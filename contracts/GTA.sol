@@ -53,7 +53,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     mapping(address => Game) public games; // map generated gameCodes (addresses) to Game structs
     address[] public gameCodes; // track gameCodes, for cleaning expired 'games'
-    uint256 gameCount = 0; // track gameCount to loop through 'gameCodes', for cleaning expired 'games'
+    uint256 activeGameCount = 0; // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
     uint64 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
     
     constructor(uint256 initialSupply) {
@@ -75,7 +75,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     modifier validGame(address gameCode) {
-        require(bytes(games[gameCode].gameName).length > 0, "err: gameCode not found");
+        require(bytes(games[gameCode].gameName).length > 0, "err: gameCode not found :(");
         _;
     }
     
@@ -104,23 +104,25 @@ contract GamerTokeAward is IERC20, Ownable {
         // log new code in gameCodes array, for 'games' supprot in 'cleanExpiredGames'
         gameCodes.push(gameCode);
         
-        // increment 'gameCount', for 'games' supprot in 'cleanExpiredGames'
-        gameCount++;
+        // increment 'activeGameCount', for 'games' supprot in 'cleanExpiredGames'
+        activeGameCount++;
         
         // return gameCode to caller
         return gameCode;
     }
     
     function getGameCode(address _host, string memory _gameName) view returns (address) {
-        require(_host != address(0x0), "err: no host address :{}");
-        require(bytes(_gameName).length > 0, "err: no game name :{}");
-        require(gameCount > 0, "err: no games :{}");
+        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
+        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
+        require(activeGameCount > 0, "err: no games :{}"); // verify there are active games
 
+        // generate gameCode from host address and game name
         address gameCode = generateAddressHash(_host, gameName);
-        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}");
+        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
         return gameCode;
     }
+    
     function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
         Game storage selectedGame = games[gameCode];
         selectedGame.players.push(playerAddress);
@@ -141,8 +143,8 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // Delete games w/ an empty players array and expDate has past
     function cleanExpiredGames() public {
-        // loop w/ 'gameCount' to find game addies w/ empty players array & passed 'expDate'
-        for (uint256 i = 0; i < gameCount; i++) {
+        // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expDate'
+        for (uint256 i = 0; i < activeGameCount; i++) {
         
             // has the expDate passed?
             if (block.timestamp > games[gameCodes[i]].expDate) {
@@ -151,7 +153,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 if (games[gameCodes[i]].players.length == 0) {
                     delete games[gameCodes[i]]; // remove gameCode mapping entry
                     delete gameCodes[i]; // remove gameCodes array entry
-                    gameCount--; // decrement total game count
+                    activeGameCount--; // decrement total game count
                 }
             }
         }
