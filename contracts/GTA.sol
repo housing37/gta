@@ -123,6 +123,20 @@ contract GamerTokeAward is IERC20, Ownable {
         return gameCode;
     }
     
+    function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
+        require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
+        address[] playerList = games[gameCode].players;
+        for (uint i = 0; i < playerList.length; i++) {
+            require(playerList[i] != _playerAddress, "err: player alrady joined game :[");
+        }
+        
+        // ... LET OFF HERE: player has to pay entry fee somehow
+        uint256 gameEntryFee = games[gameCode].entryFee;
+        
+        // add player to gameCode mapping
+        games[gameCode].gameName.players.push(_playerAddress);
+    }
+    
     function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
         Game storage selectedGame = games[gameCode];
         selectedGame.players.push(playerAddress);
