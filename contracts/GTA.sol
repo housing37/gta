@@ -51,8 +51,9 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 startDate;
         uint256 expDate;
     }
-    mapping(address => Game) public games; // map generated game codes to Game structs
-    address[] public gameCodes;
+    mapping(address => Game) public games; // map generated gameCodes (addresses) to Game structs
+    address[] public gameCodes; // track gameCodes, for cleaning expired 'games'
+    uint256 gameCount = 0; // track gameCount to loop through 'gameCodes', for cleaning expired 'games'
     uint64 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
     
     constructor(uint256 initialSupply) {
@@ -78,15 +79,18 @@ contract GamerTokeAward is IERC20, Ownable {
         _;
     }
     
-    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns {
+    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns (address) {
         require(startDate > block.timestamp, "err: must start later :/");
         require(entryFee > 0, "err: no entry fee :/");
 
         address gameCode = generateAddressHash(msg.sender, gameName);
         require(bytes(games[gameCode].gameName).length == 0, "err: game name already exists :/");
         
-        // create new storage slot for 'gameCode' & set storage ref to 'newGame' (then update that storage ref)
+        // Creates a default empty 'Game' struct (if doesn't yet exist in 'games' mapping)
         Game storage newGame = games[gameCode];
+        //Game storage newGame; // create new default empty struct
+        
+        // set properties for default empty 'Game' struct
         newGame.gameName = _gameName;
         newGame.entryFee = _entryFee * 10**uint8(decimals);
         newGame.hostFee = _hostFee * 10**uint8(decimals);
@@ -94,10 +98,29 @@ contract GamerTokeAward is IERC20, Ownable {
         newGame.startDate = _startDate;
         newGame.expDate = _startDate + gameExpSec;
 
-        // push gameCode to gameCodes array for tracking & search support (ref: 'cleanExpiredGames')
-        gameCodes.push(gameCode); // Store the game code.
+        // Assign the newly modified 'Game' struct back to 'games' 'mapping
+        games[gameCode] = newGame;
+        
+        // log new code in gameCodes array, for 'games' supprot in 'cleanExpiredGames'
+        gameCodes.push(gameCode);
+        
+        // increment 'gameCount', for 'games' supprot in 'cleanExpiredGames'
+        gameCount++;
+        
+        // return gameCode to caller
+        return gameCode;
     }
+    
+    function getGameCode(address _host, string memory _gameName) view returns (address) {
+        require(_host != address(0x0), "err: no host address :{}");
+        require(bytes(_gameName).length > 0, "err: no game name :{}");
+        require(gameCount > 0, "err: no games :{}");
 
+        address gameCode = generateAddressHash(_host, gameName);
+        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}");
+        
+        return gameCode;
+    }
     function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
         Game storage selectedGame = games[gameCode];
         selectedGame.players.push(playerAddress);
@@ -118,25 +141,19 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // Delete games w/ an empty players array and expDate has past
     function cleanExpiredGames() public {
-        uint32[] del_code_idxs; // log delted indices found in gameCodes (to delete after)
-        
-        // Find game addresses with empty players arrays and older than 'expDate'
-        for (uint256 i = 0; i < gameCodes.length; i++) {
+        // loop w/ 'gameCount' to find game addies w/ empty players array & passed 'expDate'
+        for (uint256 i = 0; i < gameCount; i++) {
         
             // has the expDate passed?
             if (block.timestamp > games[gameCodes[i]].expDate) {
             
-                // is game's player array empty?
+                // is game's players array empty?
                 if (games[gameCodes[i]].players.length == 0) {
-                    delete games[gameCodes[i]];
-                    del_host_idxs.push(i);
+                    delete games[gameCodes[i]]; // remove gameCode mapping entry
+                    delete gameCodes[i]; // remove gameCodes array entry
+                    gameCount--; // decrement total game count
                 }
             }
-        }
-        
-        // delete indices from gameCodes, that were found in games mapping
-        for (uint256 i = 0; i < del_code_idxs.length; i++) {
-            delete gameCodes[del_code_idxs[i]];
         }
     }
     
