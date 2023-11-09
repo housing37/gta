@@ -48,15 +48,17 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 hostFee;
         address[] players;
         uint256 creationDate;
+        uint256 startDate;
+        uint256 expDate;
     }
     mapping(address => Game) public games; // map generated game codes to Game structs
     address[] public gameCodes;
-    uint8 private gameExpDays = 1;
+    uint64 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
     
     constructor(uint256 initialSupply) {
         thirtyseven = msg.sender // contract creator
         owner = msg.sender; // Set the contract creator as the owner
-        totalSupply = initialSupply * 10**uint256(decimals);
+        totalSupply = initialSupply * 10**uint8(decimals);
         _balances[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
     }
@@ -76,16 +78,24 @@ contract GamerTokeAward is IERC20, Ownable {
         _;
     }
     
-    function createGame(string memory gameName, uint256 entryFee, uint256 hostFee) public returns ({
+    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns {
+        require(startDate > block.timestamp, "err: must start later :/");
+        require(entryFee > 0, "err: no entry fee :/");
+
         address gameCode = generateAddressHash(msg.sender, gameName);
-        Game storage newGame = games[gameCode];
-        newGame.gameName = gameName;
-        newGame.entryFee = entryFee;
-        newGame.hostFee = hostFee;
-        newGame.creationDate = block.timestamp; // Store the creation timestamp.
+        require(bytes(games[gameCode].gameName).length == 0, "err: game name already exists :/");
         
-        hostAddies.push(hostAddr); // Store the game address.
-        games[game_code] = newGame;
+        // create new storage slot for 'gameCode' & set storage ref to 'newGame' (then update that storage ref)
+        Game storage newGame = games[gameCode];
+        newGame.gameName = _gameName;
+        newGame.entryFee = _entryFee * 10**uint8(decimals);
+        newGame.hostFee = _hostFee * 10**uint8(decimals);
+        newGame.creationDate = block.timestamp;
+        newGame.startDate = _startDate;
+        newGame.expDate = _startDate + gameExpSec;
+
+        // push gameCode to gameCodes array for tracking & search support (ref: 'cleanExpiredGames')
+        gameCodes.push(gameCode); // Store the game code.
     }
 
     function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
@@ -106,13 +116,17 @@ contract GamerTokeAward is IERC20, Ownable {
         return generatedAddress;
     }
     
-    // Delete games w/ an empty players array and older than 'gameExpDays'
+    // Delete games w/ an empty players array and expDate has past
     function cleanExpiredGames() public {
-        uint32[] del_code_idxs; // log delted indices found in hostAddies (to delete after)
+        uint32[] del_code_idxs; // log delted indices found in gameCodes (to delete after)
         
-        // Find game addresses with empty players arrays and older than 'gameExpDays'
+        // Find game addresses with empty players arrays and older than 'expDate'
         for (uint256 i = 0; i < gameCodes.length; i++) {
-            if (block.timestamp - games[gameCodes[i]].creationDate >= gameExpDays days) {
+        
+            // has the expDate passed?
+            if (block.timestamp > games[gameCodes[i]].expDate) {
+            
+                // is game's player array empty?
                 if (games[gameCodes[i]].players.length == 0) {
                     delete games[gameCodes[i]];
                     del_host_idxs.push(i);
@@ -120,7 +134,7 @@ contract GamerTokeAward is IERC20, Ownable {
             }
         }
         
-        // delete indices from hostAddies, that were found in games mapping
+        // delete indices from gameCodes, that were found in games mapping
         for (uint256 i = 0; i < del_code_idxs.length; i++) {
             delete gameCodes[del_code_idxs[i]];
         }
