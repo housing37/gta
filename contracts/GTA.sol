@@ -67,6 +67,7 @@ contract GamerTokeAward is IERC20, Ownable {
     // game experation time _ 1 day = 86400 seconds
     uint64 private gameExpSec = 86400 * 1;
     
+    // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         thirtyseven = msg.sender // contract creator
         owner = msg.sender; // Set the contract creator as the owner
@@ -75,6 +76,7 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
     
+    // MODIFIERS
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner");
         _;
@@ -89,17 +91,35 @@ contract GamerTokeAward is IERC20, Ownable {
         require(bytes(games[gameCode].gameName).length > 0, "err: gameCode not found :(");
         _;
     }
-    
+        
+    // GETTERS / SETTERS (ADMIN)
     function getGameCodes() public view solo_37 returns (address[]) {
         return gameCodes;
     }
-    
+        
     function getGameExpSec() public view solo_37 returns (uint64) {
         return gameExpSec;
     }
     
     function setGameExpSec(uint64 sec) public solo_37 {
         gameExpSec = sec;
+    }
+    
+    // GETTERS / SETTERS
+    function getGameCode(address _host, string memory _gameName) public view returns (address) {
+        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
+        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
+        require(activeGameCount > 0, "err: no games :{}"); // verify there are active games
+
+        // generate gameCode from host address and game name
+        address gameCode = generateAddressHash(_host, gameName);
+        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
+        
+        return gameCode;
+    }
+    
+    function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
+        return games[gameCode].players;
     }
     
     function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns (address) {
@@ -137,18 +157,6 @@ contract GamerTokeAward is IERC20, Ownable {
         return gameCode;
     }
     
-    function getGameCode(address _host, string memory _gameName) public view returns (address) {
-        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
-        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
-        require(activeGameCount > 0, "err: no games :{}"); // verify there are active games
-
-        // generate gameCode from host address and game name
-        address gameCode = generateAddressHash(_host, gameName);
-        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
-        
-        return gameCode;
-    }
-    
     function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
         require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
         address[] playerList = games[gameCode].players;
@@ -168,10 +176,6 @@ contract GamerTokeAward is IERC20, Ownable {
         selectedGame.players.push(playerAddress);
         
         // TOOD: player needs to pay entry fee
-    }
-
-    function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
-        return games[gameCode].players;
     }
     
     function generateAddressHash(address host, string memory uid) private pure returns (address) {
