@@ -77,6 +77,9 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
     
+    // EVENTS
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
     // MODIFIERS
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner :0");
@@ -232,6 +235,7 @@ contract GamerTokeAward is IERC20, Ownable {
         }
     }
     
+    // STANDARD IERC20
     function balanceOf(address account) public view override returns (uint256) {
         return _balances[account];
     }
@@ -251,8 +255,16 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
+        require(sender != address(0), "TransferFrom: sender cannot be the zero address");
+        require(recipient != address(0), "TransferFrom: recipient cannot be the zero address");
+        require(_balances[sender] >= amount, "TransferFrom: sender does not have enough balance");
+        require(_allowances[sender][msg.sender] >= amount, "TransferFrom: allowance exceeded");
+
         _transfer(sender, recipient, amount);
+
+        // Update the allowance
         _approve(sender, msg.sender, _allowances[sender][msg.sender] - amount);
+
         return true;
     }
 
@@ -262,15 +274,20 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender] - subtractedValue);
+        uint256 currentAllowance = _allowances[msg.sender][spender];
+        require(currentAllowance >= subtractedValue, "DecreaseAllowance: allowance cannot be decreased below zero");
+        _approve(msg.sender, spender, currentAllowance - subtractedValue);
         return true;
     }
 
-    function mint(address account, uint256 amount) public onlyOwner {
-        require(account != address(0), "ERC20: mint to the zero address");
-        totalSupply += amount;
-        _balances[account] += amount;
-        emit Transfer(address(0), account, amount);
+    function mint(address to, uint256 amount) public onlyOwner returns (bool) {
+        require(to != address(0), "Mint: cannot mint to the zero address");
+
+        _totalSupply = _totalSupply + amount;
+        _balances[to] = _balances[to] + amount;
+
+        emit Transfer(address(0), to, amount);
+        return true;
     }
 
     function _transfer(address sender, address recipient, uint256 amount) internal {
@@ -290,6 +307,8 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     function transferOwnership(address newOwner) public onlyOwner {
-        owner = newOwner; // Transfer ownership to a new address
+        require(newOwner != address(0), "Invalid new owner address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
     }
 }
