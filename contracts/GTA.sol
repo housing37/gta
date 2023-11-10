@@ -51,10 +51,21 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 startDate;
         uint256 expDate;
     }
-    mapping(address => Game) public games; // map generated gameCodes (addresses) to Game structs
-    address[] public gameCodes; // track gameCodes, for cleaning expired 'games'
-    uint256 activeGameCount = 0; // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
-    uint64 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
+    
+    // map generated gameCodes (addresses) to Game structs
+    mapping(address => Game) public games;
+    
+    // required GTA balance to host game
+    uint256 public hostBalanceRequirement = 1 * 10**uint8(decimals);
+    
+    // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
+    uint256 public activeGameCount = 0;
+
+    // track gameCodes, for cleaning expired 'games'
+    address[] private gameCodes;
+    
+    // game experation time _ 1 day = 86400 seconds
+    uint64 private gameExpSec = 86400 * 1;
     
     constructor(uint256 initialSupply) {
         thirtyseven = msg.sender // contract creator
@@ -79,9 +90,24 @@ contract GamerTokeAward is IERC20, Ownable {
         _;
     }
     
+    function getGameCodes() public view solo_37 returns (address[]) {
+        return gameCodes;
+    }
+    
+    function getGameExpSec() public view solo_37 returns (uint64) {
+        return gameExpSec;
+    }
+    
+    function setGameExpSec(uint64 sec) public solo_37 {
+        gameExpSec = sec;
+    }
+    
     function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns (address) {
-        require(startDate > block.timestamp, "err: must start later :/");
+        require(startDate > block.timestamp, "err: start too soon :/");
         require(entryFee > 0, "err: no entry fee :/");
+        
+        uint256 bal = IERC20(address(this)).balanceOf(msg.sender);
+        require(bal >= hostBalanceRequirement, "err: not enough GTA to host :/");
 
         address gameCode = generateAddressHash(msg.sender, gameName);
         require(bytes(games[gameCode].gameName).length == 0, "err: game name already exists :/");
@@ -111,7 +137,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return gameCode;
     }
     
-    function getGameCode(address _host, string memory _gameName) view returns (address) {
+    function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
         require(activeGameCount > 0, "err: no games :{}"); // verify there are active games
