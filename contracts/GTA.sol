@@ -55,7 +55,7 @@ contract GamerTokeAward is IERC20, Ownable {
     // map generated gameCodes (addresses) to Game structs
     mapping(address => Game) public games;
     
-    // required GTA balance to host game
+    // required GTA balance to host game (should be dynamic | % of something)
     uint256 public hostBalanceRequirement = 1 * 10**uint8(decimals);
     
     // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
