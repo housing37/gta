@@ -29,7 +29,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract GamerTokeAward is IERC20, Ownable {
     // admin support
     address public owner;
-    address private thirtyseven;
+    address private keeper; // 37, curator, manager, caretaker, keeper
     
     // token support
     string public override name = "Gamer Token Award";
@@ -69,8 +69,9 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
-        thirtyseven = msg.sender // contract creator
-        owner = msg.sender; // Set the contract creator as the owner
+        // Set creator to owner & keeper
+        owner = msg.sender;
+        keeper = msg.sender;
         totalSupply = initialSupply * 10**uint8(decimals);
         _balances[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
@@ -78,12 +79,12 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // MODIFIERS
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner");
+        require(msg.sender == owner, "Only the owner :0");
         _;
     }
     
-    modifier solo_37() {
-        require(msg.sender == thirtyseven, "solo treinta y siete");
+    modifier onlyKeeper() {
+        require(msg.sender == keeper, "Only the keeper :p");
         _;
     }
     
@@ -93,15 +94,15 @@ contract GamerTokeAward is IERC20, Ownable {
     }
         
     // GETTERS / SETTERS (ADMIN)
-    function getGameCodes() public view solo_37 returns (address[]) {
+    function getGameCodes() public view onlyKeeper returns (address[]) {
         return gameCodes;
     }
         
-    function getGameExpSec() public view solo_37 returns (uint64) {
+    function getGameExpSec() public view onlyKeeper returns (uint64) {
         return gameExpSec;
     }
     
-    function setGameExpSec(uint64 sec) public solo_37 {
+    function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
     }
     
