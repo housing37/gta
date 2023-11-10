@@ -94,14 +94,21 @@ contract GamerTokeAward is IERC20, Ownable {
     }
         
     // GETTERS / SETTERS (keeper)
-    function getGameCodes() public view onlyKeeper returns (address[]) {
+    function getKeeper() public view onlyKeeper returns (address) {
+        return keeper;
+    }
+    function getGameCodes() public view onlyKeeper returns (address[] memory) {
         return gameCodes;
     }
-        
     function getGameExpSec() public view onlyKeeper returns (uint64) {
         return gameExpSec;
     }
-    
+    function setKeeper(address _newKeepr) public onlyKeeper {
+        keeper = _newKeepr;
+    }
+    function setOwner(address _newOwner) public onlyKeeper {
+        owner = _newOwner;
+    }
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
     }
@@ -109,8 +116,8 @@ contract GamerTokeAward is IERC20, Ownable {
     // GETTERS / SETTERS
     function getHostRequirementForEntryFee(uint256 _entryFee) pure returns (uint256) {
         return _entryFee * (hostRequirementPercent/100);
+        // can also just get the public class var directly: 'hostRequirementPercent'
     }
-
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
@@ -122,7 +129,6 @@ contract GamerTokeAward is IERC20, Ownable {
         
         return gameCode;
     }
-    
     function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
         return games[gameCode].players;
     }
@@ -182,6 +188,10 @@ contract GamerTokeAward is IERC20, Ownable {
         selectedGame.players.push(playerAddress);
         
         // TOOD: player needs to pay entry fee
+    }
+    
+    function payWinners() {
+    
     }
     
     function generateAddressHash(address host, string memory uid) private pure returns (address) {
