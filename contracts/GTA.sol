@@ -55,8 +55,8 @@ contract GamerTokeAward is IERC20, Ownable {
     // map generated gameCodes (addresses) to Game structs
     mapping(address => Game) public games;
     
-    // required GTA balance to host game (should be dynamic | % of something)
-    uint256 public hostBalanceRequirement = 1 * 10**uint8(decimals);
+    // required GTA balance ratio to host game (ratio of entry_fee desired)
+    uint16 public hostRequirementPercent = 100; // max = 65,535 (uint16 max)
     
     // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
     uint256 public activeGameCount = 0;
@@ -93,7 +93,7 @@ contract GamerTokeAward is IERC20, Ownable {
         _;
     }
         
-    // GETTERS / SETTERS (ADMIN)
+    // GETTERS / SETTERS (keeper)
     function getGameCodes() public view onlyKeeper returns (address[]) {
         return gameCodes;
     }
@@ -107,6 +107,10 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     // GETTERS / SETTERS
+    function getHostRequirementForEntryFee(uint256 _entryFee) pure returns (uint256) {
+        return _entryFee * (hostRequirementPercent/100);
+    }
+
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
@@ -123,24 +127,25 @@ contract GamerTokeAward is IERC20, Ownable {
         return games[gameCode].players;
     }
     
+    // max _entryFee, _hostFee = 4,294,967,295 (uint32 max)
     function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns (address) {
-        require(startDate > block.timestamp, "err: start too soon :/");
-        require(entryFee > 0, "err: no entry fee :/");
-        
-        uint256 bal = IERC20(address(this)).balanceOf(msg.sender);
-        require(bal >= hostBalanceRequirement, "err: not enough GTA to host :/");
+        require(_startDate > block.timestamp, "err: start too soon :/");
+        require(_entryFee > 0, "err: no entry fee :/");
+
+        uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
+        require(bal >= (_entryFee * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
 
         address gameCode = generateAddressHash(msg.sender, gameName);
         require(bytes(games[gameCode].gameName).length == 0, "err: game name already exists :/");
-        
+
         // Creates a default empty 'Game' struct (if doesn't yet exist in 'games' mapping)
         Game storage newGame = games[gameCode];
         //Game storage newGame; // create new default empty struct
         
         // set properties for default empty 'Game' struct
         newGame.gameName = _gameName;
-        newGame.entryFee = _entryFee * 10**uint8(decimals);
-        newGame.hostFee = _hostFee * 10**uint8(decimals);
+        newGame.entryFee = _entryFee;
+        newGame.hostFee = _hostFee;
         newGame.creationDate = block.timestamp;
         newGame.startDate = _startDate;
         newGame.expDate = _startDate + gameExpSec;
