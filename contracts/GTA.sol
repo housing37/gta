@@ -175,10 +175,17 @@ contract GamerTokeAward is IERC20, Ownable {
         for (uint i = 0; i < playerList.length; i++) {
             require(playerList[i] != _playerAddress, "err: player alrady joined game :[");
         }
-        
+
         // ... LET OFF HERE: player has to pay entry fee somehow
         uint256 gameEntryFee = games[gameCode].entryFee;
-        
+
+        /*
+            maintaining value:
+            - % of game's prize pool goes back to dex LPs
+            - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
+            - host wallets must retain a certain amount of GTA in order to create games
+                (probably some multiple of the intended player_entry_fee)
+        */
         // add player to gameCode mapping
         games[gameCode].gameName.players.push(_playerAddress);
     }
@@ -191,7 +198,13 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     function payWinners() {
-    
+        /*
+            maintaining value:
+            - % of game's prize pool goes back to dex LPs
+            - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
+            - host wallets must retain a certain amount of GTA in order to create games
+                (probably some multiple of the intended player_entry_fee)
+        */
     }
     
     function generateAddressHash(address host, string memory uid) private pure returns (address) {
