@@ -62,11 +62,13 @@ contract GamerTokeAward is IERC20, Ownable {
     uint256 public activeGameCount = 0;
 
     // track gameCodes, for cleaning expired 'activeGames'
-    address[] private gameCodes;
+    address[] storage private gameCodes;
     
     // game experation time _ 1 day = 86400 seconds
     uint64 private gameExpSec = 86400 * 1;
     
+    // maintain whitelist tokens that can be used for deposit
+    mapping(address => bool) public depositTokens;
     
     //address[] memory thisContractTransfer;
     struct PaidEntries {
@@ -220,6 +222,12 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
+    }
+    function addDepositToken(address _token) public onlyKeeper {
+        depositTokens[_token] = true;
+    }
+    function removeDepositToken(address _token) public onlyKeeper {
+        delete depositTokens[_token];
     }
     
     // GETTERS / SETTERS
