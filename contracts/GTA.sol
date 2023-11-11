@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
     //mapping(addess => uint256[]) public game_to_fees; // game_code to array [entry_fee, host_fee]
     //mapping(address => address[]) public game_to_players; // game_code to players array
     
-    /* ... need to design & store mapping for host created games
+    /* ... need to design & store mapping for host created activeGames
             input param: entry fee, host fee
             generate & store game code,
     */
@@ -44,7 +44,7 @@ contract GamerTokeAward is IERC20, Ownable {
     // game support
     struct Game {
         string gameName;
-        uint256 entryFee;
+        uint256 entryFeeUSD;
         uint256 hostFee;
         address[] players;
         uint256 creationDate;
@@ -52,21 +52,127 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 expDate;
     }
     
-    // map generated gameCodes (addresses) to Game structs
-    mapping(address => Game) public games;
+    // map generated gameCode address to Game structs
+    mapping(address => Game) public activeGames;
     
     // required GTA balance ratio to host game (ratio of entry_fee desired)
     uint16 public hostRequirementPercent = 100; // max = 65,535 (uint16 max)
     
-    // track activeGameCount to loop through 'gameCodes', for cleaning expired 'games'
+    // track activeGameCount to loop through 'gameCodes', for cleaning expired 'activeGames'
     uint256 public activeGameCount = 0;
 
-    // track gameCodes, for cleaning expired 'games'
+    // track gameCodes, for cleaning expired 'activeGames'
     address[] private gameCodes;
     
     // game experation time _ 1 day = 86400 seconds
     uint64 private gameExpSec = 86400 * 1;
     
+    
+    //address[] memory thisContractTransfer;
+    struct PaidEntries {
+        address[] gameCode;
+        uint256[] ammount;
+    }
+    struct PaidEntry {
+        address gameCode;
+        uint256 ammount;
+    }
+    
+    // one player address can have many PaidEntries
+    //mapping(address => PaidEntries[]) memory playerEntries;
+    mapping(address => PaidEntry[]) memory playerEntries;
+    
+    function findGameCode(PaidEntry[] memory entries, address _gameCode) private pure returns (bool) {
+        for (uint i; i < entries.length; i++) {
+            PaidEntry memory entry = entries[i];
+            if (entry.gameCode == _gameCode) {
+                // player has already paid for this gameCode
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
+        require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
+        address[] playerList = activeGames[gameCode].players;
+        for (uint i = 0; i < playerList.length; i++) {
+            require(playerList[i] != _playerAddress, "err: player already joined game :[");
+        }
+
+        // ... LET OFF HERE: player has to pay entry fee somehow
+        uint256 gameEntryFee = activeGames[gameCode].entryFeeUSD;
+        
+        // ... left off here...
+        //  want to keep track of all balances that players send to this contract
+        //   but players can pay entry fee in any token they want (respectful approved list)
+        
+        
+        // need to check if msg.sender has paid for this gameCode
+        PaidEntry[] memory entries = playerEntries[msg.sender];
+        bool playerJoined = findGameCode(entries, _gameCode);
+        
+        bool playerPaid = findGameCode(entries, _gameCode);
+        require(playerPaid, "err: play")
+        //bool playerPaid = False;
+        
+        for (uint i; i < entries.length; i++) {
+            PaidEntry memory entry = entries[i];
+            if (entry.gameCode == _gameCode) {
+                // player has already paid for this gameCode
+                playerPaid = true;
+                break;
+            }
+            newEntry.amount =
+        }
+        
+        
+        /*
+            maintaining value:
+            - % of game's prize pool goes back to dex LPs
+            - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
+            - host wallets must retain a certain amount of GTA in order to create activeGames
+                (probably some multiple of the intended player_entry_fee)
+        */
+        // add player to gameCode mapping
+        activeGames[gameCode].gameName.players.push(_playerAddress);
+    }
+    
+    function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
+        Game storage selectedGame = activeGames[gameCode];
+        selectedGame.players.push(playerAddress);
+        
+        // TOOD: player needs to pay entry fee
+    }
+    
+    function check_some_shit_from uniswap() {
+    
+        uint256 curr
+        string memory dai_ethmain = '0x6B175474E89094C44Da98b954EedeAC495271d0F' eth mainnet
+        string memory dai_ethmain_pcwrap = '0xefD766cCb38EaF1dfd701853BFCe31359239F305' eth mainnet pc wrapper
+        string memory gta_pc = '0x037';
+        string memory gta_pc = '0x037';
+        path = [dai_ethmain_pcwrap, ]
+        for (uint i; i < routersUniswapV2.length; i++) {
+            router = routersUniswapV2[i];
+            uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
+        }
+    }
+    
+    function transfer(address _recipient, uint256 _amount) public override returns (bool) {
+        // want to try to keep track of each ERC20 transfer to this contract from each recipient
+        // each ERC20 transfer to this contract is an 'entry_fee' being paid by a player
+        //  need to map those payments to gameCodes
+        if (recipient == address(this)) {
+            // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
+            PaidEntry[] memory entries = playerEntries[msg.sender];
+            entries.gameCode = 0x0;
+            entries.amount = _amount;
+        }
+        _transfer(msg.sender, _recipient, _amount);
+        return true;
+    }
+
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         // Set creator to owner & keeper
@@ -92,7 +198,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     modifier validGame(address gameCode) {
-        require(bytes(games[gameCode].gameName).length > 0, "err: gameCode not found :(");
+        require(bytes(activeGames[gameCode].gameName).length > 0, "err: gameCode not found :(");
         _;
     }
         
@@ -117,87 +223,58 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     // GETTERS / SETTERS
-    function getHostRequirementForEntryFee(uint256 _entryFee) pure returns (uint256) {
-        return _entryFee * (hostRequirementPercent/100);
+    function getHostRequirementForEntryFee(uint256 _entryFeeUSD) pure returns (uint256) {
+        return _entryFeeUSD * (hostRequirementPercent/100);
         // can also just get the public class var directly: 'hostRequirementPercent'
     }
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
-        require(activeGameCount > 0, "err: no games :{}"); // verify there are active games
+        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
 
         // generate gameCode from host address and game name
         address gameCode = generateAddressHash(_host, gameName);
-        require(bytes(games[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
+        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
         return gameCode;
     }
     function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
-        return games[gameCode].players;
+        return activeGames[gameCode].players;
     }
     
-    // max _entryFee, _hostFee = 4,294,967,295 (uint32 max)
-    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFee, uint256 _hostFee) public returns (address) {
+    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFeeUSD, uint256 _hostFee) public returns (address) {
         require(_startDate > block.timestamp, "err: start too soon :/");
-        require(_entryFee > 0, "err: no entry fee :/");
-
+        require(_entryFeeUSD >= 1, "required: entry fee >= 1 USD :/");
+        
         uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
-        require(bal >= (_entryFee * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
+        require(bal >= (_entryFeeUSD * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
 
         address gameCode = generateAddressHash(msg.sender, gameName);
-        require(bytes(games[gameCode].gameName).length == 0, "err: game name already exists :/");
+        require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
-        // Creates a default empty 'Game' struct (if doesn't yet exist in 'games' mapping)
-        Game storage newGame = games[gameCode];
+        // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
+        Game storage newGame = activeGames[gameCode];
         //Game storage newGame; // create new default empty struct
         
         // set properties for default empty 'Game' struct
         newGame.gameName = _gameName;
-        newGame.entryFee = _entryFee;
+        newGame.entryFeeUSD = _entryFeeUSD;
         newGame.hostFee = _hostFee;
         newGame.creationDate = block.timestamp;
         newGame.startDate = _startDate;
         newGame.expDate = _startDate + gameExpSec;
 
-        // Assign the newly modified 'Game' struct back to 'games' 'mapping
-        games[gameCode] = newGame;
+        // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
+        activeGames[gameCode] = newGame;
         
-        // log new code in gameCodes array, for 'games' supprot in 'cleanExpiredGames'
+        // log new code in gameCodes array, for 'activeGames' supprot in 'cleanExpiredGames'
         gameCodes.push(gameCode);
         
-        // increment 'activeGameCount', for 'games' supprot in 'cleanExpiredGames'
+        // increment 'activeGameCount', for 'activeGames' supprot in 'cleanExpiredGames'
         activeGameCount++;
         
         // return gameCode to caller
         return gameCode;
-    }
-    
-    function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
-        require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
-        address[] playerList = games[gameCode].players;
-        for (uint i = 0; i < playerList.length; i++) {
-            require(playerList[i] != _playerAddress, "err: player alrady joined game :[");
-        }
-
-        // ... LET OFF HERE: player has to pay entry fee somehow
-        uint256 gameEntryFee = games[gameCode].entryFee;
-
-        /*
-            maintaining value:
-            - % of game's prize pool goes back to dex LPs
-            - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
-            - host wallets must retain a certain amount of GTA in order to create games
-                (probably some multiple of the intended player_entry_fee)
-        */
-        // add player to gameCode mapping
-        games[gameCode].gameName.players.push(_playerAddress);
-    }
-    
-    function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
-        Game storage selectedGame = games[gameCode];
-        selectedGame.players.push(playerAddress);
-        
-        // TOOD: player needs to pay entry fee
     }
     
     function payWinners() {
@@ -205,7 +282,7 @@ contract GamerTokeAward is IERC20, Ownable {
             maintaining value:
             - % of game's prize pool goes back to dex LPs
             - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
-            - host wallets must retain a certain amount of GTA in order to create games
+            - host wallets must retain a certain amount of GTA in order to create activeGames
                 (probably some multiple of the intended player_entry_fee)
         */
     }
@@ -217,17 +294,17 @@ contract GamerTokeAward is IERC20, Ownable {
         return generatedAddress;
     }
     
-    // Delete games w/ an empty players array and expDate has past
+    // Delete activeGames w/ an empty players array and expDate has past
     function cleanExpiredGames() public {
         // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expDate'
         for (uint256 i = 0; i < activeGameCount; i++) {
         
             // has the expDate passed?
-            if (block.timestamp > games[gameCodes[i]].expDate) {
+            if (block.timestamp > activeGames[gameCodes[i]].expDate) {
             
                 // is game's players array empty?
-                if (games[gameCodes[i]].players.length == 0) {
-                    delete games[gameCodes[i]]; // remove gameCode mapping entry
+                if (activeGames[gameCodes[i]].players.length == 0) {
+                    delete activeGames[gameCodes[i]]; // remove gameCode mapping entry
                     delete gameCodes[i]; // remove gameCodes array entry
                     activeGameCount--; // decrement total game count
                 }
@@ -239,12 +316,9 @@ contract GamerTokeAward is IERC20, Ownable {
     function balanceOf(address account) public view override returns (uint256) {
         return _balances[account];
     }
-
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
-        _transfer(msg.sender, recipient, amount);
-        return true;
-    }
-
+    
+    
+    
     function allowance(address owner, address spender) public view override returns (uint256) {
         return _allowances[owner][spender];
     }
