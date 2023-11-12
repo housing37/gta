@@ -27,21 +27,39 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract GamerTokeAward is IERC20, Ownable {
-    // admin support
+
+    /* _ ADMIN SUPPORT _ */
     address public owner;
     address private keeper; // 37, curator, manager, caretaker, keeper
     
-    // token support
+    /* _ TOKEN SUPPORT _ */
     string public override name = "Gamer Token Award";
     string public override symbol = "GTA";
     uint8 public override decimals = 18;
     uint256 public override totalSupply;
 
-    // token support mappings
+    /* _ TOKEN SUPPORT MAPPINGS _ */
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
 
-    // game support
+    /* _ DEX SUPPORT _ */ // WARNING: router addresses only for testing (remove for launch)
+    // usd stable coins for 'getDexQuoteUSD'
+    address private constant TOK_eDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    address private constant TOK_eDAI_pcwrap = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
+    
+    // PulseXRouter02 'v1' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    address private constant ROUTER_pulsex_v1 = address(0x98bf93ebf5c380C0e6Ae8e192A7e2AE08edAcc02);
+    
+    // PulseXRouter02 'v2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    address private constant ROUTER_pulsex_v2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9);
+    
+    // PulseXSwapRouter 'v1' ref: MM tx
+    address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
+    
+    // array of all dex routers to check for 'getDexQuoteUSD'
+    address[] storage private routersUniswapV2 = [ROUTER_pulsex_v1, ROUTER_pulsex_v2, ROUTER_pulsex_vX];
+        
+    /* _ GAME SUPPORT _ */
     struct Game {
         string gameName;
         uint256 entryFeeUSD;
@@ -69,6 +87,26 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // maintain whitelist tokens that can be used for deposit
     mapping(address => bool) public depositTokens;
+    
+    // maintain local mapping of this contracts ERC20 token balances
+    mapping(address => uint256) private altBalancesGTA;
+    
+    // usd credits for players to pay entryFeeUSD to join games
+    mapping(address => uint256) private creditsUSD;
+        
+    function logCredit(address _player, address _token, uint256 _amount) public onlyKeeper {
+        uint256 prev_bal = altBalancesGTA[_token];
+        uint256 new_bal = IERC20(_token).balanceOf(address(this));
+        required(new_bal > prev_bal, "err: token bal mismatch");
+        
+        //altBalancesGTA[_token] += _amount;
+        altBalancesGTA[_token] = new_bal;
+        
+        // LEFT OFF HERE... does this logic work? ^
+        
+        amountUSD = getDexQuoteUSD(_token, _amount);
+        creditsUSD[_player] += amountUSD;
+    }
     
     //address[] memory thisContractTransfer;
     struct PaidEntries {
@@ -147,18 +185,49 @@ contract GamerTokeAward is IERC20, Ownable {
         // TOOD: player needs to pay entry fee
     }
     
-    function check_some_shit_from uniswap() {
-    
-        uint256 curr
-        string memory dai_ethmain = '0x6B175474E89094C44Da98b954EedeAC495271d0F' eth mainnet
-        string memory dai_ethmain_pcwrap = '0xefD766cCb38EaF1dfd701853BFCe31359239F305' eth mainnet pc wrapper
-        string memory gta_pc = '0x037';
-        string memory gta_pc = '0x037';
-        path = [dai_ethmain_pcwrap, ]
-        for (uint i; i < routersUniswapV2.length; i++) {
-            router = routersUniswapV2[i];
-            uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
+    function addDexRouter(address router) public onlyKeeper {
+        require(router != address(0x0), "err: invalid address");
+        rtrs = routersUniswapV2;
+        for (i = 0; i < rtrs.length; i++) {
+            if (router == rtrs[i]) {
+                revert("err: duplicate router");
+            }
         }
+        routersUniswapV2.push(router);
+    }
+    
+    function remDexRouter(address router) public onlyKeeper returns (bool) {
+        require(router != address(0x0), "err: invalid address");
+        
+        // NOTE: remove algorithm does NOT maintain order
+        
+        rtrs = routersUniswapV2;
+        for (i = 0; i < rtrs.length; i++) {
+            if (router == rtrs[i]) {
+                rtrs[i] = rtrs[rtrs.length - 1];
+                rtrs.pop();
+                routersUniswapV2 = rtrs;
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
+        require(_token != address(0x0), "err: no token");
+        require(_amountIn > 0, "err: no token amount");
+        path = [_token, dai_ethmain_pcwrap]
+        uint256 curr_low = 37373737; // unlikely that any amnt will equal 37373737
+        rtrs = routersUniswapV2;
+        for (uint i; i < rtrs.length; i++) {
+            router = rtrs[i];
+            uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(_amountIn, path); // quote swap
+            uint256 amnt = amountsOut[amountsOut.length -1];
+            if (curr_low == 37373737 || curr_low > amnt) {
+                curr_low = amnt;
+            }
+        }
+        return curr_low;
     }
     
     function transfer(address _recipient, uint256 _amount) public override returns (bool) {

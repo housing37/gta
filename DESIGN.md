@@ -1,5 +1,20 @@
 # product design (GTA = gamer token award)
 
+### end-to-end walkthrough
+    - host creates game (entryFeeUSD, payoutPercents) _ requires % GTA in wallet 
+        receives game_code
+    - host provides game_code to potential players
+    - players pay entryFeeUSD
+        players send choice alt token to GTA contract address (equal to entryFeeUSD value)
+        GTA contract logs this in "mapping(address => uint256) private _creditsUSD"
+            python listens for transfer events involving GTA contract address
+            python calls 'logTransferToGTA(address token, address from, uint256 amnt)'
+                - problem: python could lie about observing the event
+            
+    - players notify host of address used to pay entryFeeUSD
+    - host starts game with addresses received
+        contract: startGame(address gameCode, address[] playersClaimPaid)
+    
 ### maintaining the market
     rabbit_notes (TG):
         "if you charge 5% and add it to the lp, then you are making that charge a common value for everyone to invest in."
