@@ -16,6 +16,30 @@
         contract: startGame(address gameCode, address[] playersClaimPaid)
     
 ### maintaining the market
+    current option (team):
+        With the following model, we have a way of adding tokens to the market and removing tokens from the market… 
+        I believe this creates an open market, while not flooding the market, and maintains more buy pressure than sell pressure
+        I believe this also allows us to actually make money, even if the token doesn’t perform (because we are providing a service)
+
+        1) remove GTA from the market: 
+        - host can choose to pay service fee in GTA for a discount (we buy and burn)
+        - host required to hold some GTA in order to host 
+
+        2) add GTA to the market: 
+        - host gets minted some amount for hosting games
+        - player gets minted some amount for winning games 
+
+        #2 always has to be less than #1 for every hosted event 
+        - the value of amounts minted must always be less than the service fee
+
+    gabe notes (call):
+        - cannot take player deposits and add to GTA LPs for winners to cashout immediately
+            this is because arb bots will grab that added value before winners do
+         	this means winners cannot be paid in GTA
+        - deposits should be held in escrow by the contract
+            contract converts all deposits to stable coins for holding
+            player usd balances tracked in 'mapping(address => uint256) private creditsUSD;'  
+
     rabbit_notes (TG):
         "if you charge 5% and add it to the lp, then you are making that charge a common value for everyone to invest in."
         "- when chart is high acquiring new users becomes more costly. when less users its cheap and attractive to use."
