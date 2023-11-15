@@ -4,13 +4,26 @@ cStrDivider = '#================================================================
 print('', cStrDivider, f'GO _ {__filename} -> starting IMPORTs & declaring globals', cStrDivider, sep='\n')
 cStrDivider_1 = '#----------------------------------------------------------------#'
 
-#from web3 import Web3
-import sys, os, traceback
-# import sys, os, time, traceback, json, pprint
+#------------------------------------------------------------#
+#   IMPORTS                                                  #
+#------------------------------------------------------------#
+import sys, os, traceback # time, json
 from datetime import datetime
-import _web3
-import _constants
+import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 
+# required w/ pprint: for tx_receipt & event logs
+from attributedict.collections import AttributeDict 
+import pprint
+
+# additional common support
+#from web3.exceptions import ContractLogicError
+#import inspect # this_funcname = inspect.stack()[0].function
+#parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#sys.path.append(parent_dir) # import from parent dir of this file
+
+#------------------------------------------------------------#
+#   FUNCTION SUPPORT                                         #
+#------------------------------------------------------------#
 def go_main():
     RPC_URL, CHAIN_ID, sel_chain    = _web3.inp_sel_chain()
     SENDER_ADDRESS, SENDER_SECRET   = _web3.inp_sel_sender()
@@ -30,6 +43,7 @@ def go_main():
     # set from|to block numbers
     from_block = 18840779 # int | W3.eth.block_number
     to_block = 18840789 # int | 'latest'
+    str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
 
     # ## OPTIONAL: use event filters (chatGPT complex suggestion)
     # ##   note_111523: not quite sure how these filters work, but basic from/to block works fine
@@ -46,38 +60,34 @@ def go_main():
     # print('\nEVENT FILTERS ...', evt_sign, evt_name, from_block, to_block, wild_card, sep='\n ')
     # print('EVENT FILTERS _ DONE')
     # ## fetch transfer events w/ complex filter
-    # print(f'\nGETTING_LOGS: {get_time_now()}\n _ from_block: {from_block}\n _ to_block: {to_block}')
+    # print(f'\nGETTING_LOGS ... {str_from_to} _ {get_time_now()}')
     # logs = CONTRACT.events[evt_name].get_logs(event_filter)
     # print(f'GETTING_LOGS: {get_time_now()} _ DONE\n')
 
     # fetch transfer events w/ simple fromBlock/toBlock
-    print(f'\nGETTING_LOGS: {get_time_now()}\n _ from_block: {from_block}\n _ to_block: {to_block}')
-    logs = CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
+    print(f'\nGETTING_LOGS ... {get_time_now()}\n {str_from_to}')
+    events = CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
     print(f'GETTING_LOGS: {get_time_now()} _ DONE\n')
 
-    # Pretty print the dictionary
-    import pprint
-    from attributedict.collections import AttributeDict # required w/ pprint: tx_receipt & event logs
-    for i, event in enumerate(logs):
-        logx = AttributeDict(event) # import required
-        logx_print = pprint.PrettyPrinter().pformat(logx)
-        print(cStrDivider_1, f'log {i} print:\n {logx_print}', sep='\n')
-        print()
-        # print(f"Transfer of {W3.from_wei(log.args.wad, 'ether')} WETH from {log.args.src} to {log.args.dst}")
+    print_raw = False
+    for i, event in enumerate(events):
+        print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
+        if print_raw:
+            print(pprint.PrettyPrinter().pformat(AttributeDict(event))) # imports required
+        else:
+            # event Transfer(address sender, address recipient, uint256 amount);
+            print(" sender (address):", event["args"]["src"]) # sender
+            print(" recipient (address):", event["args"]["dst"]) # recipient
+            print(" amount (uint256):", event["args"]["wad"]) # amount
 
-        # event Transfer(address sender, address recipient, uint256 amount);
-        print("sender (address):", event["args"]["src"]) # sender
-        print("recipient (address):", event["args"]["dst"]) # recipient
-        print("amount (uint256):", event["args"]["wad"]) # amount
-
-        # tx meta data
-        block = W3.eth.getBlock(event["blockNumber"])
-        print("Timestamp:", block["timestamp"])
-        print("Transaction Hash:", event["transactionHash"].hex())
-        print("Block Number:", event["blockNumber"])
-        
+            # tx meta data
+            block = W3.eth.getBlock(event["blockNumber"])
+            print(" Timestamp:", block["timestamp"])
+            print(" Block Number:", event["blockNumber"])
+            print(" Transaction Hash:", event["transactionHash"].hex())
+            
         print()
-        
+            
         # ... check for "emit Transfer(sender, recipient, amount);"
         # ... call solidity function
 
