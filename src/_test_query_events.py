@@ -24,6 +24,7 @@ evt_sign = web3.keccak(text="MyEvent(uint256,address,uint256,uint256,uint256)")
     # event MyEvent(uint256 topic1, address topic2, uint256 value);
 wild_card = None
 filt_addr = "0x1234567890123456789012345678901234567890"
+event_name = 'MyEvent'
 event_filter = {
     "fromBlock": 0,
     "toBlock": 'latest',
