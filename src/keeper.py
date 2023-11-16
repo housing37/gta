@@ -30,14 +30,37 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
     # fetch transfer events w/ simple fromBlock/toBlock
     print(f"\nGETTING EVENT LOGS: 'Transfer(address,address,uint256)' _ {get_time_now()}\n ... {str_from_to}")
     events = contract.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
+    
+    # ## ALTERNATE _ for getting events with 'create_filter' (not working _ 111623)
+    # args = {'dst':'0x7b1C460d0Ad91c8A453B7b0DBc0Ae4F300423FFB'} # 'src', 'dst', 'wad'
+    # # event_filter = contract.events.Transfer().create_filter(fromBlock=from_block, toBlock=to_block, argument_filters=args)
+    # event_filter = contract.events['Transfer'].create_filter(fromBlock=from_block, toBlock=to_block, argument_filters=args)
+    # events = event_filter.get_new_entries()
+
+    # ## ALTERNATE _ for getting events with 'topics'
+    # #   note: still have to filter manually for 'src,dst,wad'
+    # transfer_event_signature = w3.keccak(text='Transfer(address,address,uint256)').hex()
+    # filter_params = {'fromBlock':from_block, 'toBlock':to_block, 
+    #                     'address':contract.address, # defaults to conract.address
+    #                     'topics': [transfer_event_signature, # event signature
+    #                                 None, # 'from' (not included with 'Transfer' event)
+    #                                 None], # 'to' (not included with 'Transfer' event)
+    # }
+    # events = w3.eth.get_logs(filter_params)
 
     # print events
     last_block_num = last_time_stamp = 0
     for i, event in enumerate(events):
-        # exe call to get blokc timestamp (min amount of times)
+        dst = event['args']['dst'] 
+        if dst != contract.address:
+            # print('dst != contract.address', f'({dst} != {contract.address})')
+            print(' .', end='', flush=True)
+            continue
+
+        # exe call to get block timestamp (min amount of times)
         if int(event["blockNumber"]) != last_block_num:
             last_block_num = int(event["blockNumber"])
-            last_time_stamp = int(w3.eth.getBlock(event["blockNumber"])["timestamp"])
+            last_time_stamp = int(w3.eth.get_block(event["blockNumber"])["timestamp"])
 
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
@@ -46,6 +69,7 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             print(pprint.PrettyPrinter().pformat(AttributeDict(event)), str_timestamp)
         else:
             # event Transfer(address sender, address recipient, uint256 amount);
+            print(" token (address):", contract.address) # token
             print(" sender (address):", event["args"]["src"]) # sender
             print(" recipient (address):", event["args"]["dst"]) # recipient
             print(" amount (uint256):", event["args"]["wad"]) # amount
@@ -60,6 +84,7 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
     return last_block_num, last_time_stamp
 
     # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
+    #   todo: parse filtered data from ‘Transfer’ event, and update contract
 
 def go_main():
     RPC_URL, CHAIN_ID, CHAIN_SEL    = _web3.inp_sel_chain()
@@ -192,7 +217,8 @@ if __name__ == "__main__":
 
         # testing...
         # start_block_num = 18849880
-        start_block_num = _w3.W3.eth.block_number - 5
+        # start_block_num = _w3.W3.eth.block_number - 100
+        start_block_num = _w3.W3.eth.block_number
         print('\nBlock# start: ', start_block_num)
         for contr_tup in _w3.LST_CONTRACTS:
             last_block_num = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, raw_print=True)[0]
@@ -206,6 +232,7 @@ if __name__ == "__main__":
             get_latest_bals(_w3, last_block_num)
 
             # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
+            #   todo: parse filtered data from ‘Transfer’ event, and update contract
 
         #go_main(_WEB3, last_block_num)
         # if sys.argv[-1] == '-loan': go_loan()
