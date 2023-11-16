@@ -69,6 +69,7 @@ LST_CONTR_ARB_ADDR = [
     "0xD0283328BC73E624Ccac40f138bb620287c0EC76", # deployed pc main 110623_1006 (TEST-ARB)
     "0x302CC7e8ffc8361c84b21450bAB7e018E41359c3", # deployed pc main 110623_1025 (TEST-ARB)
     "0xEE123F711176E22Ebb98eD5951c640722703BEf7", # deployed pc main 110623_1122 (TEST-ARB)
+    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27", # wpls
 ]
 #------------------------------------------------------------#
 #------------------------------------------------------------#

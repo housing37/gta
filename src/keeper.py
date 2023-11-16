@@ -21,11 +21,11 @@ import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 #------------------------------------------------------------#
 #   FUNCTION SUPPORT                                         #
 #------------------------------------------------------------#
-def get_latest_bals(w3:_web3._Web3, last_block_num:int):
-    print('\n_Web3 INITIALIZED ...', 
-            w3.sel_chain, w3.RPC_URL, w3.CHAIN_ID, w3.SENDER_ADDRESS, w3.ACCOUNT.address, 
-            w3.CONTR_ADDR, w3.CONTRACT.address, w3.GAS_LIMIT, w3.GAS_PRICE, w3.MAX_FEE, 
-            w3.MAX_PRIOR_FEE_RATIO, w3.MAX_PRIOR_FEE, sep='\n ')
+def get_latest_bals(_w3:_web3.WEB3, last_block_num:int, raw_print=True):
+    print('\nWEB3 INITIALIZED ...', 
+            _w3.sel_chain, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
+            _w3.CONTR_ADDR, _w3.CONTRACT.address, _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
+            _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
 
     # set from|to block numbers
     from_block = last_block_num+1 # int | W3.eth.block_number
@@ -34,13 +34,20 @@ def get_latest_bals(w3:_web3._Web3, last_block_num:int):
     
     # fetch transfer events w/ simple fromBlock/toBlock
     print(f"\nGETTING 'Transfer(address,address,uint256)' LOGS _ {get_time_now()}\n ... {str_from_to}")
-    events = w3.CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
+    events = _w3.CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
 
-    print_raw = False
+    # print events
+    last_block_num = last_time_stamp = 0
     for i, event in enumerate(events):
+        # exe call to get blokc timestamp (min amount of times)
+        if int(event["blockNumber"]) != last_block_num:
+            last_block_num = int(event["blockNumber"])
+            last_time_stamp = int(_w3.W3.eth.getBlock(event["blockNumber"])["timestamp"])
+
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
-        if print_raw:
-            print(pprint.PrettyPrinter().pformat(AttributeDict(event))) # imports required
+        if raw_print:
+            str_timestamp = f'\n\n Timestamp: {last_time_stamp}\n BlockNumber: {last_block_num}'
+            print(pprint.PrettyPrinter().pformat(AttributeDict(event)), str_timestamp) # imports required
         else:
             # event Transfer(address sender, address recipient, uint256 amount);
             print(" sender (address):", event["args"]["src"]) # sender
@@ -48,8 +55,7 @@ def get_latest_bals(w3:_web3._Web3, last_block_num:int):
             print(" amount (uint256):", event["args"]["wad"]) # amount
 
             # tx meta data
-            block = w3.W3.eth.getBlock(event["blockNumber"])
-            print(" Timestamp:", block["timestamp"])
+            print(" Timestamp:", last_time_stamp, last_block_num)
             print(" Block Number:", event["blockNumber"])
             print(" Transaction Hash:", event["transactionHash"].hex())
 
@@ -180,17 +186,21 @@ if __name__ == "__main__":
     
     ## exe ##
     try:
-        _w3 = _web3._Web3()
-        _w3 = _w3.inp_init(_constants.LST_CONTR_ARB_ADDR, _constants.abi_file, _constants.bin_file)
-        while True:
+        _w3 = _web3.WEB3()
+        _w3 = _w3.init_inp(_constants.LST_CONTR_ARB_ADDR, _constants.abi_file, _constants.bin_file)
+
+        # testing...
+        last_block_num = 18849022
+        get_latest_bals(_w3, last_block_num, raw_print=False)
+        while False:
             time.sleep(10) # ~10sec block times (pc)
             last_block_num = _w3.CONTRACT.functions.getLastBlockNumUpdate().call()
             print("GTA alt bals last logged: block#", last_block_num)
             get_latest_bals(_w3, last_block_num)
 
             # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
-        go_main(_WEB3, last_block_num)
 
+        #go_main(_WEB3, last_block_num)
         # if sys.argv[-1] == '-loan': go_loan()
         # if sys.argv[-1] == '-trans': go_transfer()
         # if sys.argv[-1] == '-withdraw': go_withdraw()
