@@ -20,10 +20,6 @@ class WEB3:
         self.ACCOUNT = None
 
         self.LST_CONTRACTS = []
-        # self.CONTR_ADDR = 'nil_contract'
-        # self.CONTR_ABI = None
-        # self.CONTR_BYTES = None
-        # self.CONTRACT = None
 
         self.GAS_LIMIT = None
         self.GAS_PRICE = None
@@ -31,18 +27,13 @@ class WEB3:
         self.MAX_PRIOR_FEE_RATIO = None
         self.MAX_PRIOR_FEE = None
 
-    # def init_inp(self, lst_contr_addr, abi_file, bin_file):
     def init_inp(self):
-        RPC_URL, CHAIN_ID, CHAIN_SEL    = self.inp_sel_chain()
-        SENDER_ADDRESS, SENDER_SECRET   = self.inp_sel_sender()
-        # CONTR_ADDR                      = self.inp_sel_contract(lst_contr_addr)
-        W3, ACCOUNT                     = self.init_web3()
-        # CONTR_ABI, CONTR_BYTES          = self.read_abi_bytecode(abi_file, bin_file)
-        # CONTRACT                        = self.init_contract(CONTR_ADDR, CONTR_ABI, W3)
-        gas_tup                         = self.get_gas_settings(W3)
+        rpc_url, chain_id, chain_sel    = self.inp_sel_chain()
+        sender_address, sender_secret   = self.inp_sel_sender()
+        w3, account                     = self.init_web3()
+        gas_tup                         = self.get_gas_settings(w3)
         return self
-    
-    # def add_contract(self, lst_contr_addr, abi_file, bin_file):
+
     def add_contract(self, dict_contr):
         assert self.W3 != None, 'err: web3 not initialzed'
         contr_addr              = self.inp_sel_contract(list(dict_contr.keys()))

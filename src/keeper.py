@@ -28,7 +28,7 @@ def get_latest_bals(w3:object, contract:object, last_block_num:int, raw_print:bo
     str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
     
     # fetch transfer events w/ simple fromBlock/toBlock
-    print(f"\nGETTING 'Transfer(address,address,uint256)' LOGS _ {get_time_now()}\n ... {str_from_to}")
+    print(f"\nGETTING EVENT LOGS: 'Transfer(address,address,uint256)' _ {get_time_now()}\n ... {str_from_to}")
     events = contract.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
 
     # print events
@@ -41,8 +41,9 @@ def get_latest_bals(w3:object, contract:object, last_block_num:int, raw_print:bo
 
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
+            # imports required: pprint, AttributeDict
             str_timestamp = f'\n\n Timestamp: {last_time_stamp}\n BlockNumber: {last_block_num}'
-            print(pprint.PrettyPrinter().pformat(AttributeDict(event)), str_timestamp) # imports required
+            print(pprint.PrettyPrinter().pformat(AttributeDict(event)), str_timestamp)
         else:
             # event Transfer(address sender, address recipient, uint256 amount);
             print(" sender (address):", event["args"]["src"]) # sender
@@ -141,7 +142,6 @@ READ_ME = f'''
 '''
 #ref: https://stackoverflow.com/a/1278740/2298002
 def print_except(e, debugLvl=0):
-    # prints instance, args, __str__ allows args to be printed directly
     #print(type(e), e.args, e)
     print('', cStrDivider, f' Exception Caught _ e: {e}', cStrDivider, sep='\n')
     if debugLvl > 0:
@@ -187,10 +187,9 @@ if __name__ == "__main__":
                 _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
                 [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
                 _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
-        # print('WEB3 CONTRACTS', [tup[1] for tup in _w3.LST_CONTRACTS])
-        # exit()
+
         # testing...
-        last_block_num = 18849780e
+        last_block_num = 18849880
         for contr_tup in _w3.LST_CONTRACTS:
             get_latest_bals(_w3.W3, contr_tup[0], last_block_num, raw_print=True)
 
