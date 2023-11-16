@@ -7,13 +7,10 @@ cStrDivider_1 = '#--------------------------------------------------------------
 #------------------------------------------------------------#
 #   IMPORTS                                                  #
 #------------------------------------------------------------#
-import sys, os, traceback # time, json
+import sys, os, traceback, time, pprint # json
+from attributedict.collections import AttributeDict # required w/ pprint for contract events
 from datetime import datetime
 import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
-
-# required w/ pprint: for tx_receipt & event logs
-from attributedict.collections import AttributeDict 
-import pprint
 
 # additional common support
 #from web3.exceptions import ContractLogicError
@@ -24,6 +21,42 @@ import pprint
 #------------------------------------------------------------#
 #   FUNCTION SUPPORT                                         #
 #------------------------------------------------------------#
+def get_latest_bals(w3:_web3._Web3, last_block_num:int):
+    print('\n_Web3 INITIALIZED ...', 
+            w3.sel_chain, w3.RPC_URL, w3.CHAIN_ID, w3.SENDER_ADDRESS, w3.ACCOUNT.address, 
+            w3.CONTR_ADDR, w3.CONTRACT.address, w3.GAS_LIMIT, w3.GAS_PRICE, w3.MAX_FEE, 
+            w3.MAX_PRIOR_FEE_RATIO, w3.MAX_PRIOR_FEE, sep='\n ')
+
+    # set from|to block numbers
+    from_block = last_block_num+1 # int | W3.eth.block_number
+    to_block = 'latest' # int | 'latest'
+    str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
+    
+    # fetch transfer events w/ simple fromBlock/toBlock
+    print(f"\nGETTING 'Transfer(address,address,uint256)' LOGS _ {get_time_now()}\n ... {str_from_to}")
+    events = w3.CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
+
+    print_raw = False
+    for i, event in enumerate(events):
+        print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
+        if print_raw:
+            print(pprint.PrettyPrinter().pformat(AttributeDict(event))) # imports required
+        else:
+            # event Transfer(address sender, address recipient, uint256 amount);
+            print(" sender (address):", event["args"]["src"]) # sender
+            print(" recipient (address):", event["args"]["dst"]) # recipient
+            print(" amount (uint256):", event["args"]["wad"]) # amount
+
+            # tx meta data
+            block = w3.W3.eth.getBlock(event["blockNumber"])
+            print(" Timestamp:", block["timestamp"])
+            print(" Block Number:", event["blockNumber"])
+            print(" Transaction Hash:", event["transactionHash"].hex())
+
+        print()
+
+    # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
+
 def go_main():
     RPC_URL, CHAIN_ID, sel_chain    = _web3.inp_sel_chain()
     SENDER_ADDRESS, SENDER_SECRET   = _web3.inp_sel_sender()
@@ -120,6 +153,15 @@ def print_except(e, debugLvl=0):
     strTrace = traceback.format_exc()
     print('', cStrDivider, f' type: {exc_type}', f' file: {fname}', f' line_no: {exc_tb.tb_lineno}', f' traceback: {strTrace}', cStrDivider, sep='\n')
 
+# def wait_sleep(wait_sec:int, b_print=True, bp_one_line=True): # sleep 'wait_sec'
+#     if b_print: print(f'waiting... {wait_sec} sec')
+#     for s in range(wait_sec, 0, -1):
+#         if b_print and bp_one_line: print(wait_sec-s+1, end=' ', flush=True)
+#         if b_print and not bp_one_line: print('wait ', s, sep='', end='\n')
+#         time.sleep(1)
+#     if bp_one_line and b_print: print() # line break if needed
+#     print(f'waiting... {wait_sec} sec _ DONE')
+
 def get_time_now(dt=True):
     if dt: return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[0:-4]
     return datetime.now().strftime("%H:%M:%S.%f")[0:-4]
@@ -138,13 +180,23 @@ if __name__ == "__main__":
     
     ## exe ##
     try:
-        go_main()
+        _w3 = _web3._Web3()
+        _w3 = _w3.inp_init(_constants.LST_CONTR_ARB_ADDR, _constants.abi_file, _constants.bin_file)
+        while True:
+            time.sleep(10) # ~10sec block times (pc)
+            last_block_num = _w3.CONTRACT.functions.getLastBlockNumUpdate().call()
+            print("GTA alt bals last logged: block#", last_block_num)
+            get_latest_bals(_w3, last_block_num)
+
+            # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
+        go_main(_WEB3, last_block_num)
+
         # if sys.argv[-1] == '-loan': go_loan()
         # if sys.argv[-1] == '-trans': go_transfer()
         # if sys.argv[-1] == '-withdraw': go_withdraw()
         
     except Exception as e:
-        print_except(e, debugLvl=0)
+        print_except(e, debugLvl=2)
     
     ## end ##
     print(f'\n\nRUN_TIME_START: {RUN_TIME_START}\nRUN_TIME_END:   {get_time_now()}\n')
