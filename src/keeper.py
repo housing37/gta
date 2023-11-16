@@ -21,20 +21,15 @@ import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 #------------------------------------------------------------#
 #   FUNCTION SUPPORT                                         #
 #------------------------------------------------------------#
-def get_latest_bals(_w3:_web3.WEB3, last_block_num:int, raw_print=True):
-    print('\nWEB3 INITIALIZED ...', 
-            _w3.sel_chain, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
-            _w3.CONTR_ADDR, _w3.CONTRACT.address, _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
-            _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
-
+def get_latest_bals(w3:object, contract:object, last_block_num:int, raw_print:bool=True):
     # set from|to block numbers
-    from_block = last_block_num+1 # int | W3.eth.block_number
+    from_block = last_block_num+1 # int | w3.eth.block_number
     to_block = 'latest' # int | 'latest'
     str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
     
     # fetch transfer events w/ simple fromBlock/toBlock
     print(f"\nGETTING 'Transfer(address,address,uint256)' LOGS _ {get_time_now()}\n ... {str_from_to}")
-    events = _w3.CONTRACT.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
+    events = contract.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
 
     # print events
     last_block_num = last_time_stamp = 0
@@ -42,7 +37,7 @@ def get_latest_bals(_w3:_web3.WEB3, last_block_num:int, raw_print=True):
         # exe call to get blokc timestamp (min amount of times)
         if int(event["blockNumber"]) != last_block_num:
             last_block_num = int(event["blockNumber"])
-            last_time_stamp = int(_w3.W3.eth.getBlock(event["blockNumber"])["timestamp"])
+            last_time_stamp = int(w3.eth.getBlock(event["blockNumber"])["timestamp"])
 
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
@@ -64,7 +59,7 @@ def get_latest_bals(_w3:_web3.WEB3, last_block_num:int, raw_print=True):
     # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
 
 def go_main():
-    RPC_URL, CHAIN_ID, sel_chain    = _web3.inp_sel_chain()
+    RPC_URL, CHAIN_ID, CHAIN_SEL    = _web3.inp_sel_chain()
     SENDER_ADDRESS, SENDER_SECRET   = _web3.inp_sel_sender()
     # CONTR_ADDR                      = _web3.inp_sel_contract(_constants.LST_CONTR_ARB_ADDR)
     # CONTR_ADDR                      = '0xCc78A0acDF847A2C1714D2A925bB4477df5d48a6'
@@ -72,9 +67,9 @@ def go_main():
     W3, ACCOUNT                     = _web3.init_web3(RPC_URL, CHAIN_ID, SENDER_ADDRESS, SENDER_SECRET, CONTR_ADDR)
     CONTR_ABI, CONTR_BYTES          = _web3.read_abi_bytecode(_constants.abi_file, _constants.bin_file)
     CONTRACT                        = _web3.init_contract(CONTR_ADDR, CONTR_ABI, W3)
-    GAS_LIMIT, GAS_PRICE, MAX_FEE, MAX_PRIOR_FEE_RATIO, MAX_PRIOR_FEE = _web3.get_gas_settings(sel_chain, W3)
+    GAS_LIMIT, GAS_PRICE, MAX_FEE, MAX_PRIOR_FEE_RATIO, MAX_PRIOR_FEE = _web3.get_gas_settings(CHAIN_SEL, W3)
     print('\nALL INPUTS ...', 
-            sel_chain, RPC_URL, CHAIN_ID, SENDER_ADDRESS, ACCOUNT.address, 
+            CHAIN_SEL, RPC_URL, CHAIN_ID, SENDER_ADDRESS, ACCOUNT.address, 
             CONTR_ADDR, CONTRACT.address, GAS_LIMIT, GAS_PRICE, MAX_FEE, 
             MAX_PRIOR_FEE_RATIO, MAX_PRIOR_FEE, sep='\n ')
     print('ALL INPUTS _ DONE')
@@ -186,16 +181,24 @@ if __name__ == "__main__":
     
     ## exe ##
     try:
-        _w3 = _web3.WEB3()
-        _w3 = _w3.init_inp(_constants.LST_CONTR_ARB_ADDR, _constants.abi_file, _constants.bin_file)
-
+        _w3 = _web3.WEB3().init_inp()
+        _w3.add_contract(_constants.DIC_CONTR_ABI_BIN)
+        print('\nWEB3 INITIALIZED ...', 
+                _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
+                [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
+                _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
+        # print('WEB3 CONTRACTS', [tup[1] for tup in _w3.LST_CONTRACTS])
+        # exit()
         # testing...
-        last_block_num = 18849022
-        get_latest_bals(_w3, last_block_num, raw_print=False)
+        last_block_num = 18849780e
+        for contr_tup in _w3.LST_CONTRACTS:
+            get_latest_bals(_w3.W3, contr_tup[0], last_block_num, raw_print=True)
+
+        # live...
         while False:
             time.sleep(10) # ~10sec block times (pc)
             last_block_num = _w3.CONTRACT.functions.getLastBlockNumUpdate().call()
-            print("GTA alt bals last logged: block#", last_block_num)
+            print("GTA alt bals _ last block# ", last_block_num)
             get_latest_bals(_w3, last_block_num)
 
             # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
@@ -206,7 +209,7 @@ if __name__ == "__main__":
         # if sys.argv[-1] == '-withdraw': go_withdraw()
         
     except Exception as e:
-        print_except(e, debugLvl=2)
+        print_except(e, debugLvl=0)
     
     ## end ##
     print(f'\n\nRUN_TIME_START: {RUN_TIME_START}\nRUN_TIME_END:   {get_time_now()}\n')

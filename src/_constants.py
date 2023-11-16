@@ -51,8 +51,11 @@ print('getting keys and setting globals ...')
 # bin_file = "../contracts/BalancerFLR_pc.bin"
 # abi_file = "../contracts/atropa.json"
 # bin_file = "../contracts/atropa.bin"
-abi_file = "../contracts/wpls.json"
-bin_file = "../contracts/wpls.bin"
+abi_file_wpls = "../contracts/wpls.json"
+bin_file_wpls = "../contracts/wpls.bin"
+DIC_CONTR_ABI_BIN = {
+    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'abi_file':abi_file_wpls,'bin_file':bin_file_wpls}
+}
 LST_CONTR_ARB_ADDR = [
     "0x59012124c297757639e4ab9b9e875ec80a5c51da", # deployed eth main 102823_1550
     "0x48af7d501bca526171b322ac2d8387a8cf085850", # deployed eth main 102823_2140
@@ -69,7 +72,6 @@ LST_CONTR_ARB_ADDR = [
     "0xD0283328BC73E624Ccac40f138bb620287c0EC76", # deployed pc main 110623_1006 (TEST-ARB)
     "0x302CC7e8ffc8361c84b21450bAB7e018E41359c3", # deployed pc main 110623_1025 (TEST-ARB)
     "0xEE123F711176E22Ebb98eD5951c640722703BEf7", # deployed pc main 110623_1122 (TEST-ARB)
-    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27", # wpls
 ]
 #------------------------------------------------------------#
 #------------------------------------------------------------#

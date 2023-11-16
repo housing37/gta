@@ -13,38 +13,49 @@ class WEB3:
         self.rpc_req_timeout = 60 # *tested_111523: 10=50s,30=150s,45=225s,60=300s
         self.RPC_URL = None
         self.CHAIN_ID = None
-        self.sel_chain = None
+        self.CHAIN_SEL = None
         self.SENDER_ADDRESS = None
         self.SENDER_SECRET = None
-        self.CONTR_ADDR = 'nil_contract'
         self.W3 = None
         self.ACCOUNT = None
-        self.CONTR_ABI = None
-        self.CONTR_BYTES = None
-        self.CONTRACT = None
+
+        self.LST_CONTRACTS = []
+        # self.CONTR_ADDR = 'nil_contract'
+        # self.CONTR_ABI = None
+        # self.CONTR_BYTES = None
+        # self.CONTRACT = None
+
         self.GAS_LIMIT = None
         self.GAS_PRICE = None
         self.MAX_FEE = None
         self.MAX_PRIOR_FEE_RATIO = None
         self.MAX_PRIOR_FEE = None
 
-    def init_inp(self, lst_contr_addr, abi_file, bin_file):
-        RPC_URL, CHAIN_ID, sel_chain    = self.inp_sel_chain()
+    # def init_inp(self, lst_contr_addr, abi_file, bin_file):
+    def init_inp(self):
+        RPC_URL, CHAIN_ID, CHAIN_SEL    = self.inp_sel_chain()
         SENDER_ADDRESS, SENDER_SECRET   = self.inp_sel_sender()
-        CONTR_ADDR                      = self.inp_sel_contract(lst_contr_addr)
-        # W3, ACCOUNT                     = self.init_web3()
-        CONTR_ABI, CONTR_BYTES          = self.read_abi_bytecode(abi_file, bin_file)
+        # CONTR_ADDR                      = self.inp_sel_contract(lst_contr_addr)
         W3, ACCOUNT                     = self.init_web3()
-        CONTRACT                        = self.init_contract(CONTR_ADDR, CONTR_ABI, W3)
+        # CONTR_ABI, CONTR_BYTES          = self.read_abi_bytecode(abi_file, bin_file)
+        # CONTRACT                        = self.init_contract(CONTR_ADDR, CONTR_ABI, W3)
         gas_tup                         = self.get_gas_settings(W3)
         return self
+    
+    # def add_contract(self, lst_contr_addr, abi_file, bin_file):
+    def add_contract(self, dict_contr):
+        assert self.W3 != None, 'err: web3 not initialzed'
+        contr_addr              = self.inp_sel_contract(list(dict_contr.keys()))
+        contr_abi, contr_bytes  = self.read_abi_bytecode(dict_contr[contr_addr]['abi_file'], dict_contr[contr_addr]['bin_file'])
+        contract, contr_addr    = self.init_contract(contr_addr, contr_abi, self.W3)
+        self.LST_CONTRACTS.append((contract, contr_addr))
 
     def inp_sel_chain(self):
-        self.sel_chain = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
-        assert 0 <= int(self.sel_chain) <= 1, 'Invalid entry, abort'
-        self.RPC_URL, self.CHAIN_ID = (env.eth_main, env.eth_main_cid) if int(self.sel_chain) == 0 else (env.pc_main, env.pc_main_cid)
+        self.CHAIN_SEL = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
+        assert 0 <= int(self.CHAIN_SEL) <= 1, 'Invalid entry, abort'
+        self.RPC_URL, self.CHAIN_ID = (env.eth_main, env.eth_main_cid) if int(self.CHAIN_SEL) == 0 else (env.pc_main, env.pc_main_cid)
         print(f'  selected {(self.RPC_URL, self.CHAIN_ID)}')
-        return self.RPC_URL, self.CHAIN_ID, self.sel_chain
+        return self.RPC_URL, self.CHAIN_ID, self.CHAIN_SEL
 
     def inp_sel_sender(self):
         sel_send = input(f'\nSelect sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
@@ -52,43 +63,22 @@ class WEB3:
         self.SENDER_ADDRESS, self.SENDER_SECRET = (env.sender_address_3, env.sender_secret_3) if int(sel_send) == 0 else (env.sender_address_1, env.sender_secret_1)
         print(f'  selected {self.SENDER_ADDRESS}')
         return self.SENDER_ADDRESS, self.SENDER_SECRET
-
-    def inp_sel_contract(self, LST_CONTR_ADDR=[]):
-        print(f'\nSelect arbitrage contract to use:')
-        for i, v in enumerate(LST_CONTR_ADDR): print(' ',i, '=', v)
-        idx = input('  > ')
-        assert 0 <= int(idx) < len(LST_CONTR_ADDR), 'Invalid input, aborting...\n'
-        self.CONTR_ADDR = str(LST_CONTR_ADDR[int(idx)])
-        print(f'  selected {self.CONTR_ADDR}')
-        return self.CONTR_ADDR
     
     def init_web3(self):
         print(f'''\nINITIALIZING web3 ...
             RPC: {self.RPC_URL} _ w/ timeout: {self.rpc_req_timeout}
             ChainID: {self.CHAIN_ID}
             SENDER: {self.SENDER_ADDRESS}
-            CONTRACT: {self.CONTR_ADDR}''')
+            CONTRACTS: {self.LST_CONTRACTS}''')
 
         self.W3 = Web3(HTTPProvider(self.RPC_URL, request_kwargs={'timeout': self.rpc_req_timeout}))
         #self.W3.middleware_stack.inject(geth_poa_middleware, layer=0) # chatGPT: for PoA chains; for gas or something
         self.ACCOUNT = Account.from_key(self.SENDER_SECRET)
         return self.W3, self.ACCOUNT
     
-    def read_abi_bytecode(self, abi_file, bin_file):
-        print(f'\nreading contract abi & bytecode files ...\n   {abi_file, bin_file}')
-        with open(bin_file, "r") as file: self.CONTR_BYTES = '0x'+file.read()
-        with open(abi_file, "r") as file: self.CONTR_ABI = file.read()
-        return self.CONTR_ABI, self.CONTR_BYTES
-    
-    def init_contract(self, CONTR_ADDR, CONTR_ABI, w3):
-        print(f'\ninitializing contract {self.CONTR_ADDR} ...')
-        self.CONTR_ADDR = w3.to_checksum_address(CONTR_ADDR)
-        self.CONTRACT = w3.eth.contract(address=CONTR_ADDR, abi=CONTR_ABI)
-        return self.CONTRACT
-    
     def get_gas_settings(self, w3):
-        print('calc gas settings...')
-        if int(self.CHAIN_ID) == 0:
+        print('\ncalc gas settings...')
+        if int(self.CHAIN_SEL) == 0:
             self.GAS_LIMIT = 3_000_000
             self.GAS_PRICE = w3.to_wei('10', 'gwei')
             self.MAX_FEE = w3.to_wei('14', 'gwei')
@@ -101,7 +91,7 @@ class WEB3:
             self.MAX_PRIOR_FEE_RATIO = 1.0
             self.MAX_PRIOR_FEE = int(w3.eth.max_priority_fee * self.MAX_PRIOR_FEE_RATIO)
 
-        print(f'''\nSetting gas params ...
+        print(f'''Setting gas params ...
             GAS_LIMIT: {self.GAS_LIMIT}
             GAS_PRICE: {self.GAS_PRICE} *'gasPrice' param fails on PC
             MAX_FEE: {self.MAX_FEE} ({self.MAX_FEE / 10**18} ether)
@@ -109,13 +99,34 @@ class WEB3:
         
         return self.GAS_LIMIT, self.GAS_PRICE, self.MAX_FEE, self.MAX_PRIOR_FEE_RATIO, self.MAX_PRIOR_FEE
 
+    def inp_sel_contract(self, _lst_contr_addr=[]):
+        print(f'\nSelect contract to use:')
+        for i, v in enumerate(_lst_contr_addr): print(' ',i, '=', v)
+        idx = input('  > ')
+        assert 0 <= int(idx) < len(_lst_contr_addr), 'Invalid input, aborting...\n'
+        contr_addr = str(_lst_contr_addr[int(idx)])
+        print(f'  selected {contr_addr}')
+        return contr_addr
+    
+    def read_abi_bytecode(self, abi_file, bin_file):
+        print(f'\nreading contract abi & bytecode files ...\n   {abi_file, bin_file}')
+        with open(bin_file, "r") as file: contr_bytes = '0x'+file.read()
+        with open(abi_file, "r") as file: contr_abi = file.read()
+        return contr_abi, contr_bytes
+    
+    def init_contract(self, contr_addr, contr_abi, w3):
+        print(f'\ninitializing contract {contr_addr} ...')
+        contr_addr = w3.to_checksum_address(contr_addr)
+        contract = w3.eth.contract(address=contr_addr, abi=contr_abi)
+        return contract, contr_addr
+    
 # #------------------------------------------------------------#
-# def inp_sel_chain():
-#     sel_chain = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
-#     assert 0 <= int(sel_chain) <= 1, 'Invalid entry, abort'
-#     (RPC_URL, CHAIN_ID) = (env.eth_main, env.eth_main_cid) if int(sel_chain) == 0 else (env.pc_main, env.pc_main_cid)
+# def inp_CHAIN_SEL():
+#     CHAIN_SEL = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
+#     assert 0 <= int(CHAIN_SEL) <= 1, 'Invalid entry, abort'
+#     (RPC_URL, CHAIN_ID) = (env.eth_main, env.eth_main_cid) if int(CHAIN_SEL) == 0 else (env.pc_main, env.pc_main_cid)
 #     print(f'  selected {(RPC_URL, CHAIN_ID)}')
-#     return RPC_URL, CHAIN_ID, sel_chain
+#     return RPC_URL, CHAIN_ID, CHAIN_SEL
 # #------------------------------------------------------------#
 # def inp_sel_sender():
 #     sel_send = input(f'\nSelect sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
@@ -170,9 +181,9 @@ class WEB3:
 #     CONTRACT = W3.eth.contract(address=CONTR_ADDR, abi=CONTR_ABI)
 #     return CONTRACT
 # #------------------------------------------------------------#
-# def get_gas_settings(sel_chain, W3:Web3):
+# def get_gas_settings(CHAIN_SEL, W3:Web3):
 #     print('calc gas settings...')
-#     if int(sel_chain) == 0:
+#     if int(CHAIN_SEL) == 0:
 #         # ethereum main net (update_102923)
 #         GAS_LIMIT = 3_000_000# max gas units to use for tx (required)
 #         GAS_PRICE = W3.to_wei('10', 'gwei') # price to pay for each unit of gas (optional?)
