@@ -21,9 +21,9 @@ import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 #------------------------------------------------------------#
 #   FUNCTION SUPPORT                                         #
 #------------------------------------------------------------#
-def get_latest_bals(w3:object, contract:object, last_block_num:int, raw_print:bool=True):
+def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:bool=True):
     # set from|to block numbers
-    from_block = last_block_num+1 # int | w3.eth.block_number
+    from_block = start_block_num # int | w3.eth.block_number
     to_block = 'latest' # int | 'latest'
     str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
     
@@ -56,6 +56,8 @@ def get_latest_bals(w3:object, contract:object, last_block_num:int, raw_print:bo
             print(" Transaction Hash:", event["transactionHash"].hex())
 
         print()
+    
+    return last_block_num, last_time_stamp
 
     # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
 
@@ -189,9 +191,12 @@ if __name__ == "__main__":
                 _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
 
         # testing...
-        last_block_num = 18849880
+        # start_block_num = 18849880
+        start_block_num = _w3.W3.eth.block_number - 5
+        print('\nBlock# start: ', start_block_num)
         for contr_tup in _w3.LST_CONTRACTS:
-            get_latest_bals(_w3.W3, contr_tup[0], last_block_num, raw_print=True)
+            last_block_num = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, raw_print=True)[0]
+        print('\n\nBlock# range: ', start_block_num, last_block_num)
 
         # live...
         while False:
