@@ -36,23 +36,6 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
     str_evt = 'Transfer(address,address,uint256)'
     print(f"\nGETTING EVENT LOGS: '{str_evt}' _ {get_time_now()}\n ... {str_from_to}")
     events = contract.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
-    
-    # ## ALTERNATE _ for getting events with 'create_filter' (not working _ 111623)
-    # args = {'dst':'0x7b1C460d0Ad91c8A453B7b0DBc0Ae4F300423FFB'} # 'src', 'dst', 'wad'
-    # # event_filter = contract.events.Transfer().create_filter(fromBlock=from_block, toBlock=to_block, argument_filters=args)
-    # event_filter = contract.events['Transfer'].create_filter(fromBlock=from_block, toBlock=to_block, argument_filters=args)
-    # events = event_filter.get_new_entries()
-
-    # ## ALTERNATE _ for getting events with 'topics'
-    # #   note: still have to filter manually for 'src,dst,wad'
-    # transfer_event_signature = w3.keccak(text='Transfer(address,address,uint256)').hex()
-    # filter_params = {'fromBlock':from_block, 'toBlock':to_block, 
-    #                     'address':contract.address, # defaults to conract.address
-    #                     'topics': [transfer_event_signature, # event signature
-    #                                 None, # 'from' (not included with 'Transfer' event)
-    #                                 None], # 'to' (not included with 'Transfer' event)
-    # }
-    # events = w3.eth.get_logs(filter_params)
 
     # print events
     last_block_num = last_time_stamp = 0
