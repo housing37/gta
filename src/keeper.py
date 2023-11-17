@@ -209,7 +209,7 @@ if __name__ == "__main__":
     ## exe ##
     try:
         _w3 = _web3.WEB3().init_inp()
-        _w3.add_contract(_constants.DIC_CONTR_ABI_BIN)
+        _w3.add_contract(_constants.DICT_CONTR_ABI_BIN)
         print('\nWEB3 INITIALIZED ...', 
                 _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
                 [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 

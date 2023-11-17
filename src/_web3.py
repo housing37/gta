@@ -36,7 +36,7 @@ class WEB3:
 
     def add_contract(self, dict_contr):
         assert self.W3 != None, 'err: web3 not initialzed'
-        contr_addr              = self.inp_sel_contract(list(dict_contr.keys()))
+        contr_addr              = self.inp_sel_contract([(list(dict_contr.keys()),[v['symb'] for k,v in dict_contr.items()])])
         contr_abi, contr_bytes  = self.read_abi_bytecode(dict_contr[contr_addr]['abi_file'], dict_contr[contr_addr]['bin_file'])
         contract, contr_addr    = self.init_contract(contr_addr, contr_abi, self.W3)
         self.LST_CONTRACTS.append((contract, contr_addr))
@@ -92,10 +92,10 @@ class WEB3:
 
     def inp_sel_contract(self, _lst_contr_addr=[]):
         print(f'\nSelect contract to use:')
-        for i, v in enumerate(_lst_contr_addr): print(' ',i, '=', v)
+        for i, v in enumerate(_lst_contr_addr): print(' ',i,'=',v[0][0],v[1][0]) # parse through tuple
         idx = input('  > ')
         assert 0 <= int(idx) < len(_lst_contr_addr), 'Invalid input, aborting...\n'
-        contr_addr = str(_lst_contr_addr[int(idx)])
+        contr_addr = str(_lst_contr_addr[int(idx)][0][0]) # parse through tuple
         print(f'  selected {contr_addr}')
         return contr_addr
     

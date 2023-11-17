@@ -53,8 +53,8 @@ print('getting keys and setting globals ...')
 # bin_file = "../contracts/atropa.bin"
 abi_file_wpls = "../contracts/wpls.json"
 bin_file_wpls = "../contracts/wpls.bin"
-DIC_CONTR_ABI_BIN = {
-    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'abi_file':abi_file_wpls,'bin_file':bin_file_wpls}
+DICT_CONTR_ABI_BIN = {
+    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'symb':'WPLS','abi_file':abi_file_wpls,'bin_file':bin_file_wpls}
 }
 LST_CONTR_ARB_ADDR = [
     "0x59012124c297757639e4ab9b9e875ec80a5c51da", # deployed eth main 102823_1550
