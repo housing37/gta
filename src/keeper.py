@@ -242,20 +242,23 @@ if __name__ == "__main__":
     try:
         _w3 = _web3.WEB3().init_inp()
         _w3.add_contract(_constants.DICT_CONTR_ABI_BIN)
+        # _w3.add_contract(_constants.DICT_CONTR_ABI_BIN) # choose 2nd token for event logs
         print('\nWEB3 INITIALIZED ...', 
                 _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
                 [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
                 _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
 
         # testing...
-        start_block_num = 18851861
+        # start_block_num = 18851861
         # start_block_num = _w3.W3.eth.block_number - 100
-        # start_block_num = _w3.W3.eth.block_number
+        start_block_num = _w3.W3.eth.block_number
         print('\nBlock# start: ', start_block_num)
+        lst_dict_evts = [] # store multiple token events
         for contr_tup in _w3.LST_CONTRACTS:
             dict_evts, last_block_num, last_time_stamp = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, filter_gta=False)
+            lst_dict_evts.append(dict_evts)
         print('\n\nBlock# range: ', start_block_num, last_block_num)
-        print(json.dumps(dict_evts, indent=4))
+        print(json.dumps(lst_dict_evts, indent=4))
 
         # live...
         while False:

@@ -91,7 +91,6 @@ class WEB3:
         return self.GAS_LIMIT, self.GAS_PRICE, self.MAX_FEE, self.MAX_PRIOR_FEE_RATIO, self.MAX_PRIOR_FEE
 
     def inp_sel_contract(self, _lst_contr_addr=[]):
-        print(_lst_contr_addr)
         print(f'\nSelect contract to use:')
         for i, v in enumerate(_lst_contr_addr): print(' ',i,'=',v[0],v[1]) # parse through tuple
         idx = input('  > ')
