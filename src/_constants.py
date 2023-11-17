@@ -49,12 +49,16 @@ print('getting keys and setting globals ...')
 ## SETTINGS ##
 # abi_file = "../contracts/BalancerFLR_pc.json"
 # bin_file = "../contracts/BalancerFLR_pc.bin"
-# abi_file = "../contracts/atropa.json"
-# bin_file = "../contracts/atropa.bin"
+abi_file_atro = "../contracts/atropa.json"
+bin_file_atro = "../contracts/atropa.bin"
 abi_file_wpls = "../contracts/wpls.json"
 bin_file_wpls = "../contracts/wpls.bin"
+abi_file_plsx = "../contracts/plsx.json"
+bin_file_plsx = "../contracts/plsx.bin"
 DICT_CONTR_ABI_BIN = {
-    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'symb':'WPLS','abi_file':abi_file_wpls,'bin_file':bin_file_wpls}
+    "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'symb':'WPLS','abi_file':abi_file_wpls,'bin_file':bin_file_wpls},
+    "0x95B303987A60C71504D99Aa1b13B4DA07b0790ab":{'symb':'PLSX','abi_file':abi_file_plsx,'bin_file':bin_file_plsx},
+    # "0xCc78A0acDF847A2C1714D2A925bB4477df5d48a6":{'symb':'ATROPA','abi_file':abi_file_atro,'bin_file':bin_file_atro},
 }
 LST_CONTR_ARB_ADDR = [
     "0x59012124c297757639e4ab9b9e875ec80a5c51da", # deployed eth main 102823_1550

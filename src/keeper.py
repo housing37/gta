@@ -7,7 +7,7 @@ cStrDivider_1 = '#--------------------------------------------------------------
 #------------------------------------------------------------#
 #   IMPORTS                                                  #
 #------------------------------------------------------------#
-import sys, os, traceback, time, pprint # json
+import sys, os, traceback, time, pprint, json
 from attributedict.collections import AttributeDict # required w/ pprint for contract events
 from datetime import datetime
 import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
@@ -19,16 +19,22 @@ import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 #sys.path.append(parent_dir) # import from parent dir of this file
 
 #------------------------------------------------------------#
+#   GLOABALS SUPPORT                                         #
+#------------------------------------------------------------#
+GTA_CONTRACT_ADDR = '0xGtaContractAddress'
+
+#------------------------------------------------------------#
 #   FUNCTION SUPPORT                                         #
 #------------------------------------------------------------#
-def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:bool=True):
+def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:bool=False, filter_gta=True):
     # set from|to block numbers
     from_block = start_block_num # int | w3.eth.block_number
     to_block = 'latest' # int | 'latest'
     str_from_to = f'from_block: {from_block} _ to_block: {to_block}'
     
     # fetch transfer events w/ simple fromBlock/toBlock
-    print(f"\nGETTING EVENT LOGS: 'Transfer(address,address,uint256)' _ {get_time_now()}\n ... {str_from_to}")
+    str_evt = 'Transfer(address,address,uint256)'
+    print(f"\nGETTING EVENT LOGS: '{str_evt}' _ {get_time_now()}\n ... {str_from_to}")
     events = contract.events.Transfer().get_logs(fromBlock=from_block, toBlock=to_block) # toBlock='latest' (default)
     
     # ## ALTERNATE _ for getting events with 'create_filter' (not working _ 111623)
@@ -50,10 +56,24 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
 
     # print events
     last_block_num = last_time_stamp = 0
+    dict_evts = {}
     for i, event in enumerate(events):
-        dst = event['args']['dst'] 
-        if dst != contract.address:
-            # print('dst != contract.address', f'({dst} != {contract.address})')
+        evt_num = i
+        token = contract.address
+
+        # check for various param names for 'event Transfer(address,address,uint256);'
+        if token == '0xA1077a294dDE1B09bB078844df40758a5D0f9a27': # WPLS support
+            src = event["args"]["src"]
+            dst = event["args"]["dst"]
+            wad = event["args"]["wad"]
+        if token == '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab': # PLSX support
+            src = event["args"]["from"]
+            dst = event["args"]["to"]
+            wad = event["args"]["value"]
+
+        # # ignore token txs NOT sent to gta contract
+        if dst != GTA_CONTRACT_ADDR and filter_gta:
+            # print('dst != GTA_CONTRACT_ADDR', f'({dst} != {GTA_CONTRACT_ADDR})')
             print(' .', end='', flush=True)
             continue
 
@@ -68,23 +88,35 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             str_timestamp = f'\n\n Timestamp: {last_time_stamp}\n BlockNumber: {last_block_num}'
             print(pprint.PrettyPrinter().pformat(AttributeDict(event)), str_timestamp)
         else:
-            # event Transfer(address sender, address recipient, uint256 amount);
-            print(" token (address):", contract.address) # token
-            print(" sender (address):", event["args"]["src"]) # sender
-            print(" recipient (address):", event["args"]["dst"]) # recipient
-            print(" amount (uint256):", event["args"]["wad"]) # amount
+            block_num = event["blockNumber"]
+            tx_hash = event["transactionHash"].hex()
+            print(" token (address):", token) # token
+            print(" sender (address):", src) # sender
+            print(" recipient (address):", dst) # recipient
+            print(" amount (uint256):", wad) # amount
 
             # tx meta data
             print(" Timestamp:", last_time_stamp, last_block_num)
             print(" Block Number:", event["blockNumber"])
             print(" Transaction Hash:", event["transactionHash"].hex())
 
+            dict_evts[str(evt_num)] = { 'tx_hash':tx_hash,
+                                        'token':token,
+                                        'evt_sign':str_evt,
+                                        'sender':src,
+                                        'recipient':dst,
+                                        'amount':wad,
+                                        'time_stamp':last_time_stamp,
+                                        'last_block_num':last_block_num,
+                                        'block_num':block_num,
+                                        'evt_num':evt_num
+                                    }
         print()
-    
-    return last_block_num, last_time_stamp
+    return dict_evts, last_block_num, last_time_stamp
 
     # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
-    #   todo: parse filtered data from ‘Transfer’ event, and update contract
+    #   DONE - parse filtered data from ‘Transfer’ event, and update contract
+    #   - send dict_evts to gta contract 
 
 def go_main():
     RPC_URL, CHAIN_ID, CHAIN_SEL    = _web3.inp_sel_chain()
@@ -216,13 +248,14 @@ if __name__ == "__main__":
                 _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
 
         # testing...
-        # start_block_num = 18849880
+        start_block_num = 18851861
         # start_block_num = _w3.W3.eth.block_number - 100
-        start_block_num = _w3.W3.eth.block_number
+        # start_block_num = _w3.W3.eth.block_number
         print('\nBlock# start: ', start_block_num)
         for contr_tup in _w3.LST_CONTRACTS:
-            last_block_num = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, raw_print=True)[0]
+            dict_evts, last_block_num, last_time_stamp = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, filter_gta=False)
         print('\n\nBlock# range: ', start_block_num, last_block_num)
+        print(json.dumps(dict_evts, indent=4))
 
         # live...
         while False:
@@ -231,8 +264,9 @@ if __name__ == "__main__":
             print("GTA alt bals _ last block# ", last_block_num)
             get_latest_bals(_w3, last_block_num)
 
-            # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
-            #   todo: parse filtered data from ‘Transfer’ event, and update contract
+        # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
+        #   DONE - parse filtered data from ‘Transfer’ event, and update contract
+        #   - send dict_evts to gta contract
 
         #go_main(_WEB3, last_block_num)
         # if sys.argv[-1] == '-loan': go_loan()
