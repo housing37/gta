@@ -88,19 +88,77 @@ contract GamerTokeAward is IERC20, Ownable {
     // maintain whitelist tokens that can be used for deposit
     mapping(address => bool) public depositTokens;
     
-    // maintain local mapping of this contracts ERC20 token balances
-    mapping(address => uint256) private altBalancesGTA;
-    
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
-        
-    function logCredit(address _player, address _token, uint256 _amount) public onlyKeeper {
-        uint256 prev_bal = altBalancesGTA[_token];
+
+    // maintain local mapping of this contracts ERC20 token balances
+    mapping(address => uint256) private gtaAltBalances;
+    uint256 private gtaAltBalsLastBlockNum = 0;
+    
+    // CONSTRUCTOR
+    constructor(uint256 initialSupply) {
+        // Set creator to owner & keeper
+        owner = msg.sender;
+        keeper = msg.sender;
+        totalSupply = initialSupply * 10**uint8(decimals);
+        _balances[msg.sender] = totalSupply;
+        emit Transfer(address(0), msg.sender, totalSupply);
+    }
+
+    function getLastBlockNumUpdate() public view onlyKeeper {
+        return gtaAltBalsLastBlockNum;
+    }
+
+    // LEFT OFF HERE... 
+    //  ready to pass data from 'Transfer' event logs on python side
+    //      - need to update mapping for player usd credits
+    //      - may need to maintain mapping of GTA contract alt coin balances
+    //          or maybe just swap for usd stables immediately (i forgot)
+    //  should only pass the bare-min data needed
+    //  should probably use pyton side to calc USD credit vals for alt coin transfers
+    //      however, we need to actually make the swaps on chain
+    //       note: need to keep track of all 'expenses' and deduct from usd credit balances
+    //          ie. gas fees, dex swap fees, etc.
+    struct InnerStruct {
+        uint256 k1;
+        uint256 k2;
+        // Add more nested values as needed
+    }
+    struct MyStruct {
+        uint256 key;
+        InnerStruct[] innerStructs;
+    }
+    function myMethod(MyStruct[] memory dataArray) public {
+        for (uint256 i = 0; i < dataArray.length; i++) {
+            uint256 key = dataArray[i].key;
+            InnerStruct[] memory innerStructs = dataArray[i].innerStructs;
+
+            for (uint256 j = 0; j < innerStructs.length; j++) {
+                uint256 k1 = innerStructs[j].k1;
+                uint256 k2 = innerStructs[j].k2;
+
+                // Perform operations with k1, k2
+                // ...
+
+                // Do something with the data
+            }
+        }
+    }
+
+    function logCredit(address _player, address _token, uint256 _amount, uint256 lastBlock) public onlyKeeper {
+        uint256 prev_bal = gtaAltBalances[_token];
         uint256 new_bal = IERC20(_token).balanceOf(address(this));
         required(new_bal > prev_bal, "err: token bal mismatch");
-        
-        //altBalancesGTA[_token] += _amount;
-        altBalancesGTA[_token] = new_bal;
+            // 'logCredit' gets called after ever time a token transfer to this contract occurs
+            // hence, if new_bal < prev_bal
+            //  then that means this contract spent some _token
+            //  after a token transfer occurred (mined)
+            //   and before this 'logCredit' was called
+            
+            // LEFT OFF HERE... is this correct? ^
+            
+        //gtaAltBalances[_token] += _amount;
+        gtaAltBalances[_token] = new_bal;
         
         // LEFT OFF HERE... does this logic work? ^
         
@@ -242,16 +300,6 @@ contract GamerTokeAward is IERC20, Ownable {
         }
         _transfer(msg.sender, _recipient, _amount);
         return true;
-    }
-
-    // CONSTRUCTOR
-    constructor(uint256 initialSupply) {
-        // Set creator to owner & keeper
-        owner = msg.sender;
-        keeper = msg.sender;
-        totalSupply = initialSupply * 10**uint8(decimals);
-        _balances[msg.sender] = totalSupply;
-        emit Transfer(address(0), msg.sender, totalSupply);
     }
     
     // EVENTS

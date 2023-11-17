@@ -65,6 +65,10 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             last_block_num = int(event["blockNumber"])
             last_time_stamp = int(w3.eth.get_block(event["blockNumber"])["timestamp"])
 
+            # initalize block_num key to empty block event dict array (if needed)
+            if str(last_block_num) not in dict_evts:
+                dict_evts[str(last_block_num)] = []
+
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
             # imports required: pprint, AttributeDict
@@ -80,20 +84,22 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
 
             # tx meta data
             print(" Timestamp:", last_time_stamp, last_block_num)
-            print(" Block Number:", event["blockNumber"])
-            print(" Transaction Hash:", event["transactionHash"].hex())
+            print(" Block Number:", block_num)
+            print(" Transaction Hash:", tx_hash)
 
-            dict_evts[str(evt_num)] = { 'tx_hash':tx_hash,
-                                        'token':token,
-                                        'evt_sign':str_evt,
-                                        'sender':src,
-                                        'recipient':dst,
-                                        'amount':wad,
-                                        'time_stamp':last_time_stamp,
-                                        'last_block_num':last_block_num,
-                                        'block_num':block_num,
-                                        'evt_num':evt_num
-                                    }
+            # append block event dict to block_num array
+            block_evt = {   'evt_num':evt_num,
+                            'tx_hash':tx_hash,
+                            'token':token,
+                            'evt_sign':str_evt,
+                            'sender':src,
+                            'recipient':dst,
+                            'amount':wad,
+                            'time_stamp':last_time_stamp,
+                            'block_num':block_num
+                        }
+            dict_evts[str(last_block_num)].append(block_evt)
+            
         print()
     return dict_evts, last_block_num, last_time_stamp
 
@@ -158,7 +164,7 @@ if __name__ == "__main__":
     try:
         _w3 = _web3.WEB3().init_inp()
         _w3.add_contract(_constants.DICT_CONTR_ABI_BIN)
-        # _w3.add_contract(_constants.DICT_CONTR_ABI_BIN) # choose 2nd token for event logs
+        #_w3.add_contract(_constants.DICT_CONTR_ABI_BIN) # choose 2nd token for event logs
         print('\nWEB3 INITIALIZED ...', 
                 _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
                 [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
@@ -166,8 +172,8 @@ if __name__ == "__main__":
 
         # testing...
         # start_block_num = 18851861
-        # start_block_num = _w3.W3.eth.block_number - 100
-        start_block_num = _w3.W3.eth.block_number
+        start_block_num = _w3.W3.eth.block_number - 10
+        # start_block_num = _w3.W3.eth.block_number
         print('\nBlock# start: ', start_block_num)
         lst_dict_evts = [] # store multiple token events
         for contr_tup in _w3.LST_CONTRACTS:
