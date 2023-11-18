@@ -48,11 +48,11 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
         if token == '0xA1077a294dDE1B09bB078844df40758a5D0f9a27': # WPLS support
             src = event["args"]["src"]
             dst = event["args"]["dst"]
-            wad = event["args"]["wad"]
+            amt = event["args"]["wad"]
         if token == '0x95B303987A60C71504D99Aa1b13B4DA07b0790ab': # PLSX support
             src = event["args"]["from"]
             dst = event["args"]["to"]
-            wad = event["args"]["value"]
+            amt = event["args"]["value"]
 
         # # ignore token txs NOT sent to gta contract
         if dst != GTA_CONTRACT_ADDR and filter_gta:
@@ -80,7 +80,7 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             print(" token (address):", token) # token
             print(" sender (address):", src) # sender
             print(" recipient (address):", dst) # recipient
-            print(" amount (uint256):", wad) # amount
+            print(" amount (uint256):", amt) # amount
 
             # tx meta data
             print(" Timestamp:", last_time_stamp, last_block_num)
@@ -94,7 +94,7 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
                             'evt_sign':str_evt,
                             'sender':src,
                             'recipient':dst,
-                            'amount':wad,
+                            'amount':amt,
                             'time_stamp':last_time_stamp,
                             'block_num':block_num
                         }
