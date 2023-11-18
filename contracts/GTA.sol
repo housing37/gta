@@ -25,7 +25,30 @@ pragma solidity ^0.8.0;
         
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-
+interface IUniswapV2 {
+    // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
+    function swapExactTokensForTokens(
+        uint amountIn,
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapTokensForExactTokens(
+        uint amountOut,
+        uint amountInMax,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external returns (uint[] memory amounts);
+    function swapExactETHForTokens(
+        uint amountOutMin, 
+        address[] calldata path, 
+        address to, 
+        uint deadline
+    ) external payable returns (uint[] memory amounts);
+    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+}
 contract GamerTokeAward is IERC20, Ownable {
 
     /* _ ADMIN SUPPORT _ */
@@ -91,10 +114,25 @@ contract GamerTokeAward is IERC20, Ownable {
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
 
-    // maintain local mapping of this contracts ERC20 token balances
-    mapping(address => uint256) private gtaAltBalances;
-    uint256 private gtaAltBalsLastBlockNum = 0;
+    // // maintain local mapping of this contracts ERC20 token balances
+    // mapping(address => uint256) private gtaAltBalances;
+    // uint256 private gtaAltBalsLastBlockNum = 0;
     
+    // track last block # that 'creditsUSD' has been udpated with
+    uint32 private creditsLastBlockNum = 0; // takes 1355 years to max out uint32
+
+    // mapping of accepted usd stable coins for player deposits
+    mapping(address => bool) public whitelistUsdStables;
+    mapping(address => bool) public whitelistAltTokens;
+
+    // usd deposit fee taken out of amount used for creditsUSD updates
+    //  - this is a simple fee 'per deposit' (goes to contract)
+    //  - keeper has the option to set this fee
+    uint256 private usdStableDepositFeePerc = 0;
+    function setDepositFeePerc(uint8 perc) public onlyKeeper {
+        usdStableDepositFeePerc = perc;
+    }
+
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         // Set creator to owner & keeper
@@ -106,7 +144,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     function getLastBlockNumUpdate() public view onlyKeeper {
-        return gtaAltBalsLastBlockNum;
+        return creditsLastBlockNum;
     }
 
     // LEFT OFF HERE... 
@@ -118,31 +156,115 @@ contract GamerTokeAward is IERC20, Ownable {
     //  should probably use pyton side to calc USD credit vals for alt coin transfers
     //      however, we need to actually make the swaps on chain
     //       note: need to keep track of all 'expenses' and deduct from usd credit balances
-    //          ie. gas fees, dex swap fees, etc.
-    struct InnerStruct {
-        uint256 k1;
-        uint256 k2;
-        // Add more nested values as needed
-    }
-    struct MyStruct {
-        uint256 key;
-        InnerStruct[] innerStructs;
-    }
-    function myMethod(MyStruct[] memory dataArray) public {
-        for (uint256 i = 0; i < dataArray.length; i++) {
-            uint256 key = dataArray[i].key;
-            InnerStruct[] memory innerStructs = dataArray[i].innerStructs;
+    //          ie. gas fees, dex swap fees, etc.    
+    function updateCredits(MyStruct[] memory dataArray, uint32 lastBlockNum) public onlyKeeper {
+        // Record the gas at the beginning of the function
+        gasStart = gasleft(); 
 
-            for (uint256 j = 0; j < innerStructs.length; j++) {
-                uint256 k1 = innerStructs[j].k1;
-                uint256 k2 = innerStructs[j].k2;
+        // loop through ERC-20 'Transfer' events received from client side
+        //  events are pre-filtered for recipient = this contract address
+        for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
+            address tok_addr = dataArray[i].token;
+            address src_addr = dataArray[i].sender;
+            uint256 tok_amnt = dataArray[i].amount;
 
-                // Perform operations with k1, k2
-                // ...
 
-                // Do something with the data
+            // ... inputs needed: tok_addr, tok_amnt, src_addr
+            // ... globals needed: stable_addr to generate 'path', 
+
+            // 0) check if tok_addr is in 'whitelistUsdStables'
+            //  * should be on python side? ... and get 'whitelistUsdStables' during 'getLastBlockNumUpdate'?
+            //  ** WARNING ** : cannot 'only' do this on python side: keeper can lie and 'say' its whitelisted
+            //      however, keeper could pre-filter on python side to help save gas (that the contract refunds)
+            bool stableFound = whitelistUsdStables[tok_addr];
+            uint256 amntUsdCredit = tok_amnt; // default, if stableFound == true
+
+            // - if not in whitelistUsdStables, swap alt for stable: tok_addr, tok_amnt
+            if (!stableFound) {
+                // - verify non-stable tok_addr supported in 'whitelistAltTokens'
+                bool altFound = whitelistAltTokens[tok_addr];
+                require(altFound, 'err: alt token not supported =(');
+
+                // - generate path: [tok_addr, stable_addr]
+                address[] memory path = [tok_addr];
+
+                // - select router w/ best price (requires loop through 'routersUniswapV2')
+                uint8 currHighIdx = 37;
+                uint256 currHigh = 0;
+                for (uint i = 0; i < routersUniswapV2.length, i++) {
+                    uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(tok_amnt, path); // quote swap
+                    if (amountsOut[amountsOut.length-1] > currHigh) {
+                        currHigh = amountsOut[amountsOut.length-1];
+                        currHighIdx = i;
+                    }
+                }
+                
+                // - swap w/ path, router, amount
+                amntUsdCredit = swap_v2_wrap(paths[i], routersUniswapV2[currHighIdx], tok_amnt);
             }
+
+            // 1) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD'
+            //     - dex fees already taken out
+            //     - optional 'usdStableDepositFeePerc' can be set by keeper
+            creditsUSD[src_addr] += (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
         }
+
+        // 2) update last block number
+        creditsLastBlockNum = lastBlockNum;
+
+        // -1) calc gas used to this point & and refund to 'keeper' (in wei)
+        uint256 gasUsed = gasStart - gasleft(); // calc gas used
+        payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
+
+
+
+        // ... is there any need to go from ETH to stable(erc20)?
+        // uint256 gasCostWei = gasUsed * gasPriceWei;
+        // uint256 gasCostETH = gasCostWei / 1e18;
+        // uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
+    }
+
+    // uniwswap v2 protocol based: get quote and execute swap
+    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn) private returns (uint256) {
+        //address[] memory path = [weth, wpls];
+        uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
+        uint256 amntOut = swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
+                
+        // verifiy new balance of token received
+        uint256 new_bal = IERC20(path[path.length -1]).balanceOf(address(this));
+        require(new_bal >= amntOut, "err: balance low :{");
+        
+        return amntOut;
+    }
+    
+    // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
+    function swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, bool fromETH) private returns (uint256) {
+        emit logRFL(address(this), msg.sender, "logRFL 6a");
+        IUniswapV2 swapRouter = IUniswapV2(router);
+        
+        emit logRFL(address(this), msg.sender, "logRFL 6b");
+        IERC20(address(path[0])).approve(address(swapRouter), amntIn);
+        uint deadline = block.timestamp + 300;
+        
+        emit logRFL(address(this), msg.sender, "logRFL 6c");
+        if (fromETH) {
+            uint[] memory amntOut = swapRouter.swapExactETHForTokens{value: amountUSD}(
+                            amntOutMin,
+                            path, //address[] calldata path,
+                            address(this), // to
+                            deadline
+                        );
+        } else {
+            uint[] memory amntOut = swapRouter.swapExactTokensForTokens(
+                            amntIn,
+                            amntOutMin,
+                            path, //address[] calldata path,
+                            address(this),
+                            deadline
+                        );
+        }
+        emit logRFL(address(this), msg.sender, "logRFL 6d");
+        return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
     }
 
     function logCredit(address _player, address _token, uint256 _amount, uint256 lastBlock) public onlyKeeper {

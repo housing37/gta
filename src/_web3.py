@@ -27,12 +27,23 @@ class WEB3:
         self.MAX_PRIOR_FEE_RATIO = None
         self.MAX_PRIOR_FEE = None
 
+        self.GTA_CONTRACT = None
+        self.GTA_CONTRACT_ADDR = None
+
     def init_inp(self):
         rpc_url, chain_id, chain_sel    = self.inp_sel_chain()
         sender_address, sender_secret   = self.inp_sel_sender()
         w3, account                     = self.init_web3()
         gas_tup                         = self.get_gas_settings(w3)
         return self
+
+    def add_contract_GTA(self, dict_contr):
+        assert self.W3 != None, 'err: web3 not initialzed'
+        contr_addr              = self.inp_sel_contract([(k,v['symb']) for k,v in dict_contr.items()])
+        contr_abi, contr_bytes  = self.read_abi_bytecode(dict_contr[contr_addr]['abi_file'], dict_contr[contr_addr]['bin_file'])
+        contract, contr_addr    = self.init_contract(contr_addr, contr_abi, self.W3)
+        self.GTA_CONTRACT = contract
+        self.GTA_CONTRACT_ADDR = contr_addr
 
     def add_contract(self, dict_contr):
         assert self.W3 != None, 'err: web3 not initialzed'
@@ -91,7 +102,7 @@ class WEB3:
         return self.GAS_LIMIT, self.GAS_PRICE, self.MAX_FEE, self.MAX_PRIOR_FEE_RATIO, self.MAX_PRIOR_FEE
 
     def inp_sel_contract(self, _lst_contr_addr=[]):
-        print(f'\nSelect contract to use:')
+        print(f'\nSelect contract to add:')
         for i, v in enumerate(_lst_contr_addr): print(' ',i,'=',v[0],v[1]) # parse through tuple
         idx = input('  > ')
         assert 0 <= int(idx) < len(_lst_contr_addr), 'Invalid input, aborting...\n'
