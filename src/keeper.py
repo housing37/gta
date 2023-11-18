@@ -39,7 +39,6 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
 
     # print events
     last_block_num = last_time_stamp = 0
-    dict_block_evts = {}
     lst_evts_min = []
     for i, event in enumerate(events):
         evt_num = i
@@ -66,10 +65,6 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             last_block_num = int(event["blockNumber"])
             last_time_stamp = int(w3.eth.get_block(event["blockNumber"])["timestamp"])
 
-            # dict_block_evts support: initalize block_num key to empty block event dict array (if needed)
-            if str(last_block_num) not in dict_block_evts:
-                dict_block_evts[str(last_block_num)] = []
-
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
             # imports required: pprint, AttributeDict
@@ -79,24 +74,10 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             block_num = event["blockNumber"]
             tx_hash = event["transactionHash"].hex()
 
-            # dict_block_evts support: append block event dict to block_num array
-            block_evt = {   'evt_num':evt_num,
-                            'tx_hash':tx_hash,
-                            'token':token,
-                            'evt_sign':str_evt,
-                            'sender':src,
-                            'recipient':dst,
-                            'amount':amt,
-                            'time_stamp':last_time_stamp,
-                            'block_num':block_num
-                        }
-            dict_block_evts[str(last_block_num)].append(block_evt)
-
-            # append blok dict to block_num array
-            # // ... inputs needed: tok_addr, tok_amnt, src_addr
+            # generate block event dict & append to block events array
             block_evt_min = {   
-                                'token':_w3.W3.toChecksumAddress(token),
-                                'sender':_w3.W3.toChecksumAddress(src),
+                                'token':w3.to_checksum_address(token),
+                                'sender':w3.to_checksum_address(src),
                                 'amount':int(amt)
                             }
             lst_evts_min.append(block_evt_min)
@@ -113,11 +94,7 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             print(" solidity call params: ", block_evt_min)
 
         print(f'events min for solidity side ... ', *lst_evts_min, '', sep='\n')
-    return list(lst_evts_min), dict(dict_block_evts), last_block_num, last_time_stamp
-
-    # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
-    #   DONE - parse filtered data from ‘Transfer’ event, and update contract
-    #   - send dict_block_evts to gta contract 
+    return list(lst_evts_min), last_block_num, last_time_stamp
 
 #------------------------------------------------------------#
 #   DEFAULT SUPPORT                                          #
@@ -147,15 +124,6 @@ def print_except(e, debugLvl=0):
     strTrace = traceback.format_exc()
     print('', cStrDivider, f' type: {exc_type}', f' file: {fname}', f' line_no: {exc_tb.tb_lineno}', f' traceback: {strTrace}', cStrDivider, sep='\n')
 
-# def wait_sleep(wait_sec:int, b_print=True, bp_one_line=True): # sleep 'wait_sec'
-#     if b_print: print(f'waiting... {wait_sec} sec')
-#     for s in range(wait_sec, 0, -1):
-#         if b_print and bp_one_line: print(wait_sec-s+1, end=' ', flush=True)
-#         if b_print and not bp_one_line: print('wait ', s, sep='', end='\n')
-#         time.sleep(1)
-#     if bp_one_line and b_print: print() # line break if needed
-#     print(f'waiting... {wait_sec} sec _ DONE')
-
 def get_time_now(dt=True):
     if dt: return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[0:-4]
     return datetime.now().strftime("%H:%M:%S.%f")[0:-4]
@@ -175,40 +143,39 @@ if __name__ == "__main__":
     ## exe ##
     try:
         _w3 = _web3.WEB3().init_inp()
+
+        # choose alt tokens for event logs
         _w3.add_contract(_constants.DICT_CONTR_ABI_BIN)
-        #_w3.add_contract(_constants.DICT_CONTR_ABI_BIN) # choose 2nd token for event logs
-        
-        print('\nchoose GTA contract ...') # LEFT OF HERE...
-        _w3.add_contract_GTA(_constants.DICT_CONTR_ABI_BIN) # choose GTA contract to work with
+        #_w3.add_contract(_constants.DICT_CONTR_ABI_BIN) 
+
+        # choose GTA contract to work with
+        _w3.add_contract_GTA(_constants.DICT_CONTR_ABI_BIN)
+
         print('\nWEB3 INITIALIZED ...', 
                 _w3.CHAIN_SEL, _w3.RPC_URL, _w3.CHAIN_ID, _w3.SENDER_ADDRESS, _w3.ACCOUNT.address, 
                 [tup[1] for tup in _w3.LST_CONTRACTS], _w3.GAS_LIMIT, _w3.GAS_PRICE, _w3.MAX_FEE, 
                 _w3.MAX_PRIOR_FEE_RATIO, _w3.MAX_PRIOR_FEE, sep='\n ')
 
         # testing...
-        # start_block_num = 18851861
-        start_block_num = _w3.W3.eth.block_number - 10
-        # start_block_num = _w3.W3.eth.block_number
-        print('\nBlock# start: ', start_block_num)
-        lst_dict_block_evts = [] # store multiple token events
+        # start_blocknum = 18851861
+        start_blocknum = _w3.W3.eth.block_number - 10
+        print('\nBlock# start: ', start_blocknum)
         for contr_tup in _w3.LST_CONTRACTS: # _w3.LST_CONTRACTS (ERC20 tokens from cli input selection)
             contr_inst = contr_tup[0]
             contr_addr = contr_tup[1]
-            lst_evts_min, dict_block_evts, last_block_num, last_time_stamp = get_latest_bals(_w3.W3, contr_inst, start_block_num, filter_gta=False)
-            # lst_dict_block_evts.append(dict_block_evts)
+            lst_evts_min, blocknum, timstamp = get_latest_bals(_w3.W3, contr_inst, start_blocknum, filter_gta=False)
 
-            # send 'lst_evts_min' to solidity?
-            # Convert Python data to Solidity-friendly format
+            # Convert python lst_evts_min to Solidity-friendly format
             solidity_data = [
                     (
                         v["token"], v["sender"], v["amount"]
                     ) for v in lst_evts_min
                 ]
-            # Call the Solidity contract method with the data
-            _w3.GTA_CONTRACT.updateCredits(solidity_data, last_block_num, {'from': _w3.ACCOUNT})
+            # send 'lst_evts_min' credit updates to solidity contract
+            #   note: send credit updates for stable token: 'contr_inst'  (for all players)
+            _w3.GTA_CONTRACT.updateCredits(solidity_data, blocknum, {'from': _w3.ACCOUNT})
 
-        print('\n\nBlock# range: ', start_block_num, last_block_num)
-        print(json.dumps(lst_dict_block_evts, indent=4))
+        print('\n\nBlock# range: ', start_blocknum, blocknum)
 
         # live...
         while False:
@@ -217,15 +184,6 @@ if __name__ == "__main__":
             print("GTA alt bals _ last block# ", last_block_num)
             get_latest_bals(_w3, last_block_num)
 
-        # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
-        #   DONE - parse filtered data from ‘Transfer’ event, and update contract
-        #   - send dict_block_evts to gta contract
-
-        #go_main(_WEB3, last_block_num)
-        # if sys.argv[-1] == '-loan': go_loan()
-        # if sys.argv[-1] == '-trans': go_transfer()
-        # if sys.argv[-1] == '-withdraw': go_withdraw()
-        
     except Exception as e:
         print_except(e, debugLvl=0)
     
@@ -233,3 +191,29 @@ if __name__ == "__main__":
     print(f'\n\nRUN_TIME_START: {RUN_TIME_START}\nRUN_TIME_END:   {get_time_now()}\n')
 
 print('', cStrDivider, f'# END _ {__filename}', cStrDivider, sep='\n')
+
+
+#===============================================================================#
+# dead code
+#===============================================================================#
+# # dict_block_evts support: append block event dict to block_num array
+# block_evt = {   'evt_num':evt_num,
+#                 'tx_hash':tx_hash,
+#                 'token':token,
+#                 'evt_sign':str_evt,
+#                 'sender':src,
+#                 'recipient':dst,
+#                 'amount':amt,
+#                 'time_stamp':last_time_stamp,
+#                 'block_num':block_num
+#             }
+# dict_block_evts[str(last_block_num)].append(block_evt)
+
+# def wait_sleep(wait_sec:int, b_print=True, bp_one_line=True): # sleep 'wait_sec'
+#     if b_print: print(f'waiting... {wait_sec} sec')
+#     for s in range(wait_sec, 0, -1):
+#         if b_print and bp_one_line: print(wait_sec-s+1, end=' ', flush=True)
+#         if b_print and not bp_one_line: print('wait ', s, sep='', end='\n')
+#         time.sleep(1)
+#     if bp_one_line and b_print: print() # line break if needed
+#     print(f'waiting... {wait_sec} sec _ DONE')

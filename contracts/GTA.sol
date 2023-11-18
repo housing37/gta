@@ -215,13 +215,6 @@ contract GamerTokeAward is IERC20, Ownable {
         // -1) calc gas used to this point & and refund to 'keeper' (in wei)
         uint256 gasUsed = gasStart - gasleft(); // calc gas used
         payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
-
-
-
-        // ... is there any need to go from ETH to stable(erc20)?
-        // uint256 gasCostWei = gasUsed * gasPriceWei;
-        // uint256 gasCostETH = gasCostWei / 1e18;
-        // uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
