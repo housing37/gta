@@ -39,7 +39,8 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
 
     # print events
     last_block_num = last_time_stamp = 0
-    dict_evts = {}
+    dict_block_evts = {}
+    lst_evts = []
     for i, event in enumerate(events):
         evt_num = i
         token = contract.address
@@ -66,8 +67,8 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
             last_time_stamp = int(w3.eth.get_block(event["blockNumber"])["timestamp"])
 
             # initalize block_num key to empty block event dict array (if needed)
-            if str(last_block_num) not in dict_evts:
-                dict_evts[str(last_block_num)] = []
+            if str(last_block_num) not in dict_block_evts:
+                dict_block_evts[str(last_block_num)] = []
 
         print(cStrDivider_1, f'event #{i} ... {str_from_to}', sep='\n')
         if raw_print:
@@ -98,14 +99,15 @@ def get_latest_bals(w3:object, contract:object, start_block_num:int, raw_print:b
                             'time_stamp':last_time_stamp,
                             'block_num':block_num
                         }
-            dict_evts[str(last_block_num)].append(block_evt)
+            dict_block_evts[str(last_block_num)].append(block_evt)
+
             
         print()
-    return dict_evts, last_block_num, last_time_stamp
+    return dict_block_evts, last_block_num, last_time_stamp
 
     # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
     #   DONE - parse filtered data from ‘Transfer’ event, and update contract
-    #   - send dict_evts to gta contract 
+    #   - send dict_block_evts to gta contract 
 
 #------------------------------------------------------------#
 #   DEFAULT SUPPORT                                          #
@@ -175,12 +177,12 @@ if __name__ == "__main__":
         start_block_num = _w3.W3.eth.block_number - 10
         # start_block_num = _w3.W3.eth.block_number
         print('\nBlock# start: ', start_block_num)
-        lst_dict_evts = [] # store multiple token events
+        lst_dict_block_evts = [] # store multiple token events
         for contr_tup in _w3.LST_CONTRACTS:
-            dict_evts, last_block_num, last_time_stamp = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, filter_gta=False)
-            lst_dict_evts.append(dict_evts)
+            dict_block_evts, last_block_num, last_time_stamp = get_latest_bals(_w3.W3, contr_tup[0], start_block_num, filter_gta=False)
+            lst_dict_block_evts.append(dict_block_evts)
         print('\n\nBlock# range: ', start_block_num, last_block_num)
-        print(json.dumps(lst_dict_evts, indent=4))
+        print(json.dumps(lst_dict_block_evts, indent=4))
 
         # live...
         while False:
@@ -191,7 +193,7 @@ if __name__ == "__main__":
 
         # LEFT OFF HERE... need to update alt balances in contract w/ 'Transfer' event data
         #   DONE - parse filtered data from ‘Transfer’ event, and update contract
-        #   - send dict_evts to gta contract
+        #   - send dict_block_evts to gta contract
 
         #go_main(_WEB3, last_block_num)
         # if sys.argv[-1] == '-loan': go_loan()
