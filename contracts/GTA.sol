@@ -157,7 +157,12 @@ contract GamerTokeAward is IERC20, Ownable {
     //      however, we need to actually make the swaps on chain
     //       note: need to keep track of all 'expenses' and deduct from usd credit balances
     //          ie. gas fees, dex swap fees, etc.    
-    function updateCredits(MyStruct[] memory dataArray, uint32 lastBlockNum) public onlyKeeper {
+    struct TxDeposit {
+        address token;
+        address sender;
+        uint256 amount;
+    }
+    function updateCredits(TxDeposit[] memory dataArray, uint32 lastBlockNum) public onlyKeeper {
         // Record the gas at the beginning of the function
         gasStart = gasleft(); 
 
