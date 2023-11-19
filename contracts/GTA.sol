@@ -70,10 +70,8 @@ contract GamerTokeAward is IERC20, Ownable {
     address private constant TOK_eDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     address private constant TOK_eDAI_pcwrap = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
     
-    // PulseXRouter02 'v1' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    // PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
     address private constant ROUTER_pulsex_v1 = address(0x98bf93ebf5c380C0e6Ae8e192A7e2AE08edAcc02);
-    
-    // PulseXRouter02 'v2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
     address private constant ROUTER_pulsex_v2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9);
     
     // PulseXSwapRouter 'v1' ref: MM tx
@@ -84,12 +82,15 @@ contract GamerTokeAward is IERC20, Ownable {
         
     /* _ GAME SUPPORT _ */
     struct Game {
+        address host;
         string gameName;
         uint256 entryFeeUSD;
         uint256 hostFee;
-        address[] players;
-        uint256 creationDate;
-        uint256 startDate;
+        // address[] players;
+        mapping(address => bool) players;
+        uint256 playerCnt;
+        uint256 createTime;
+        uint256 startTime;
         uint256 expDate;
     }
     
@@ -108,30 +109,27 @@ contract GamerTokeAward is IERC20, Ownable {
     // game experation time _ 1 day = 86400 seconds
     uint64 private gameExpSec = 86400 * 1;
     
-    // maintain whitelist tokens that can be used for deposit
-    mapping(address => bool) public depositTokens;
+    // // maintain whitelist tokens that can be used for deposit
+    // mapping(address => bool) public depositTokens;
     
-    // usd credits for players to pay entryFeeUSD to join games
-    mapping(address => uint256) private creditsUSD;
-
     // // maintain local mapping of this contracts ERC20 token balances
     // mapping(address => uint256) private gtaAltBalances;
     // uint256 private gtaAltBalsLastBlockNum = 0;
     
     // track last block # that 'creditsUSD' has been udpated with
-    uint32 private creditsLastBlockNum = 0; // takes 1355 years to max out uint32
+    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
     // mapping of accepted usd stable coins for player deposits
     mapping(address => bool) public whitelistUsdStables;
     mapping(address => bool) public whitelistAltTokens;
 
+    // usd credits for players to pay entryFeeUSD to join games
+    mapping(address => uint256) private creditsUSD;
+
     // usd deposit fee taken out of amount used for creditsUSD updates
     //  - this is a simple fee 'per deposit' (goes to contract)
     //  - keeper has the option to set this fee
     uint256 private usdStableDepositFeePerc = 0;
-    function setDepositFeePerc(uint8 perc) public onlyKeeper {
-        usdStableDepositFeePerc = perc;
-    }
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -143,8 +141,103 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
 
+    function getCredits() public onlyKeeper {
+        return creditsUSD;
+    }
+
+    function getCreditsToStableBalance() public onlyKeeper {
+        // ... return diff:  GTA stable token balances -  total player credits
+        //                      'whitelistUsdStables' - 'creditsUSD'
+    }
+
+    function hostStartEventWithPlayers(address _gameCode, address[] memory _players) public {
+        require(_gameCode != address(0), 'err: no game code :p');
+        require(_players.length > 0, 'err: no players :p');
+
+        // get/validate active game
+        struct storage game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
+
+        // loop through _players to verify they joined event & payed?
+        address[] paid;
+        address[] unpaid;
+        for (uint i=0; i < _players.length; i++) {
+            if (games.players[_players[i]]) { paid.push(_players[i]); } 
+            else { unpaid.push(_players[i]); }
+        }
+
+        // LEFT OFF HERE... this needs a solution
+        //      host needs to start the game with a list of entry addresses
+        //      Q: what happens if an address in that list hasn't paid yet?
+        //          1) check if the address credits and pay now?
+        //              *WARNING* that means a host can force someone to join
+        //                  & what if the address doesn't have credits?
+        //          2) ...
+        // required: msg.sender = host
+        // required: 
+    }
+
+    // msg.sender can add themself to any game (debit from msg.sender credits)
+    function joinEvent(address gameCode) public {
+        require(gameCode != address(0), 'err: no game code ;o');
+
+        // get/validate active game
+        struct storage game = activeGames[gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
+
+        // check if game started
+        require(game.startTime > block.timestamp, 'err: event started :(');
+
+        // check msg.sender for enough credits
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(');
+        
+        // debit entry fee from msg.sender credits
+        creditsUSD[msg.sender] -= game.entryFeeUSD;
+
+        // -1) add msg.sender to game event
+        // game.players.push(msg.sender);
+        game.players[msg.sender] = true;
+        game.playerCnt += 1;
+        
+        // address[] playerList = activeGames[gameCode].players;
+        // for (uint i = 0; i < playerList.length; i++) {
+        //     require(playerList[i] != _playerAddress, "err: player already joined game :[");
+        // }
+    }
+
+    // hosts can add players to their own games (debit from host credits)
+    function hostAddPlayer(address player, address gameCode) public {
+        require(player != address(0), 'err: no player ;l');
+        require(gameCode != address(0), 'err: no game code ;l');
+
+        // get/validate active game
+        struct storage game = activeGames[gameCode];
+        require(game.host != address(0), 'err: invalid game code :I');
+
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
+
+        // check if game started
+        require(game.startTime > block.timestamp, 'err: event started :(');
+
+        // check msg.sender for enough credits
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(');
+
+        // debit entry fee from msg.sender credits
+        creditsUSD[msg.sender] -= game.entryFeeUSD;
+
+        // -1) add player to game event
+        // game.players.push(player);
+        game.players[player] = true;
+        game.playerCnt += 1;
+    }
+
+    function setDepositFeePerc(uint8 perc) public onlyKeeper {
+        usdStableDepositFeePerc = perc;
+    }
+
     function getLastBlockNumUpdate() public view onlyKeeper {
-        return creditsLastBlockNum;
+        return lastBlockNumUpdate;
     }
 
     // LEFT OFF HERE... 
@@ -215,7 +308,7 @@ contract GamerTokeAward is IERC20, Ownable {
         }
 
         // 2) update last block number
-        creditsLastBlockNum = lastBlockNum;
+        lastBlockNumUpdate = lastBlockNum;
 
         // -1) calc gas used to this point & and refund to 'keeper' (in wei)
         uint256 gasUsed = gasStart - gasleft(); // calc gas used
@@ -265,103 +358,104 @@ contract GamerTokeAward is IERC20, Ownable {
         return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
     }
 
-    function logCredit(address _player, address _token, uint256 _amount, uint256 lastBlock) public onlyKeeper {
-        uint256 prev_bal = gtaAltBalances[_token];
-        uint256 new_bal = IERC20(_token).balanceOf(address(this));
-        required(new_bal > prev_bal, "err: token bal mismatch");
-            // 'logCredit' gets called after ever time a token transfer to this contract occurs
-            // hence, if new_bal < prev_bal
-            //  then that means this contract spent some _token
-            //  after a token transfer occurred (mined)
-            //   and before this 'logCredit' was called
+    /** LEGACY CREDIT MODEL */
+    // function logCredit(address _player, address _token, uint256 _amount, uint256 lastBlock) public onlyKeeper {
+    //     uint256 prev_bal = gtaAltBalances[_token];
+    //     uint256 new_bal = IERC20(_token).balanceOf(address(this));
+    //     required(new_bal > prev_bal, "err: token bal mismatch");
+    //         // 'logCredit' gets called after ever time a token transfer to this contract occurs
+    //         // hence, if new_bal < prev_bal
+    //         //  then that means this contract spent some _token
+    //         //  after a token transfer occurred (mined)
+    //         //   and before this 'logCredit' was called
             
-            // LEFT OFF HERE... is this correct? ^
+    //         // LEFT OFF HERE... is this correct? ^
             
-        //gtaAltBalances[_token] += _amount;
-        gtaAltBalances[_token] = new_bal;
+    //     //gtaAltBalances[_token] += _amount;
+    //     gtaAltBalances[_token] = new_bal;
         
-        // LEFT OFF HERE... does this logic work? ^
+    //     // LEFT OFF HERE... does this logic work? ^
         
-        amountUSD = getDexQuoteUSD(_token, _amount);
-        creditsUSD[_player] += amountUSD;
-    }
+    //     amountUSD = getDexQuoteUSD(_token, _amount);
+    //     creditsUSD[_player] += amountUSD;
+    // }
     
-    //address[] memory thisContractTransfer;
-    struct PaidEntries {
-        address[] gameCode;
-        uint256[] ammount;
-    }
-    struct PaidEntry {
-        address gameCode;
-        uint256 ammount;
-    }
+    // //address[] memory thisContractTransfer;
+    // struct PaidEntries {
+    //     address[] gameCode;
+    //     uint256[] ammount;
+    // }
+    // struct PaidEntry {
+    //     address gameCode;
+    //     uint256 ammount;
+    // }
     
-    // one player address can have many PaidEntries
-    //mapping(address => PaidEntries[]) memory playerEntries;
-    mapping(address => PaidEntry[]) memory playerEntries;
+    // // one player address can have many PaidEntries
+    // //mapping(address => PaidEntries[]) memory playerEntries;
+    // mapping(address => PaidEntry[]) memory playerEntries;
     
-    function findGameCode(PaidEntry[] memory entries, address _gameCode) private pure returns (bool) {
-        for (uint i; i < entries.length; i++) {
-            PaidEntry memory entry = entries[i];
-            if (entry.gameCode == _gameCode) {
-                // player has already paid for this gameCode
-                return true;
-            }
-        }
-        return false;
-    }
+    // function findGameCode(PaidEntry[] memory entries, address _gameCode) private pure returns (bool) {
+    //     for (uint i; i < entries.length; i++) {
+    //         PaidEntry memory entry = entries[i];
+    //         if (entry.gameCode == _gameCode) {
+    //             // player has already paid for this gameCode
+    //             return true;
+    //         }
+    //     }
+    //     return false;
+    // }
     
-    function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
-        require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
-        address[] playerList = activeGames[gameCode].players;
-        for (uint i = 0; i < playerList.length; i++) {
-            require(playerList[i] != _playerAddress, "err: player already joined game :[");
-        }
+    // function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
+    //     require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
+    //     address[] playerList = activeGames[gameCode].players;
+    //     for (uint i = 0; i < playerList.length; i++) {
+    //         require(playerList[i] != _playerAddress, "err: player already joined game :[");
+    //     }
 
-        // ... LET OFF HERE: player has to pay entry fee somehow
-        uint256 gameEntryFee = activeGames[gameCode].entryFeeUSD;
+    //     // ... LET OFF HERE: player has to pay entry fee somehow
+    //     uint256 gameEntryFee = activeGames[gameCode].entryFeeUSD;
         
-        // ... left off here...
-        //  want to keep track of all balances that players send to this contract
-        //   but players can pay entry fee in any token they want (respectful approved list)
-        
-        
-        // need to check if msg.sender has paid for this gameCode
-        PaidEntry[] memory entries = playerEntries[msg.sender];
-        bool playerJoined = findGameCode(entries, _gameCode);
-        
-        bool playerPaid = findGameCode(entries, _gameCode);
-        require(playerPaid, "err: play")
-        //bool playerPaid = False;
-        
-        for (uint i; i < entries.length; i++) {
-            PaidEntry memory entry = entries[i];
-            if (entry.gameCode == _gameCode) {
-                // player has already paid for this gameCode
-                playerPaid = true;
-                break;
-            }
-            newEntry.amount =
-        }
+    //     // ... left off here...
+    //     //  want to keep track of all balances that players send to this contract
+    //     //   but players can pay entry fee in any token they want (respectful approved list)
         
         
-        /*
-            maintaining value:
-            - % of game's prize pool goes back to dex LPs
-            - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
-            - host wallets must retain a certain amount of GTA in order to create activeGames
-                (probably some multiple of the intended player_entry_fee)
-        */
-        // add player to gameCode mapping
-        activeGames[gameCode].gameName.players.push(_playerAddress);
-    }
+    //     // need to check if msg.sender has paid for this gameCode
+    //     PaidEntry[] memory entries = playerEntries[msg.sender];
+    //     bool playerJoined = findGameCode(entries, _gameCode);
+        
+    //     bool playerPaid = findGameCode(entries, _gameCode);
+    //     require(playerPaid, "err: play")
+    //     //bool playerPaid = False;
+        
+    //     for (uint i; i < entries.length; i++) {
+    //         PaidEntry memory entry = entries[i];
+    //         if (entry.gameCode == _gameCode) {
+    //             // player has already paid for this gameCode
+    //             playerPaid = true;
+    //             break;
+    //         }
+    //         newEntry.amount =
+    //     }
+        
+        
+    //     /*
+    //         maintaining value:
+    //         - % of game's prize pool goes back to dex LPs
+    //         - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
+    //         - host wallets must retain a certain amount of GTA in order to create activeGames
+    //             (probably some multiple of the intended player_entry_fee)
+    //     */
+    //     // add player to gameCode mapping
+    //     activeGames[gameCode].gameName.players.push(_playerAddress);
+    // }
     
-    function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
-        Game storage selectedGame = activeGames[gameCode];
-        selectedGame.players.push(playerAddress);
+    // function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
+    //     Game storage selectedGame = activeGames[gameCode];
+    //     selectedGame.players.push(playerAddress);
         
-        // TOOD: player needs to pay entry fee
-    }
+    //     // TOOD: player needs to pay entry fee
+    // }
     
     function addDexRouter(address router) public onlyKeeper {
         require(router != address(0x0), "err: invalid address");
@@ -408,6 +502,9 @@ contract GamerTokeAward is IERC20, Ownable {
         return curr_low;
     }
     
+    // LEFT OFF HERE... legacy code that was trying to use this contract code's
+    //   to handle all ERC20 token transfers to it
+    //  but i think this 'transfer' function is needed as part of IERC20
     function transfer(address _recipient, uint256 _amount) public override returns (bool) {
         // want to try to keep track of each ERC20 transfer to this contract from each recipient
         // each ERC20 transfer to this contract is an 'entry_fee' being paid by a player
@@ -483,12 +580,14 @@ contract GamerTokeAward is IERC20, Ownable {
         
         return gameCode;
     }
+
+    // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
     function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
     
-    function createGame(string memory _gameName, uint64 _startDate, uint256 _entryFeeUSD, uint256 _hostFee) public returns (address) {
-        require(_startDate > block.timestamp, "err: start too soon :/");
+    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint256 _hostFee) public returns (address) {
+        require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= 1, "required: entry fee >= 1 USD :/");
         
         uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
@@ -502,12 +601,14 @@ contract GamerTokeAward is IERC20, Ownable {
         //Game storage newGame; // create new default empty struct
         
         // set properties for default empty 'Game' struct
+        newGame.host = msg.sender;
         newGame.gameName = _gameName;
         newGame.entryFeeUSD = _entryFeeUSD;
         newGame.hostFee = _hostFee;
-        newGame.creationDate = block.timestamp;
-        newGame.startDate = _startDate;
-        newGame.expDate = _startDate + gameExpSec;
+        newGame.createTime = block.timestamp;
+        newGame.startTime = _startTime;
+        newGame.expDate = _startTime + gameExpSec;
+        newGame.playerCnt = 0;
 
         // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
         activeGames[gameCode] = newGame;
@@ -539,6 +640,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return generatedAddress;
     }
     
+    // LEFT OFF HERE... need to refactor to handle games.players mapping instead of array
     // Delete activeGames w/ an empty players array and expDate has past
     function cleanExpiredGames() public {
         // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expDate'

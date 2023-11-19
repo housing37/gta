@@ -1,5 +1,8 @@
 # product design (GTA = gamer token award)
 
+## edage case use cases
+    - payment processing
+
 ### end-to-end walkthrough
     - host creates game (entryFeeUSD, payoutPercents) _ requires % GTA in wallet 
         receives game_code
