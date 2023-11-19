@@ -93,7 +93,14 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 prizePoolUSD;
         uint256 createTime;
         uint256 startTime;
-        uint256 expDate;
+        uint256 launchTime;
+        uint256 launchBlockNum;
+        uint256 endTime;
+        uint256 endBlockNum;
+        bool launched;
+        bool ended;
+        bool expired;
+        uint256 expTime;
     }
     
     // map generated gameCode address to Game structs
@@ -191,6 +198,11 @@ contract GamerTokeAward is IERC20, Ownable {
             // LEFT OFF HERE... need to design away to choose stables from 'whitelistUsdStables'
         }
 
+        // set game end state (which really doesn't matter because its about to be deleted)
+        game.endTime = block.timestamp;
+        game.endBlockNum = block.number;
+        game.ended = true;
+
         // delete game mapping
         delete activeGames[_gameCode];
         activeGameCount--;
@@ -198,9 +210,10 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    function hostStartEventWithPlayers(address _gameCode, address[] memory _players) public {
+    // host can start event w/ players already registerd in gameCode
+    function hostStartEvent(address _gameCode) public {
         require(_gameCode != address(0), 'err: no game code :p');
-        require(_players.length > 0, 'err: no players :p');
+        // require(_players.length > 0, 'err: no players :p');
 
         // get/validate active game
         struct storage game = activeGames[_gameCode];
@@ -209,40 +222,29 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // loop through _players to verify they joined event & payed?
-        address[] paid;
-        address[] unpaid;
-        for (uint i=0; i < _players.length; i++) {
-            if (games.players[_players[i]]) { paid.push(_players[i]); } 
-            else { unpaid.push(_players[i]); }
-        }
-
-        // LEFT OFF HERE... this needs a solution
-        //      host needs to start the game with a list of entry addresses
-        //      Q: what happens if an address in that list hasn't paid yet?
-        //          1) check if the address credits and pay now?
-        //              *WARNING* that means a host can force someone to join
-        //                  & what if the address doesn't have credits?
-        //          2) ...
-        // required: msg.sender = host
-        // required: 
+        // set game launched state
+        game.launchTime = block.timestamp;
+        game.launchBlockNum = block.number;
+        game.launched = true;
     }
 
-    // msg.sender can add themself to any game (debit from msg.sender credits)
-    function joinEvent(address gameCode) public {
+    // msg.sender can add themself to any game (debits from msg.sender credits)
+    //  *WARNING* preferred way for user registration, after manual transfer to this contract
+    //     (instead of providing address to host and waiting for host to claim)
+    function registerEvent(address gameCode) public returns (bool) {
         require(gameCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
         struct storage game = activeGames[gameCode];
         require(game.host != address(0), 'err: invalid game code :I')
 
-        // check if game started
-        require(game.startTime > block.timestamp, 'err: event started :(');
+        // check if game launched
+        require(!game.launched, 'err: event launched :(');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
         
-        // debit entry fee from msg.sender credits
+        // debit entry fee from msg.sender credits (player)
         creditsUSD[msg.sender] -= game.entryFeeUSD;
 
         // -1) add msg.sender to game event
@@ -250,14 +252,16 @@ contract GamerTokeAward is IERC20, Ownable {
         game.players[msg.sender] = true;
         game.playerCnt += 1;
         
+        return true;
+
         // address[] playerList = activeGames[gameCode].players;
         // for (uint i = 0; i < playerList.length; i++) {
         //     require(playerList[i] != _playerAddress, "err: player already joined game :[");
         // }
     }
 
-    // hosts can add players to their own games (debit from host credits)
-    function hostAddPlayer(address player, address gameCode) public {
+    // hosts can pay to add players to their own games (debits from host credits)
+    function hostRegisterEvent(address player, address gameCode) public returns (bool) {
         require(player != address(0), 'err: no player ;l');
         require(gameCode != address(0), 'err: no game code ;l');
 
@@ -268,19 +272,51 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // check if game started
-        require(game.startTime > block.timestamp, 'err: event started :(');
+        // check if game launched
+        require(!game.launched, 'err: event launched :(');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
 
-        // debit entry fee from msg.sender credits
+        // debit entry fee from msg.sender credits (host)
         creditsUSD[msg.sender] -= game.entryFeeUSD;
 
         // -1) add player to game event
         // game.players.push(player);
         game.players[player] = true;
         game.playerCnt += 1;
+
+        return true;
+    }
+
+    // host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
+    //  *WARNING* players should not share their addresses with anyone 'except' the host
+    //      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
+    function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
+        require(player != address(0), 'err: no player ;l');
+
+        // get/validate active game
+        struct storage game = activeGames[gameCode];
+        require(game.host != address(0), 'err: invalid game code :I');
+
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
+
+        // check if game launched
+        require(!game.launched, 'err: event launched :(');
+
+        // check player for enough credits
+        require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
+
+        // debit entry fee from player credits
+        creditsUSD[player] -= game.entryFeeUSD;
+
+        // -1) add player to game event
+        // game.players.push(player);
+        game.players[player] = true;
+        game.playerCnt += 1;
+
+        return true;
     }
 
     function setDepositFeePerc(uint8 perc) public onlyKeeper {
@@ -664,9 +700,12 @@ contract GamerTokeAward is IERC20, Ownable {
         newGame.winPercs = _winPercs;
         newGame.createTime = block.timestamp;
         newGame.startTime = _startTime;
-        newGame.expDate = _startTime + gameExpSec;
+        newGame.expTime = _startTime + gameExpSec;
         newGame.playerCnt = 0;
         newGame.prizePoolUSD = 0;
+        newGame.launched = false;
+        newGame.ended = false;
+        newGame.expired = false;
 
         // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
         activeGames[gameCode] = newGame;
@@ -699,13 +738,13 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     // LEFT OFF HERE... need to refactor to handle games.players mapping instead of array
-    // Delete activeGames w/ an empty players array and expDate has past
+    // Delete activeGames w/ an empty players array and expTime has past
     function cleanExpiredGames() public {
-        // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expDate'
+        // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expTime'
         for (uint256 i = 0; i < activeGameCount; i++) {
         
-            // has the expDate passed?
-            if (block.timestamp > activeGames[gameCodes[i]].expDate) {
+            // has the expTime passed?
+            if (block.timestamp > activeGames[gameCodes[i]].expTime) {
             
                 // is game's players array empty?
                 if (activeGames[gameCodes[i]].players.length == 0) {
