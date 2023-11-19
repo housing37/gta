@@ -195,7 +195,7 @@ contract GamerTokeAward is IERC20, Ownable {
         delete activeGames[_gameCode];
         activeGameCount--;
 
-        retur true;
+        return true;
     }
 
     function hostStartEventWithPlayers(address _gameCode, address[] memory _players) public {
