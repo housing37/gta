@@ -185,6 +185,8 @@ if __name__ == "__main__":
             get_latest_bals(_w3, last_block_num)
 
         # NEXT_111823:
+        # 	- GTA.sol: integrate stable coin selection
+        # 		for sending winner payouts (algorithm is complete)
         # 	- cleanup and organization on python and solidity side
         # 	- GTA.sol: finish ‘generate path’ aspect w/ ‘stable_addr’ in ‘updateCredits’
         # 	- keeper.py: should get ‘whitelistAltTokens’ & ‘whitelistUsdStables’

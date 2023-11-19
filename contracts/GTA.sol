@@ -185,7 +185,7 @@ contract GamerTokeAward is IERC20, Ownable {
         // loop through _winners: distribute 'game.winPercs'
         for (uint i=0; i < _winners.length; i++) {
             // check if winner address was a player in the game
-            require(game.players[_winners[i]], 'err: invalid winner :/');
+            require(game.players[_winners[i]], 'err: invalid player found :/, retry with ALL valid players');
 
             // calc win_usd
             winner = _winners[i];
@@ -198,7 +198,7 @@ contract GamerTokeAward is IERC20, Ownable {
             // LEFT OFF HERE... need to design away to choose stables from 'whitelistUsdStables'
         }
 
-        // set game end state (which really doesn't matter because its about to be deleted)
+        // set game end state (doesn't matter if its about to be deleted)
         game.endTime = block.timestamp;
         game.endBlockNum = block.number;
         game.ended = true;
@@ -210,10 +210,9 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    // host can start event w/ players already registerd in gameCode
+    // host can start event w/ players pre-registerd for gameCode
     function hostStartEvent(address _gameCode) public {
         require(_gameCode != address(0), 'err: no game code :p');
-        // require(_players.length > 0, 'err: no players :p');
 
         // get/validate active game
         struct storage game = activeGames[_gameCode];
