@@ -150,6 +150,13 @@ contract GamerTokeAward is IERC20, Ownable {
         //                      'whitelistUsdStables' - 'creditsUSD'
     }
 
+    function hostEndEventWithWinners(address _gameCode, address[] memory _winners, uint8[] memory _distrPercs) public {
+        require(_gameCode != address(0), 'err: no game code :p');
+        require(_winner.length > 0, 'err: no winner :p');
+        require(_winners.length == _distrPercs.length, 'err: winner/percs length mismatch =(');
+
+        // LEFT OFF HERE... what next?
+    }
     function hostStartEventWithPlayers(address _gameCode, address[] memory _players) public {
         require(_gameCode != address(0), 'err: no game code :p');
         require(_players.length > 0, 'err: no players :p');
