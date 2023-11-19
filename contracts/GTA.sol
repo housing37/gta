@@ -85,10 +85,12 @@ contract GamerTokeAward is IERC20, Ownable {
         address host;
         string gameName;
         uint256 entryFeeUSD;
-        uint256 hostFee;
+        uint8 hostFeePerc;
+        uint8[] winPercs;
         // address[] players;
         mapping(address => bool) players;
         uint256 playerCnt;
+        uint256 prizePoolUSD;
         uint256 createTime;
         uint256 startTime;
         uint256 expDate;
@@ -131,6 +133,9 @@ contract GamerTokeAward is IERC20, Ownable {
     //  - keeper has the option to set this fee
     uint256 private usdStableDepositFeePerc = 0;
 
+    // max percent of prize pool the host may charge
+    uint8 private maxHostFeePerc = 100;
+
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         // Set creator to owner & keeper
@@ -139,6 +144,10 @@ contract GamerTokeAward is IERC20, Ownable {
         totalSupply = initialSupply * 10**uint8(decimals);
         _balances[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
+    }
+
+    function setMaxHostFeePerc(uint8 perc) public onlyKeeper {
+        maxHostFeePerc = perc;
     }
 
     function getCredits() public onlyKeeper {
@@ -150,13 +159,45 @@ contract GamerTokeAward is IERC20, Ownable {
         //                      'whitelistUsdStables' - 'creditsUSD'
     }
 
-    function hostEndEventWithWinners(address _gameCode, address[] memory _winners, uint8[] memory _distrPercs) public {
+    // _winners: [0x1st_place, 0x2nd_place, ...]
+    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
         require(_winner.length > 0, 'err: no winner :p');
         require(_winners.length == _distrPercs.length, 'err: winner/percs length mismatch =(');
 
-        // LEFT OFF HERE... what next?
+        // get/validate active game
+        struct storage game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
+
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
+
+        // check if number of winners lines up with winpercs array lenght set in event create
+        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
+
+        // loop through _winners: distribute 'game.winPercs'
+        for (uint i=0; i < _winners.length; i++) {
+            // check if winner address was a player in the game
+            require(game.players[_winners[i]], 'err: invalid winner :/');
+
+            // calc win_usd
+            winner = _winners[i];
+            win_perc = game.winPercs[i];
+            win_pool = game.prizePoolUSD;
+            win_usd = win_perc * win_pool;
+
+            // send 'win_usd' (amount in stable) to 'winner'
+
+            // LEFT OFF HERE... need to design away to choose stables from 'whitelistUsdStables'
+        }
+
+        // delete game mapping
+        delete activeGames[_gameCode];
+        activeGameCount--;
+
+        retur true;
     }
+
     function hostStartEventWithPlayers(address _gameCode, address[] memory _players) public {
         require(_gameCode != address(0), 'err: no game code :p');
         require(_players.length > 0, 'err: no players :p');
@@ -164,6 +205,9 @@ contract GamerTokeAward is IERC20, Ownable {
         // get/validate active game
         struct storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I')
+
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
 
         // loop through _players to verify they joined event & payed?
         address[] paid;
@@ -593,13 +637,18 @@ contract GamerTokeAward is IERC20, Ownable {
         return activeGames[gameCode].players;
     }
     
-    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint256 _hostFee) public returns (address) {
+    // _winPercs: [%_1st_place, %_2nd_place, ...]
+    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= 1, "required: entry fee >= 1 USD :/");
-        
+        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high');
+        require(_winPercs.length > 0, 'no winners? :O');
+
+        // verify msg.sender has enough GTA to host
         uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
         require(bal >= (_entryFeeUSD * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
 
+        // verify active game name/code doesn't exist yet
         address gameCode = generateAddressHash(msg.sender, gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
@@ -611,19 +660,21 @@ contract GamerTokeAward is IERC20, Ownable {
         newGame.host = msg.sender;
         newGame.gameName = _gameName;
         newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.hostFee = _hostFee;
+        newGame.hostFeePerc = _hostFeePerc;
+        newGame.winPercs = _winPercs;
         newGame.createTime = block.timestamp;
         newGame.startTime = _startTime;
         newGame.expDate = _startTime + gameExpSec;
         newGame.playerCnt = 0;
+        newGame.prizePoolUSD = 0;
 
         // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
         activeGames[gameCode] = newGame;
         
-        // log new code in gameCodes array, for 'activeGames' supprot in 'cleanExpiredGames'
+        // log new code in gameCodes array, for 'activeGames' support in 'cleanExpiredGames'
         gameCodes.push(gameCode);
         
-        // increment 'activeGameCount', for 'activeGames' supprot in 'cleanExpiredGames'
+        // increment 'activeGameCount', for 'activeGames' support in 'cleanExpiredGames'
         activeGameCount++;
         
         // return gameCode to caller
