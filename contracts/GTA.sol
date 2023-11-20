@@ -676,18 +676,24 @@ contract GamerTokeAward is IERC20, Ownable {
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // MODIFIERS
+    modifier onlyAdmins(address gameCode) {
+        // *WARNING* _ assigned function requires 'validGameCode' FIRST, else always fails
+        bool isKeeper = msg.sender == keeper;
+        bool isOwner = msg.sender == owner;
+        bool isHost = msg.sender == activeGames[gameCode].host;
+        require(isKeeper || isOwner || isHost, 'err: only host :/');
+        _;
+    }
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner :0");
         _;
     }
-    
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
     }
-    
-    modifier validGame(address gameCode) {
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: gameCode not found :(");
+    modifier validGameCode(address gameCode) {
+        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         _;
     }
         
@@ -735,11 +741,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
-    function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
-        bool isKeeper = msg.sender == keeper;
-        bool isOwner = msg.sender == owner;
-        bool isHost = msg.sender == activeGames[gameCode].host;
-        require(isKeeper || isOwner || isHost, 'err: only host :/');
+    function getPlayers(address gameCode) public view validGameCode(address gameCode) onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
     
