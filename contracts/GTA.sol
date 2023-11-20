@@ -134,6 +134,7 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
+    address[] storage private creditsAddrArray;
 
     // usd deposit fee taken out of amount used for creditsUSD updates
     //  - this is a simple fee 'per deposit' (goes to contract)
@@ -153,17 +154,30 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
 
-    function setMaxHostFeePerc(uint8 perc) public onlyKeeper {
+    function setMaxHostFeePerc(uint8 perc) public onlyKeeper returns (bool) {
         maxHostFeePerc = perc;
+        return true;
     }
 
-    function getCredits() public onlyKeeper {
+    function getCredits() public onlyKeeper returns (mapping(address => uint256)) {
         return creditsUSD;
     }
 
-    function getCreditsToStableBalance() public onlyKeeper {
-        // ... return diff:  GTA stable token balances -  total player credits
-        //                      'whitelistUsdStables' - 'creditsUSD'
+    // returns GTA total stable balances - total player credits ('whitelistUsdStables' - 'creditsUSD')
+    //  can be done simply from client side as well (ie. w/ 'getCredits()', client side can calc balances)
+    function getGrossNetBalances() public onlyKeeper {
+        uint256 stable_bal = 0;
+        for (uint i=0; i < whitelistUsdStables.length; i++) {
+            stable_bal += IERC20(whitelistUsdStables[i]).balanceOf(address(this));
+        }
+        
+        uint256 owedCredits = 0;
+        for (uint i=0; i < creditsAddrArray.length; i++) {
+            owedCredits += creditsUSD[creditsAddrArray[i]];
+        }
+
+        uint256 net_bal = stable_bal - owedCredits;
+        return [stable_bal, owedCredits, net_bal];
     }
 
     // _winners: [0x1st_place, 0x2nd_place, ...]
@@ -211,7 +225,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // host can start event w/ players pre-registerd for gameCode
-    function hostStartEvent(address _gameCode) public {
+    function hostStartEvent(address _gameCode) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
 
         // get/validate active game
@@ -225,6 +239,7 @@ contract GamerTokeAward is IERC20, Ownable {
         game.launchTime = block.timestamp;
         game.launchBlockNum = block.number;
         game.launched = true;
+        return true;
     }
 
     // msg.sender can add themself to any game (debits from msg.sender credits)
@@ -244,7 +259,9 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
         
         // debit entry fee from msg.sender credits (player)
-        creditsUSD[msg.sender] -= game.entryFeeUSD;
+        // creditsUSD[msg.sender] -= game.entryFeeUSD;
+        // handles tracking addresses w/ creditsAddrArray
+        _updateCredit(msg.sender, uint256 game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
         // game.players.push(msg.sender);
@@ -260,12 +277,12 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // hosts can pay to add players to their own games (debits from host credits)
-    function hostRegisterEvent(address player, address gameCode) public returns (bool) {
-        require(player != address(0), 'err: no player ;l');
-        require(gameCode != address(0), 'err: no game code ;l');
+    function hostRegisterEvent(address _player, address _gameCode) public returns (bool) {
+        require(_player != address(0), 'err: no player ;l');
+        require(_gameCode != address(0), 'err: no game code ;l');
 
         // get/validate active game
-        struct storage game = activeGames[gameCode];
+        struct storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
@@ -278,11 +295,13 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
 
         // debit entry fee from msg.sender credits (host)
-        creditsUSD[msg.sender] -= game.entryFeeUSD;
+        // creditsUSD[msg.sender] -= game.entryFeeUSD;
+        // handles tracking addresses w/ creditsAddrArray
+        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
         // game.players.push(player);
-        game.players[player] = true;
+        game.players[_player] = true;
         game.playerCnt += 1;
 
         return true;
@@ -308,7 +327,9 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
 
         // debit entry fee from player credits
-        creditsUSD[player] -= game.entryFeeUSD;
+        // creditsUSD[player] -= game.entryFeeUSD;
+        // handles tracking addresses w/ creditsAddrArray
+        _updateCredit(player, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
         // game.players.push(player);
@@ -326,14 +347,16 @@ contract GamerTokeAward is IERC20, Ownable {
         return lastBlockNumUpdate;
     }
 
+    
+    //  DONE: ready to pass data from 'Transfer' event logs on python side
+    //  DONE:    - need to update mapping for player usd credits
+    //  N/A:     - may need to maintain mapping of GTA contract alt coin balances
+    //  DONE:        or maybe just swap for usd stables immediately (i forgot)
+    //  DONE: should only pass the bare-min data needed
+    //  N/A:  should probably use pyton side to calc USD credit vals for alt coin transfers
+    //  DONE:    however, we need to actually make the swaps on chain
+
     // LEFT OFF HERE... 
-    //  ready to pass data from 'Transfer' event logs on python side
-    //      - need to update mapping for player usd credits
-    //      - may need to maintain mapping of GTA contract alt coin balances
-    //          or maybe just swap for usd stables immediately (i forgot)
-    //  should only pass the bare-min data needed
-    //  should probably use pyton side to calc USD credit vals for alt coin transfers
-    //      however, we need to actually make the swaps on chain
     //       note: need to keep track of all 'expenses' and deduct from usd credit balances
     //          ie. gas fees, dex swap fees, etc.    
     struct TxDeposit {
@@ -341,9 +364,11 @@ contract GamerTokeAward is IERC20, Ownable {
         address sender;
         uint256 amount;
     }
-    function updateCredits(TxDeposit[] memory dataArray, uint32 lastBlockNum) public onlyKeeper {
+
+    // LEFT OFF HERE... i'm pretty sure this function still doesn't prevent keeper from lying about deposits
+    function updateCredits(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
         // Record the gas at the beginning of the function
-        gasStart = gasleft(); 
+        gasStart = gasleft();
 
         // loop through ERC-20 'Transfer' events received from client side
         //  events are pre-filtered for recipient = this contract address
@@ -390,15 +415,57 @@ contract GamerTokeAward is IERC20, Ownable {
             // 1) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD'
             //     - dex fees already taken out
             //     - optional 'usdStableDepositFeePerc' can be set by keeper
-            creditsUSD[src_addr] += (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
+            // creditsUSD[src_addr] += (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
+            // handles tracking addresses w/ creditsAddrArray
+            uint256 amnt = (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100))
+            _updateCredit(src_addr, amnt, false); // false = credit
         }
 
         // 2) update last block number
-        lastBlockNumUpdate = lastBlockNum;
+        lastBlockNumUpdate = _lastBlockNum;
 
         // -1) calc gas used to this point & and refund to 'keeper' (in wei)
         uint256 gasUsed = gasStart - gasleft(); // calc gas used
         payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
+    }
+
+    function _updateCredit(address _player, uint256 _amount, bool _debit) private {
+        if (_debit) { 
+            // ensure there is enough credit before debit
+            require(creditsUSD[_player] >= _amount, 'err: invalid credits to debit :[');
+            creditsUSD[_player] -= _amount;
+
+            // if balance is now 0, remove _player from balance tracking
+            if (creditsUSD[_player] == 0) {
+                _remCreditsAddrArray(_player);
+            }
+        } else { 
+            creditsUSD[_player] += _amount; 
+            _addCreditsAddrArraySafe[_player]; // removes first
+        }
+    }
+
+    // ensure _player address is logged only once in creditsAddrArray
+    function _addCreditsAddrArraySafe(address _player) private returns (bool) {
+        require(_player != address(0), "err: invalid _player");
+        bool success = _remCreditsAddrArray(_player);
+        creditsAddrArray.push(_player);
+        return true;
+    }
+
+    // remove algorithm does NOT maintain order
+    function _remCreditsAddrArray(address _player) private returns (bool) {
+        require(_player != address(0), "err: invalid _player");
+        arr = creditsAddrArray;
+        for (i = 0; i < rtrs.length; i++) {
+            if (_player == arr[i]) {
+                arr[i] = arr[rtrs.length - 1];
+                arr.pop();
+                creditsAddrArray = arr;
+                return true;
+            }
+        }
+        return false;
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
@@ -669,6 +736,10 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
     function getPlayers(address gameCode) public view validGame(gameCode) returns (address[] memory) {
+        bool isKeeper = msg.sender == keeper;
+        bool isOwner = msg.sender == owner;
+        bool isHost = msg.sender == activeGames[gameCode].host;
+        require(isKeeper || isOwner || isHost, 'err: only host :/');
         return activeGames[gameCode].players;
     }
     
