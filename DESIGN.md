@@ -1,5 +1,25 @@
 # product design (GTA = gamer token award)
 
+## GTA.sol finalized design & integration ##
+    - current integration
+        - host calls 'createEvent(entry_fee)'; generates event_code; holding GTA required (ratio of entry_fee)
+        - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
+        - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
+        - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
+        - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
+        - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
+
+    - remaining integrations
+        - host chooses service-fee discount if paid in GTA
+            1) buy & burn|hold integration
+            2) host & winners get minted some amount after event ends
+                *required: mint amount < buy & burn amount
+
+    - hanging blockers / tasks / edge-cases to solve
+        - hostRegisterEventClaim: someone could listen for 'Transfer' events to GTA contract
+            and then use 'hostRegisterEventClaim' to immediately take the credits
+        - creditUpdates: verify that keeper cannot lie when calling 'creditUpdates' (deposits)
+
 ## edage case use cases
     - payment processing
 
