@@ -10,6 +10,8 @@
         - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
     - remaining integrations
+        - players call 'processRefunds(event_code)' to refund all entry_fees 
+            required: event_code has 'expired' and not yet 'launched'
         - host chooses service-fee discount if paid in GTA
             1) buy & burn|hold integration
             2) host & winners get minted some amount after event ends
