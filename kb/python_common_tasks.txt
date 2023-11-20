@@ -1,0 +1,1369 @@
+#=========================================#
+python common tasks
+house_060220
+#=========================================#
+# print/traverse call stack (extract_stack)
+# get / print def function name
+# import .py files that start with #
+# selenium w/ tor browser
+# clear library install cache
+# python_common_topics_basic_expert
+# install python3.9.6 from source code
+# pandas
+# download files (pdf example)
+# move file
+# ATOM - create list of strings to use in python
+# import from parent directory
+# create barcodes
+# change dir of os (os.chdir)
+# change cli tab title (echo)
+# dict extend / union operators (python3.9)
+# remove from list / filter
+# pymysql
+# switch / case examples
+# launch terminal / appscript / os.system
+# trim / truncate float
+# regex
+# lambda functions
+# check python ID of variable
+# splitlines
+# print / get variable name
+# bytearray
+# bytes to int (utf-8 encoding / decoding)
+# diff between 2 lists
+# reverse list
+# list index
+# list append / extend
+# dictionary add / update
+# count chars in string
+# pretty print
+# unicode
+# raw string encoding / decoding
+# tuple (append to tuple)
+# flask get http headers
+# flask dynamic urls
+# base64 image to filesystem
+# import & __init__.py
+# flask redirect example
+# time now
+# open file and write to it
+# random string
+# python cheat sheet
+# dict_len_key_value
+# python native / built in functions
+# view function source code
+# install pip
+# import os / check python install path
+# check https access
+# install / uninstall python
+# itertools / lambda example
+#=========================================#
+
+
+#=========================================#
+# print/traverse call stack (extract_stack)
+#=========================================#
+import traceback, sys
+def my_function(str_arg):
+    print(traceback.extract_stack(None, 2)[0][0])
+    print(traceback.extract_stack(None, 2)[0][1])
+    print(traceback.extract_stack(None, 2)[0][2])
+    print(traceback.extract_stack(None, 2)[0][3]) # prints function name and arg param name
+    print(traceback.extract_stack(None, 2)[1][3])
+
+#=========================================#
+# get / print def function name
+#=========================================#
+# examples x5 to print current function name
+import inspect, sys, traceback
+def my_function():
+    #ex: 1 (requires 'import inspect')
+    defname = inspect.stack()[0].function
+
+    #ex: 2 (requires 'import inspect')
+    defname = inspect.currentframe().f_code.co_name
+
+    #ex: 3 (requires 'import sys')
+    defname = sys._getframe(1).f_code.co_name
+
+    #ex: 4 (requires 'import traceback')
+    defname = traceback.format_stack()[-2].split()[-1]
+
+    #ex: 5 (requires 'import sys, traceback'), includes func params
+    defname = traceback.extract_stack(None, 2)[0][3]
+	
+    print('function name: ' + defname)
+
+#=========================================#
+# import .py files that start with #
+#=========================================#
+# import 02_test_kuna_html_1.py
+> import importlib
+> HTML_1 = importlib.import_module('02_test_kuna_html_1')
+> print(HTML_1.TEST_HTML)
+
+#=========================================#
+# selenium w/ tor browser
+#=========================================#
+#ref: chatGPT
+'''
+Yes, there is a Tor Browser version of the Selenium WebDriver that you can use to automate actions in the Tor Browser. The Tor Browser uses the Firefox browser engine, so you can use the Firefox WebDriver (GeckoDriver) along with Tor Browser to achieve this.
+Here's an example of how you can use the Tor Browser with Selenium WebDriver in 
+
+In this example, we first set the tor_browser_path variable to the path where the Tor Browser executable is located on your system.
+Next, we configure the Firefox options using selenium.webdriver.firefox.options.Options(). We set the binary location to the Tor Browser executable using firefox_options.binary_location.
+To route the browser traffic through the Tor network, we configure the Tor SOCKS proxy using firefox_options.set_preference(). The Tor Browser uses SOCKS proxy at 127.0.0.1:9150 by default.
+Finally, we initialize the WebDriver with the configured options and perform browser actions as needed.
+Make sure to adjust the tor_browser_path variable to match the actual path to your Tor Browser installation.
+Remember to use this setup responsibly and in accordance with the Tor Project's guidelines and policies.
+'''
+
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+
+# Set the path to the Tor Browser executable
+tor_browser_path = '/path/to/tor-browser/Browser/firefox'
+
+# Configure Firefox options for Tor Browser
+firefox_options = Options()
+firefox_options.binary_location = tor_browser_path
+
+# Configure the Tor SOCKS proxy
+proxy_ip = '127.0.0.1'
+proxy_port = 9150
+firefox_options.set_preference('network.proxy.type', 1)
+firefox_options.set_preference('network.proxy.socks', proxy_ip)
+firefox_options.set_preference('network.proxy.socks_port', proxy_port)
+firefox_options.set_preference('network.proxy.socks_remote_dns', True)
+
+# Initialize the WebDriver with Tor Browser options
+driver = webdriver.Firefox(options=firefox_options)
+
+# Perform browser actions
+driver.get("https://example.com")  # Replace with the desired website URL
+# Continue interacting with the browser as needed
+
+# Close the WebDriver
+driver.quit()
+
+
+
+#=========================================#
+# clear library install cache
+#=========================================#
+# example: clearing cache for 'googletrans'
+# Clear the cache for the googletrans library 
+#  by deleting the files stored in the googletrans cache directory. 
+#  You can locate the cache directory using the following code:
+> import googletrans
+> print(googletrans.__path__)
+
+#... navigate to that directory and delete everything in it
+
+
+#=========================================#
+# python_common_topics_basic_expert
+#=========================================#
+#ref: https://www.youtube.com/watch?v=p15xzjzR9j0
+  -> generated './python_common_topics_basic_expert_youtube.com/watch?v=p15xzjzR9j0.pdf'
+	'Basic'
+	'Intermediate'
+	'Advanced'
+	'Expert/Master'
+
+#=========================================#
+# install python3.9.6 from source code
+#=========================================#
+#ref: https://tecadmin.net/how-to-install-python-3-9-on-ubuntu-18-04/
+sudo apt install wget build-essential checkinstall 
+sudo apt install libreadline-gplv2-dev libncursesw5-dev libssl-dev \
+    libsqlite3-dev tk-dev libgdbm-dev libc6-dev libbz2-dev libffi-dev zlib1g-dev 
+cd /opt 
+sudo wget https://www.python.org/ftp/python/3.9.6/Python-3.9.6.tgz 
+tar xzf Python-3.9.6.tgz 
+cd Python-3.9.6 
+sudo ./configure --enable-optimizations
+sudo make altinstall 
+python3.9 -V
+sudo rm -f /opt/Python-3.9.6.tgz
+
+#=========================================#
+# pandas
+#=========================================#
+## parsing out formats from DataFrame
+#ref: https://pandas.pydata.org/pandas-docs/stable/reference/frame.html#serialization-io-conversion
+#ref: .../testing/equibase_scrapper.py
+main_df = pd.DataFrame(columns=['Track Name','Race Date','Top Description','P#','PP','Horse','VirtualStable','A/S','Med','Claim $','Jockey','Wgt','Trainer','M/L','Bottom Description'])
+main_df = pd.concat([main_df, df], ignore_index = True)
+main_df.to_csv("equibase_data.csv",index=False)
+pprint(main_df.to_json())
+pprint(main_df.to_dict(orient='
+pprint(main_df.to_dict(orient='dict'))
+
+#=========================================#
+# download files (pdf example)
+#=========================================#
+#ref: https://stackoverflow.com/a/43163218/2298002
+with open('./tmp/metadata.pdf', 'wb') as f:
+    f.write(response.content)
+
+#ref: https://stackoverflow.com/a/34503421/2298002
+import requests
+
+url = 'http://www.hrecos.org//images/Data/forweb/HRTVBSH.Metadata.pdf'
+r = requests.get(url, stream=True)
+
+with open('/tmp/metadata.pdf', 'wb') as fd:
+    for chunk in r.iter_content(chunk_size):
+        fd.write(chunk)
+
+#=========================================#
+# move file
+#=========================================#
+#ref: https://stackoverflow.com/a/8858026/2298002
+import os
+import shutil
+
+os.rename("path/to/current/file.foo", "path/to/new/destination/for/file.foo")
+os.replace("path/to/current/file.foo", "path/to/new/destination/for/file.foo")
+shutil.move("path/to/current/file.foo", "path/to/new/destination/for/file.foo")
+
+#=========================================#
+# ATOM - create list of strings to use in python
+#=========================================#
+example list...
+ACE
+AD
+ADR
+AFT
+ALE
+
+#regex to create this list
+# 1) put list into ATOM
+# 2) use regex in find: (^([A-Za-z]+)$)
+# 3) use string in replace: "1$",
+# 4) copy list back into python :) 
+
+#=========================================#
+# import from parent directory
+#=========================================#
+#ref: chatGPT
+# import from a parent dir
+#   add the parent dir containing <import>.py file, to the Python path
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from db_controller import * # <import>.py file
+
+#ref: https://stackoverflow.com/a/28712742/2298002
+
+# import from parent dir
+>>> import sys
+>>> sys.path.insert(0,'..')
+>>> from parent_dir_lib import whatever
+
+# import from sibling dir
+>>> import sys
+>>> sys.path.insert(0,'../sib_dir')
+>>> from sib_dir_lib import whatever
+
+# NOTE: can use "sys.path.append('../sib_dir')"
+>>> import sys
+>>> sys.path.append('../sib_dir')
+>>> from sib_dir_lib import whatever
+
+#=========================================#
+# create barcodes
+#=========================================#
+#ref: https://www.geeksforgeeks.org/how-to-generate-barcode-in-python/
+$ python3 -m pip install python-barcode 
+$ python3 -m pip install pillow
+
+## generate a barcode in the EAN-13 format. 
+## GENERATE it as an SVG file.
+# import EAN13 from barcode module
+from barcode import EAN13
+
+# Make sure to pass the number as string
+number = '5901234123457'
+
+# Now, let's create an object of EAN13
+# class and pass the number
+my_code = EAN13(number)
+
+# Our barcode is ready. Let's save it.
+my_code.save("new_code")
+
+
+## GENERATE the same barcode in PNG format.
+# import EAN13 from barcode module
+from barcode import EAN13
+
+# import ImageWriter to generate an image file
+from barcode.writer import ImageWriter
+
+# Make sure to pass the number as string
+number = '5901234123457'
+
+# Now, let's create an object of EAN13 class and
+# pass the number with the ImageWriter() as the
+# writer
+my_code = EAN13(number, writer=ImageWriter())
+
+# Our barcode is ready. Let's save it.
+my_code.save("new_code1")
+
+
+
+
+#=========================================#
+# change dir of os (os.chdir)
+#=========================================#
+import os
+os.chdir(“My Folder/Personnel/EDUCBA/Jan”)
+
+#=========================================#
+# change cli tab title (echo)
+#=========================================#
+#ref: https://superuser.com/a/105500
+#ref: https://stackoverflow.com/questions/15100402/call-a-command-line-which-includes-both-echo-and#15100669
+
+# update mac osx cli tab title (easy to see and track pdf count)
+>>> os.system(f'echo -n -e "\033]0;{file_num}\007"')
+
+#=========================================#
+# dict extend / union operators (python3.9)
+#=========================================#
+#ref: https://stackoverflow.com/a/70345971/2298002
+Notice that since python3.9 a much easier syntax was introduced (Union Operators):
+
+d1 = {'a': 1}
+d2 = {'b': 2}
+
+extended_dict = d1 | d2
+>> {'a':1, 'b': 2}
+Pay attention: in case first dict shared keys with second dict, position matters!
+
+d1 = {'b': 1}
+d2 = {'b': 2}
+d1 | d2 
+>> {'b': 2} 
+
+
+#=========================================#
+# remove from list / filter
+#=========================================#
+# pop... remove by idx and get value of idx removed
+my_list = [1, 2, 3, 4, 5]
+index_to_remove = 2
+my_list.pop(index_to_remove)
+
+# del... remove by idx and DON'T get value of idx removed
+my_list = [1, 2, 3, 4, 5]
+index_to_remove = 2
+del my_list[index_to_remove]
+
+
+from pprint import *
+def remove_all_from_list(lst_rem, obj_rem):
+    return list(filter((obj_rem).__ne__, lst_rem))
+
+
+#ref: https://stackoverflow.com/a/1157160
+# Python 3.x
+>>> x = [1,2,3,2,2,2,3,4]
+>>> list(filter((2).__ne__, x))
+[1, 3, 3, 4]
+
+# or
+
+>>> x = [1,2,3,2,2,2,3,4]
+>>> list(filter(lambda a: a != 2, x))
+[1, 3, 3, 4]
+
+#ref: https://stackoverflow.com/a/46975102/2298002
+>>> del m[start:end:step]
+
+#ref: pdf_engine.py
+>>> del lst_pg_utf8[idx:idx_fn:1]
+
+#=========================================#
+# pymysql
+#=========================================#
+## transactions, commits, & rollback
+#ref: https://stackoverflow.com/a/48432286
+
+## check connect / reconnect
+#ref: https://stackoverflow.com/a/67187289
+#ref: https://pymysql.readthedocs.io/en/latest/modules/connections.html
+From the pymysql docs:
+
+ping(reconnect=True)
+Check if the server is alive.
+
+Parameters: reconnect – If the connection is closed, reconnect.
+Raises: Error – If the connection is closed and reconnect=False.
+
+Code example
+
+connection = pymysql.connect(host='localhost', user='root', password='password')
+connection.close()
+
+>> connection is now closed
+
+connection.ping(reconnect=False)
+
+>> returns an error, connection is closed
+
+connection.ping(reconnect=True)
+
+>> connection is reconnected
+
+
+#ref: db_engine.py
+    def is_connected(self):
+        try:
+            # Raises:	Error – If the connection is closed and reconnect=False
+            connection.ping(reconnect=False)
+            return True
+        except Exception as e:
+            printException(e)
+            return False
+
+
+#=========================================#
+# switch / case examples
+#=========================================#
+#ref: https://pythonguides.com/case-statement-in-python/#Switch_case_in_Python_with_example
+# Defining the switch function
+def switch(operation, num1, num2):
+
+    dict={
+        1: addition(num1, num2),
+        2: subtraction(num1, num2),
+        3: multiply(num1, num2),
+        4: realDivision(num1, num2),
+        5: intDivision(num1, num2),
+        6: modulus(num1, num2)
+    }
+    return dict.get(operation, 'Invalid Operation')
+
+# Calling the switch function
+print('Result is: ', switch(num, num1, num2))
+
+#ref: https://pythonguides.com/case-statement-in-python/#Switch_case_in_Python_with_example
+#ref: https://pythongeeks.org/switch-in-python/
+# note: at least 10 more examples on this site (besides below)
+
+## Simple case statement in Python
+def printMonth(num):
+    if num == 1:
+        month =' January'
+    elif num == 2:
+        month = 'February'
+    elif num == 3:
+        month = 'March'
+    else:
+        month= 'Invalid Month'
+    return month
+
+print('Month is:', printMonth(13))
+
+## Case statement dictionary Python
+dict={
+    1: 'Sunday',
+    2: 'Monday',
+    3: 'Tuesday',
+    4: 'Wednesday',
+    5: 'Thursday',
+    6: 'Friday',
+    7: 'Saturday'
+}
+
+print('Entered Number is 2. Day of the week is:',dict.get(2))
+
+## Python switch case statement default
+dict={
+    1: 'Sunday',
+    2: 'Monday',
+    3: 'Tuesday',
+    4: 'Wednesday',
+    5: 'Thursday',
+    6: 'Friday',
+    7: 'Saturday'
+}
+
+print('Entered Number is 9. Day of the week is:',dict.get(9, 'Not Valid'))
+
+## Switch case in Python using function
+def switch(num):
+    dict={
+        1: 'Sunday',
+        2: 'Monday',
+        3: 'Tuesday',
+        4: 'Wednesday',
+        5: 'Thursday',
+        6: 'Friday',
+        7: 'Saturday'
+    }
+    return dict.get(num, 'Invalid Day')
+num= 5
+print(' The number is:', num, 'and the day is:',switch(num))
+
+
+## Switch case in Python using classes and objects
+class Switch:
+    # Defining a function for every case
+    def case_1(self):
+        print('January')
+    def case_2(self):
+        print('February')
+    def case_3(self):
+        print('March')
+    def case_4(self):
+        print('April')
+
+    # Defining a function to decide which function to call
+    def circle(self, cases):
+        method = 'case_' + str(cases)
+        return getattr(self, method)()
+        
+# Declaring an object
+switcher= Switch()
+
+# Calling the switch case method
+switcher.circle(12)
+
+
+## Switch case in Python with user input
+def returnUserInfo(user_id):
+    user_info={
+        1001: 'James',
+        1002: 'Rosy',
+        1003: 'Ben',
+        1004: 'John',
+        1005: 'Mary'
+    }
+    return user_info.get(user_id, 'Invalid User ID')
+
+user_id= int(input('Enter the user ID:'))
+print(returnUserInfo(user_id))
+
+#=========================================#
+# launch terminal / appscript / os.system
+#=========================================#
+# open new terminal and run command
+import appscript
+appscript.app('Terminal').do_script(ascript)
+
+# open file from existing terminal (i.e. "open 'some.pdf'")
+os.system("open '"+file_path+"'")
+
+#=========================================#
+# trim / truncate float
+#=========================================#
+#ref: https://python-forum.io/thread-12331.html
+>>> some_num = 328.88452
+>>> some_other_num = 31.11547999999999
+>>> print(f"{some_num:.2f}, {some_other_num:.2f}")
+328.88, 31.12
+
+>>> f = 0.234243
+>>> print(f"{f:.2f}")
+0.23
+
+#=========================================#
+# regex
+#=========================================#
+#ref: https://www.w3schools.com/python/python_regex.asp
+Metacharacters are characters with a special meaning:
+
+Character	Description		Example		Try it
+[]	A set of characters		"[a-m]"		Try it »
+\	Signals a special sequence 	"\d"		Try it »
+	(can also be used to escape 
+	 special characters)	
+.	Any character 			"he..o"		Try it »
+	(except newline character)	
+^	Starts with			"^hello"	Try it »
+$	Ends with			"planet$"	Try it »
+*	Zero or more occurrences	"he.*o"		Try it »
++	One or more occurrences		"he.+o"		Try it »
+?	Zero or one occurrences		"he.?o"		Try it »
+{}	Exactly the specified number	"he{2}o"	Try it » 
+	 of occurrences	
+|	Either or			"falls|stays"	Try it »
+()	Capture and group
+
+#=========================================#
+# lambda functions
+#=========================================#
+## lambda function to +2 for every item in list
+>>> my_list = [22, 34, 1, 2, 3, 66, 77, 88]
+>>> my_list
+[22, 34, 1, 2, 3, 66, 77, 88]
+>>> 
+>>> 
+>>> new_list = map(lambda x: x + 2, my_list)
+>>> list(new_list)
+[24, 36, 3, 4, 5, 68, 79, 90]
+>>> list(new_list)
+[]
+>>> 
+
+#ref: https://stackoverflow.com/a/52460395/2298002
+>>> get_cubes = lambda x: [pow(i, 3) for i in range(0, x+1, 3)]
+>>> get_cubes(3) # 3 goes into x
+
+#=========================================#
+# check python ID of variable
+#=========================================#
+#ref: https://towardsdatascience.com/immutable-vs-mutable-data-types-in-python-e8a9a6fcfbdc
+
+age = 42
+print(id(age))
+print(type(age))
+print(age)
+age = 43
+print(age)
+print(id(age))
+[Out:]
+10966208
+<class ‘int’>
+42
+43
+10966240
+
+x = [1, 2, 3]
+print(x)
+print(id(x))
+x.pop()
+print(x)
+print(id(x))
+[Out:]
+[1, 2, 3]
+139912816421064
+[1, 2]
+139912816421064
+
+a = list(('apple', 'banana', 'clementine'))
+b = a
+c = list(a)
+print(id(a))
+print(id(b))
+print(id(c))
+
+
+[Out:]
+140372445629448
+140372445629448
+140372445674635
+
+#=========================================#
+# splitlines
+#=========================================#
+#ref: https://docs.python.org/3/library/stdtypes.html#str.splitlines
+
+#=========================================#
+# print / get variable name
+#=========================================#
+>>> var_name = f"{var=}"
+
+#ref: https://stackoverflow.com/a/58415090/2298002
+my_nice_variable_name = 'test'
+print(f'{my_nice_variable_name=}')
+
+# Output:
+# my_nice_variable_name='test'
+
+#=========================================#
+# bytearray
+#=========================================#
+#ref: https://stackoverflow.com/a/27001435/2298002
+bytes is immutable. Use bytearray.
+
+xs = bytearray(b'\x01\x02\x03')
+xs.append(5)
+
+#=========================================#
+# bytes to int (utf-8 encoding / decoding)
+#=========================================#
+#ref: https://www.programiz.com/python-programming/methods/built-in/bytes
+#encoding / decoding
+>>> bytes([10])
+b'\n'
+
+>>> text = "\n idx: ..."
+>>> text.encode('utf-8')
+b"\n idx: ..."
+
+>>> text_utf8 = text.encode('utf-8')
+>>> text_utf8
+b"\n idx: ..."
+
+>>> text_utf8.decode('utf-8')
+'\n idx: ...'
+
+
+#ref: https://stackoverflow.com/a/21017834/2298002
+>>> bytes([3])
+b'\x03
+
+#ref: https://stackoverflow.com/a/61445009/2298002
+>>> i = 5
+>>> i.to_bytes(2, 'big')
+b'\x00\x05'
+>>> int.from_bytes(i.to_bytes(2, 'big'), byteorder='big')
+5
+
+#=========================================#
+# diff between 2 lists
+#=========================================#
+#ref: https://stackoverflow.com/a/3462160/2298002
+In [5]: list(set(temp1) - set(temp2))
+Out[5]: ['Four', 'Three']
+
+# warning...
+In [5]: set([1, 2]) - set([2, 3])
+Out[5]: set([1]) 
+
+#=========================================#
+# reverse list
+#=========================================#
+#ref: https://stackoverflow.com/a/32517283/2298002
+>>> l = ["a","b","c","d"]
+>>> l.reverse()
+>>> l
+['d', 'c', 'b', 'a']
+
+	- OR -
+
+>>> print l[::-1]
+['d', 'c', 'b', 'a']
+
+#=========================================#
+# list index
+#=========================================#
+#ref: https://stackoverflow.com/a/176921
+>>> ["foo", "bar", "baz"].index("bar")
+1
+
+#=========================================#
+# list append / extend
+#=========================================#
+#ref: https://stackoverflow.com/a/69246800/2298002
+list1 = ["cat", 3.14, "dog", 81, 6, 41]
+list_first_3 = []
+list_2 = [1, 2, 3]
+
+list_2.extend(list1[:3])
+assert list_2 == [1, 2, 3, "cat", 3.14, "dog"]
+
+list_first_3.extend(list1[:3])
+assert list_first_3 == ["cat", 3.14, "dog"]
+
+
+list1 = ["cat", 3.14, "dog", 81, 6, 41]
+list_first_3 = []
+list_2 = [1, 2, 3]
+
+list_2.append(list1[:3])
+assert list_2 == [1, 2, 3, ["cat", 3.14, "dog"]]
+
+list_first_3.append(list1[:3])
+assert list_first_3 == [["cat", 3.14, "dog"]]
+
+#=========================================#
+# dictionary add / update
+#=========================================#
+#ref: https://www.w3schools.com/python/python_dictionaries_add.asp
+
+# Adding Items (replaces val for existing keys)
+>>> thisdict = {
+  "brand": "Ford",
+  "model": "Mustang",
+  "year": 1964
+}
+>>>thisdict["color"] = "red"
+>>> print(thisdict)
+
+# Update Dictionary w/ dict (ignores existing keys)
+>>> thisdict = {
+  "brand": "Ford",
+  "model": "Mustang",
+  "year": 1964
+}
+>>> thisdict.update({"color": "red"})
+
+#=========================================#
+# count chars in string
+#=========================================#
+#ref: https://stackoverflow.com/a/1155648
+>>> 'Mary had a little lamb'.count('a')
+4
+
+#=========================================#
+# pretty print
+#=========================================#
+#ref: https://datagy.io/python-pretty-print-dictionary/
+import pprint
+pprint.pprint(dict)
+
+
+#=========================================#
+# unicode
+#=========================================#
+#ref: https://docs.python.org/3/howto/unicode.html
+#ref: https://stackoverflow.com/a/13836410
+There are a bunch: https://en.wikipedia.org/wiki/Newline#Unicode
+
+LF: Line Feed, U+000A (UTF-8 in hex: 0A)
+VT: Vertical Tab, U+000B (UTF-8 in hex: 0B)
+FF: Form Feed, U+000C (UTF-8 in hex: 0C)
+CR: Carriage Return, U+000D (UTF-8 in hex: 0D)
+CR+LF: CR (U+000D) followed by LF (U+000A) (UTF-8 in hex: 0D0A)
+NEL: Next Line, U+0085 (UTF-8 in hex: C285)
+LS: Line Separator, U+2028 (UTF-8 in hex: E280A8)
+PS: Paragraph Separator, U+2029 (UTF-8 in hex: E280A9)
+...and probably many more.
+
+The most commonly used ones are LF (*nix), CR+LF (Windows and DOS), and CR (old pre-OSX Mac systems, mostly).
+
+#=========================================#
+# raw string encoding / decoding
+#=========================================#
+#ref: https://stackoverflow.com/a/13110762
+#ref: https://stackoverflow.com/a/32331337
+"As an alternative to escaping the backslash, you can disable backslash-escaping entirely by using a raw string literal:"
+>>> print(r"abc\ndef")
+abc\ndef
+
+>>> print("abc\ndef")
+abc
+def
+
+#ref: https://stackoverflow.com/a/13110762
+#ref: https://docs.python.org/2/howto/unicode.html
+>>> text = 'adds'
+>>> text.encode('utf-8')
+b'adds'
+
+
+#print(f"{pg_text}")
+#print(fr"{pg_text}")
+#print(fu"{pg_text}")
+
+#=========================================#
+# tuple (append to tuple)
+#=========================================#
+#ref: https://datagy.io/python-append-to-tuple/
+
+# Appending to a tuple with concatenation
+a_tuple = (1, 2, 3)
+a_tuple = a_tuple + (4,)
+print(a_tuple)
+# Returns: (1, 2, 3, 4)
+
+# Appending to a tuple with list conversion
+a_tuple = (1, 2, 3)
+a_list = list(a_tuple)
+a_list.append(4)
+a_tuple = tuple(a_list)
+print(a_tuple)
+# Returns: (1, 2, 3, 4)
+
+# Appending to a tuple with tuple unpacking
+a_tuple = (1, 2, 3)
+a_tuple = (*a_tuple, 4)
+print(a_tuple)
+# Returns: (1, 2, 3, 4)
+
+
+#=========================================#
+# flask get http headers
+#=========================================#
+======================================================================
+example: get http header params in flask
+
+ref: http://stackoverflow.com/a/29387151/2298002
+======================================================================
+from flask import request
+request.headers.get('your-header-name')
+
+#=========================================#
+# flask dynamic urls
+#=========================================#
+========================================
+example:
+ - flask, utilize dynamic urls
+
+
+ref: http://flask.pocoo.org/docs/0.10/quickstart/
+========================================
+
+@app.route('/user/<username>')
+def show_user_profile(username):
+    # show the user profile for that user
+    return 'User %s' % username
+
+@app.route('/post/<int:post_id>')
+def show_post(post_id):
+    # show the post with the given id, the id is an integer
+    return 'Post %d' % post_id
+
+
+
+The following converters exist:
+int 	accepts integers
+float 	like int but for floating point values
+path 	like the default but also accepts slashes
+
+#=========================================#
+# base64 image to filesystem
+#=========================================#
+====================================
+example:
+ get image from data string and
+  save to filesystem
+
+ref: http://stackoverflow.com/a/2324133/2298002
+====================================
+
+
+@app.route(‘/save/image’, methods=['GET', 'POST'])
+def postEventNew():
+   
+    imgData = None
+    
+    if request.method == 'POST':
+        # use request.formt:
+        if 'imgData' in request.form:
+            imgData=request.form['imgData'].decode('base64')
+    
+    if request.method == 'GET':
+        # use request.args:
+        if 'imgData' in request.args:
+            imgData=request.args['imgData'].decode('base64')
+
+    path = "photos/%s.png" % 02
+    fh = open(path, "wb")
+#    fh.write(imgData.decode('base64'))
+    fh.write(imgData)
+    fh.close()
+
+#=========================================#
+# import & __init__.py
+#=========================================#
+========================================
+example:
+ import and use other python file
+
+ref: http://stackoverflow.com/a/4142178/2298002
+========================================
+
+#import:
+Make an empty file called __init__.py in the same directory as the files. That will signify to Python that it's "ok to import from this directory".
+
+# create folder named ‘testimport’
+# create a python file inside it named ‘__init__.py’
+
+########################## begin __init__.py file:
+
+import logging #not required
+
+def helloworld():
+    return “hello world”
+
+########################## end __ini__.py file ##
+
+
+
+# use ‘def helloworld()’ in demo.py
+# import ‘testimport’ to use code in testimport/__init__.py
+
+########################## begin demo.py file:
+
+import logging #not required
+import testimport
+
+def doSomething():
+    #this will print ‘hello world’
+    print testimport.helloworld()
+
+
+
+########################## end importdemo.py file
+
+
+#=========================================#
+# flask redirect example
+#=========================================#
+=======================================================
+example:
+  python flask-redirect a request to another page
+
+ref: http://stackoverflow.com/a/14343957/2298002
+ref: http://flask.pocoo.org/docs/0.10/api/#flask.redirect
+=======================================================
+
+
+@app.route('/')
+def hello():
+    return redirect("http://www.example.com", code=302)
+
+
+# default value for code is 302 so code=302 can be ommited or replaced by other redirect 
+# code (one in 301, 302, 303, 305, and 307)
+
+#=========================================#
+# time now
+#=========================================#
+========================
+example: 
+ get time now in seconds since 1970
+
+ref: http://www.tutorialspoint.com/python/python_date_time.htm
+========================
+
+#!/usr/bin/python
+import time;  # This is required to include time module.
+
+ticks = time.time()
+print "Number of ticks since 12:00am, January 1, 1970:", ticks
+
+
+#This would produce a result something as follows:
+#Number of ticks since 12:00am, January 1, 1970: 7186862.73399
+
+#=========================================#
+# open file and write to it
+#=========================================#
+====================================
+example:
+ open a file and write to it
+
+ref: http://stackoverflow.com/a/2324133/2298002
+====================================
+
+
+@app.route(‘/save/image’, methods=['GET', 'POST'])
+def postEventNew():
+   
+    imgData = None
+    
+    if request.method == 'POST':
+        # use request.formt:
+        if 'imgData' in request.form:
+            imgData=request.form['imgData'].decode('base64')
+    
+    if request.method == 'GET':
+        # use request.args:
+        if 'imgData' in request.args:
+            imgData=request.args['imgData'].decode('base64')
+
+    path = "photos/%s.png" % 02
+    fh = open(path, "wb")
+#    fh.write(imgData.decode('base64'))
+    fh.write(imgData)
+    fh.close()
+
+#=========================================#
+# random string
+#=========================================#
+=========================
+example:
+ generate random string
+=========================
+
+import string
+import random
+
+# @descr: creates a random string (default size = 6, default chars = A-Za-z)
+# @expects: integer size and chars to utilize for randomness
+# @requires: nil
+# @returns: random string of specified size and chars
+# ref: http://stackoverflow.com/a/2257449/2298002
+def generate_random_key(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+#=========================================#
+# python cheat sheet
+#=========================================#
+.../git/knowledgebase/devSupport/python/Cheatsheet-Python-README.md
+
+#=========================================#
+# dict_len_key_value
+#=========================================#
+================================
+example:
+ - get length of dictionary
+ - get key
+ - get value
+
+ref: https://docs.python.org/2/library/stdtypes.html#dict
+ref: http://stackoverflow.com/a/2212442/2298002
+ref: http://stackoverflow.com/a/8424955/2298002
+ref: http://stackoverflow.com/a/8424954/2298002
+ref: http://stackoverflow.com/q/3294889/2298002
+
+#for iterating
+ref: http://stackoverflow.com/a/3294899/2298002
+================================
+
+>>> dict[‘key1’] = 1
+>>> dict[‘key2’] = 2
+>>> dict[‘key3’] = 3
+# or 
+>>> dict = {‘key1’:1,’key2’:2,’key3’:3}
+
+>>> len(dict)
+3
+
+>>> for key in d:
+...     print key, d[key]
+... 
+key1 value1
+key2 value2
+key3 value3
+
+>>> for key in d:
+...     print key
+... 
+key1
+key2
+key3
+
+>>> for value in d:
+...     print value
+... 
+key1
+key2
+key3
+
+>>> for key in d:
+...     print d[key]
+... 
+value1
+value2
+value3
+
+#ref: https://docs.python.org/2/library/stdtypes.html#dict
+>>> a = dict(one=1, two=2, three=3)
+>>> b = {'one': 1, 'two': 2, 'three': 3}
+>>> c = dict(zip(['one', 'two', 'three'], [1, 2, 3]))
+>>> d = dict([('two', 2), ('one', 1), ('three', 3)])
+>>> e = dict({'three': 3, 'one': 1, 'two': 2})
+>>> a == b == c == d == e
+True
+
+#=========================================#
+# python native / built in functions
+#=========================================#
+define:
+ python native / built in functions
+ref: https://docs.python.org/2/library/functions.html
+
+abs() 	divmod() 	input() 	open() 	staticmethod()
+all() 	enumerate() 	int() 	ord() 	str()
+any() 	eval() 	isinstance() 	pow() 	sum()
+basestring() 	execfile() 	issubclass() 	print() 	super()
+bin() 	file() 	iter() 	property() 	tuple()
+bool() 	filter() 	len() 	range() 	type()
+bytearray() 	float() 	list() 	raw_input() 	unichr()
+callable() 	format() 	locals() 	reduce() 	unicode()
+chr() 	frozenset() 	long() 	reload() 	vars()
+classmethod() 	getattr() 	map() 	repr() 	xrange()
+cmp() 	globals() 	max() 	reversed() 	zip()
+compile() 	hasattr() 	memoryview() 	round() 	__import__()
+complex() 	hash() 	min() 	set() 	apply()
+delattr() 	help() 	next() 	setattr() 	buffer()
+dict() 	hex() 	object() 	slice() 	coerce()
+dir() 	id() 	oct() 	sorted() 	intern()
+
+#=========================================#
+# view function source code
+#=========================================#
+
+$ python3
+>>> import inspect
+>>> import web3
+>>> print(''.join(inspect.getsourcelines(web3.parity)[0]))
+
+
+#ref: https://stackoverflow.com/a/3143932
+>>> import inspect
+>>> print(''.join(inspect.getsourcelines(inspect.getsourcelines)[0]))
+def getsourcelines(object):
+    """Return a list of source lines and starting line number for an object.
+
+    The argument may be a module, class, method, function, traceback, frame,
+    or code object.  The source code is returned as a list of the lines
+    corresponding to the object and the line number indicates where in the
+    original source file the first line of code was found.  An IOError is
+    raised if the source code cannot be retrieved."""
+    lines, lnum = findsource(object)
+
+    if ismodule(object): return lines, 0
+    else: return getblock(lines[lnum:]), lnum + 1
+
+
+#=========================================#
+# install pip
+#=========================================#
+$ wget https://bootstrap.pypa.io/get-pip.py
+$ python3 get-pip.py
+
+#=========================================#
+# import os / check python install path
+#=========================================#
+#ref: https://www.pythonpool.com/python-loop-through-files-in-directory/
+# traverse through files in dir
+import os
+path_of_the_directory = '../../assets/'
+ext = ('.pdf','.exe')
+for files in os.listdir(path_of_the_directory):
+    if files.endswith(ext):
+        print(files) # print... 'hello.pdf'
+	
+
+#ref: https://stackoverflow.com/a/647798/2298002
+>>> import os
+>>> import sys
+>>> os.path.dirname(sys.executable)
+
+OR
+
+$ python -c "import os, sys; print(os.path.dirname(sys.executable))"
+
+#=========================================#
+# install / uninstall python
+#=========================================#
+#ref: https://linuxize.com/post/how-to-install-python-3-8-on-ubuntu-18-04/
+$ sudo apt update
+$ sudo apt install software-properties-common
+$ sudo add-apt-repository ppa:deadsnakes/ppa
+$ sudo apt install python3.8
+$ python3.8 -V
+
+#uninstall
+$ sudo apt autoremove python3.8
+
+#=========================================#
+# check https access
+#=========================================#
+# ref: https://github.com/HandBrake/HandBrake/issues/2216#issuecomment-527114519
+$ python3 -c 'import requests; print(requests.get("https://apple.com").text)'
+
+
+# ref: https://handbrake.fr/docs/en/latest/developer/build-mac.html
+$ python3 -c 'from urllib.request import urlopen; test = lambda x=exec("def f():\n try:\n  urlopen(\"https://handbrake.fr\", timeout=10)\n  return 0\n except:  return 1"): f(); result = test(); exit(result)'; echo $?
+
+
+#=========================================#
+# itertools / lambda example
+#=========================================#
+## lambda function to +2 for every item in list
+>>> my_list = [22, 34, 1, 2, 3, 66, 77, 88]
+>>> my_list
+[22, 34, 1, 2, 3, 66, 77, 88]
+>>> 
+>>> 
+>>> new_list = map(lambda x: x + 2, my_list)
+>>> list(new_list)
+[24, 36, 3, 4, 5, 68, 79, 90]
+>>> list(new_list)
+[]
+>>> 
+
+=========================
+get string name from variable for parsing request params
+
+(not working but this is my progress)
+
+=========================
+
+
+example:
+varname = “hello”
+
+trying to print ‘variance’
+=======
+
+import itertools
+
+def variablename(var):
+    logging.info("variablename _enter")
+    return [tpl[0] for tpl in itertools.ifilter(lambda x: var is x[1], locals().items())]
+
+variable1 = "hello"
+logging.info("log: %s" % (variablename(variable1)))
+
+
+@app.route('/inhouse/cms/add_client', methods=['GET', 'POST'])
+def add_client():
+    logging.info('add_client called')
+    
+    first_name = last_name = 1
+    home_phone = cell_phone = None
+    str_address = city = state = zip = None
+    referred_by = ref_url_photo = None
+
+    logging.info("%s = id " % (id(first_name)))
+    
+    if id(first_name) == id("first_name"):
+        logging.info("first_name")
+
+    requestVars = [first_name, last_name, home_phone, cell_phone, str_address, city, state, zip, referred_by, ref_url_photo]
+
+    var = "hello"
+    print [tpl[0] for tpl in itertools.ifilter(lambda x: requestVars is x[1], locals().items())]
+    logging.info("vname: %s" % (variablename(first_name)))
+#    requestDict = {id(first_name), last_name, home_phone, cell_phone, str_address, city, state, zip, referred_by, ref_url_photo}
+
+    logging.info("%s _pre-parse" % (requestVars))
+    for v in requestVars:
+        print [tpl[0] for tpl in itertools.ifilter(lambda x: v is x[1], locals().items())]
+        for r in request.form:
+            logging.info("%s _curr-r" % (r))
+            if (id(v) == id(r)):
+                logging.info("setting v")
+                v = request.form[r]
+                del request.form[r]
+#            else:
+#                logging.info("NOT setting v")
+
+#    logging.info("%s _post-parse" % (requestVars))
+
+    ############# POST/GET request params ###############
+    if request.method == 'POST':
+        # use request.formt:
+        if 'first_name' in request.form:
+            first_name = request.form['first_name']
+        else:
+            first_name = ''
+        
+        if 'last_name' in request.form:
+            last_name = request.form['last_name']
+        else:
+            last_name = ''
+
+    if request.method == 'GET':
+        # use request.args:
+        if 'first_name' in request.args:
+            first_name = request.args['first_name']
+        else:
+            first_name = ''
+
+        if 'last_name' in request.args:
+            last_name = request.args['last_name']
+        else:
+            last_name = ''
+    ###########################################
+
+
+    return "add_client successful!"
+
+
+
+
+#=========================================#
+#=========================================#
