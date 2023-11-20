@@ -2,6 +2,28 @@
 
 ## GTA.sol finalized design & integration ##
     - current integration
+        - owner model
+            modifier onlyOwner()
+            - mint(address to, uint256 amount)
+            - transferOwnership(address newOwner)
+        - keeper model
+            - modifier onlyKeeper()
+            - getKeeper()
+            - getGameCodes()
+            - getGameExpSec()
+            - setKeeper(address _newKeepr)
+            - setOwner(address _newOwner)
+            - setGameExpSec(uint64 sec)
+            - addDepositToken(address _token)
+            - removeDepositToken(address _token)
+            - setMaxHostFeePerc(uint8 perc)
+            - getCredits()
+            - getGrossNetBalances()
+            - setDepositFeePerc(uint8 perc)
+            - getLastBlockNumUpdate()
+            - updateCredits(TxDeposit[] memory dataArray, uint32 _lastBlockNum)
+            - addDexRouter(address router)
+            - remDexRouter(address router)
         - host calls 'createEvent(entry_fee)'; generates event_code; holding GTA required (ratio of entry_fee)
         - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
         - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
@@ -18,9 +40,11 @@
                 *required: mint amount < buy & burn amount
 
     - hanging blockers / tasks / edge-cases to solve
-        - hostRegisterEventClaim: someone could listen for 'Transfer' events to GTA contract
-            and then use 'hostRegisterEventClaim' to immediately take the credits
-        - creditUpdates: verify that keeper cannot lie when calling 'creditUpdates' (deposits)
+        - PROBLEM -> hostRegisterEventClaim: 
+            someone could listen for 'Transfer' events to GTA contract
+             and then use 'hostRegisterEventClaim' to immediately take the credits
+            A: 
+        - PROBLEM -> creditUpdates: verify that keeper cannot lie when calling 'creditUpdates' (deposits)
 
 ## edage case use cases
     - payment processing

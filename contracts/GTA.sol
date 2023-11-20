@@ -70,12 +70,10 @@ contract GamerTokeAward is IERC20, Ownable {
     address private constant TOK_eDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
     address private constant TOK_eDAI_pcwrap = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
     
-    // PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    // PulseXSwapRouter 'v1' ref: MM tx | PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
     address private constant ROUTER_pulsex_v1 = address(0x98bf93ebf5c380C0e6Ae8e192A7e2AE08edAcc02);
     address private constant ROUTER_pulsex_v2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9);
-    
-    // PulseXSwapRouter 'v1' ref: MM tx
-    address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
     
     // array of all dex routers to check for 'getDexQuoteUSD'
     address[] storage private routersUniswapV2 = [ROUTER_pulsex_v1, ROUTER_pulsex_v2, ROUTER_pulsex_vX];
@@ -338,6 +336,7 @@ contract GamerTokeAward is IERC20, Ownable {
 
         return true;
     }
+
 
     function setDepositFeePerc(uint8 perc) public onlyKeeper {
         usdStableDepositFeePerc = perc;
@@ -638,6 +637,8 @@ contract GamerTokeAward is IERC20, Ownable {
         return false;
     }
     
+    // house_112023: don't think this function is needed anymore, was being used in legacy 'logCredit'
+    //  something like this is indeed now being used in 'updateCredits'
     function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
         require(_token != address(0x0), "err: no token");
         require(_amountIn > 0, "err: no token amount");
