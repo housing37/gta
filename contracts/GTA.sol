@@ -677,13 +677,18 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // MODIFIERS
     modifier onlyAdmins(address gameCode) {
-        // *WARNING* _ assigned function requires 'validGameCode' FIRST, else always fails
+        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
+        bool isHost = msg.sender == activeGames[gameCode].host;
         bool isKeeper = msg.sender == keeper;
         bool isOwner = msg.sender == owner;
-        bool isHost = msg.sender == activeGames[gameCode].host;
-        require(isKeeper || isOwner || isHost, 'err: only host :/');
+        require(isKeeper || isOwner || isHost, 'err: only host :/*');
         _;
     }
+    modifier onlyHost(address gameCode) {
+        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
+        require(msg.sender == activeGames[gameCode].host, "Only the host :0");
+        _;
+    }    
     modifier onlyOwner() {
         require(msg.sender == owner, "Only the owner :0");
         _;
@@ -724,7 +729,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     // GETTERS / SETTERS
-    function getHostRequirementForEntryFee(uint256 _entryFeeUSD) pure returns (uint256) {
+    function getHostRequirementForEntryFee(uint256 _entryFeeUSD) public pure returns (uint256) {
         return _entryFeeUSD * (hostRequirementPercent/100);
         // can also just get the public class var directly: 'hostRequirementPercent'
     }
@@ -741,7 +746,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
-    function getPlayers(address gameCode) public view validGameCode(address gameCode) onlyAdmins(gameCode) returns (address[] memory) {
+    function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
     
