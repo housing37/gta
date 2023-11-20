@@ -6,6 +6,7 @@
             modifier onlyOwner()
             - mint(address to, uint256 amount)
             - transferOwnership(address newOwner)
+            
         - keeper model
             - modifier onlyKeeper()
             - getKeeper()
@@ -24,16 +25,19 @@
             - updateCredits(TxDeposit[] memory dataArray, uint32 _lastBlockNum)
             - addDexRouter(address router)
             - remDexRouter(address router)
-        - host calls 'createEvent(entry_fee)'; generates event_code; holding GTA required (ratio of entry_fee)
-        - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
-        - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
-        - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
-        - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
-        - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
+
+        - algorithmic workflow
+            - host calls 'createEvent(entry_fee)'; generates event_code; holding GTA required (ratio of entry_fee)
+            - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
+            - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
+            - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
+            - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
+            - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
     - remaining integrations
         - players call 'processRefunds(event_code)' to refund all entry_fees 
             required: event_code has 'expired' and not yet 'launched'
+
         - host chooses service-fee discount if paid in GTA
             1) buy & burn|hold integration
             2) host & winners get minted some amount after event ends
@@ -43,8 +47,11 @@
         - PROBLEM -> hostRegisterEventClaim: 
             someone could listen for 'Transfer' events to GTA contract
              and then use 'hostRegisterEventClaim' to immediately take the credits
-            A: 
-        - PROBLEM -> creditUpdates: verify that keeper cannot lie when calling 'creditUpdates' (deposits)
+          SOLUTION: -> ?
+
+        - PROBLEM -> creditUpdates: 
+            ensure that keeper cannot lie when calling 'creditUpdates' (deposits)
+          SOLUTION: -> ?
 
 ## edage case use cases
     - payment processing
