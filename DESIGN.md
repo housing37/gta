@@ -2,13 +2,11 @@
 
 ## GTA.sol finalized design & integration ##
     - current integration
-        - owner model
-            modifier onlyOwner()
+        - owner model _ modifier onlyOwner()
             - mint(address to, uint256 amount)
             - transferOwnership(address newOwner)
-            
-        - keeper model
-            - modifier onlyKeeper()
+
+        - keeper model _ modifier onlyKeeper()
             - getKeeper()
             - getGameCodes()
             - getGameExpSec()
@@ -30,6 +28,7 @@
             - host calls 'createEvent(entry_fee)'; generates event_code; holding GTA required (ratio of entry_fee)
             - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
             - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
+            - host can call 'hostRegisterEvent(player, event_code)' to pay for a player's registration
             - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
             - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
             - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
@@ -47,7 +46,17 @@
         - PROBLEM -> hostRegisterEventClaim: 
             someone could listen for 'Transfer' events to GTA contract
              and then use 'hostRegisterEventClaim' to immediately take the credits
-          SOLUTION: -> ?
+          SOLUTION: -> get rid of 'hostRegisterEventClaim' -> simplest solution so far
+                        and players are REQUIRED to 'registerEvent(event_code)' manually on blockexplorer :/
+
+          SOLUTION: -> *FAIL* -> *DOES NOT WORK* people can still track the 'tranfer' events and lie about recieving addresses for invites
+                        what if 'Game' struct maintains 'address[] playerInvites'?
+                         and 'hostRegisterEventClaim(player, event_code)' can only claim credits
+                            from addresses in 'game[event_code].playerInvites'
+                         this would mean... 
+                            1) players can call 'registerEvent(event_code)' on their own (after 'transfer')
+                            2) players can provide the host thier address used for 'transfer' 
+                                then, hosts can 'hostRegisterEventClaim(player, event_code)' for players that have been invited to their event_code
 
         - PROBLEM -> creditUpdates: 
             ensure that keeper cannot lie when calling 'creditUpdates' (deposits)
