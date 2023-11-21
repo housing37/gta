@@ -33,14 +33,18 @@
             - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
             - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
-    - remaining integrations
-        - players call 'processRefunds(event_code)' to refund all entry_fees 
-            required: event_code has 'expired' and not yet 'launched'
+    - remaining integrations (algorithms ready to be coded)
+        - finalize debits/credits integration
+            w/ updateCredits, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
 
-        - host chooses service-fee discount if paid in GTA
-            1) buy & burn|hold integration
-            2) host & winners get minted some amount after event ends
-                *required: mint amount < buy & burn amount
+        - refund players
+            call 'processRefunds(event_code)' to refund all entry_fees 
+             required: event_code has 'expired' and not yet 'launched'
+
+        - GTA token distribution (minting & burning)
+             1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
+             2) host & winners get minted some amount after event ends
+                 *required: mint amount < buy & burn amount
 
     - hanging blockers / tasks / edge-cases to solve
         - PROBLEM -> hostRegisterEventClaim: 
@@ -58,9 +62,12 @@
                             2) players can provide the host thier address used for 'transfer' 
                                 then, hosts can 'hostRegisterEventClaim(player, event_code)' for players that have been invited to their event_code
 
-        - PROBLEM -> creditUpdates: 
-            ensure that keeper cannot lie when calling 'creditUpdates' (deposits)
-          SOLUTION: -> ?
+        - PROBLEM -> updateCredits: 
+            ensure that keeper cannot lie when calling 'updateCredits' (for deposits)
+          SOLUTION: -> maintain mapping(address => uint256) for 'whitelistBalances' & 'whitelistPendingDebits'
+                        append to 'whitelistPendingDebits' during 'hostEndEventWithWinners'
+                        settle 'whitelistPendingDebits' into 'whitelistBalances' during 'updateCredits' call from keeper
+                        if 'whitelistBalances[token]' != 'IERC20(token).balanceOf', then KEEPER LIED
 
 ## edage case use cases
     - payment processing
