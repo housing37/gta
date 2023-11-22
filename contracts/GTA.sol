@@ -1,28 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
-
-    //mapping(address => address) public game_to_hosts; // game_code to host_addr
-    //mapping(addess => uint256[]) public game_to_fees; // game_code to array [entry_fee, host_fee]
-    //mapping(address => address[]) public game_to_players; // game_code to players array
-    
-    /* ... need to design & store mapping for host created activeGames
-            input param: entry fee, host fee
-            generate & store game code,
-    */
-
-        // ... generate & store game code
-        // ... store entry_fee mapped to game code
-        // ... store host_fee mapped to game code
-        // ... store host_addr mapped to game code
-        
-        /* use case to consider:
-            host wants to pay entire prize pool
-                how are player addresses added to game code mapping
-                 w/o paying an entry fee
-            host wants to a create free game for anyone (w/ no prize pool)
-                don't use GTA :O
-        */
-        
+pragma solidity ^0.8.0;        
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 interface IUniswapV2 {
@@ -353,18 +330,6 @@ contract GamerTokeAward is IERC20, Ownable {
         return lastBlockNumUpdate;
     }
 
-    
-    //  DONE: ready to pass data from 'Transfer' event logs on python side
-    //  DONE:    - need to update mapping for player usd credits
-    //  N/A:     - may need to maintain mapping of GTA contract alt coin balances
-    //  DONE:        or maybe just swap for usd stables immediately (i forgot)
-    //  DONE: should only pass the bare-min data needed
-    //  N/A:  should probably use pyton side to calc USD credit vals for alt coin transfers
-    //  DONE:    however, we need to actually make the swaps on chain
-
-    // LEFT OFF HERE... 
-    //       note: need to keep track of all 'expenses' and deduct from usd credit balances
-    //          ie. gas fees, dex swap fees, etc.    
     struct TxDeposit {
         address token;
         address sender;
@@ -445,9 +410,8 @@ contract GamerTokeAward is IERC20, Ownable {
         whitelistBalances[tok_addr] += tok_amnt;
     }
 
-    // aggregate debits incurred from 'hostEndEventWithWinners'
+    // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
     function _increasePendingDebit(address token, uint256 amount) private {
-        // whitelistPendingDebits[tok_addr] += win_usd; // syncs w/ 'settleBalances' algorithm
         whitelistPendingDebits[token] += amount;
     }
 
@@ -547,105 +511,6 @@ contract GamerTokeAward is IERC20, Ownable {
         emit logRFL(address(this), msg.sender, "logRFL 6d");
         return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
     }
-
-    /** LEGACY CREDIT MODEL */
-    // function logCredit(address _player, address _token, uint256 _amount, uint256 lastBlock) public onlyKeeper {
-    //     uint256 prev_bal = gtaAltBalances[_token];
-    //     uint256 new_bal = IERC20(_token).balanceOf(address(this));
-    //     required(new_bal > prev_bal, "err: token bal mismatch");
-    //         // 'logCredit' gets called after ever time a token transfer to this contract occurs
-    //         // hence, if new_bal < prev_bal
-    //         //  then that means this contract spent some _token
-    //         //  after a token transfer occurred (mined)
-    //         //   and before this 'logCredit' was called
-            
-    //         // LEFT OFF HERE... is this correct? ^
-            
-    //     //gtaAltBalances[_token] += _amount;
-    //     gtaAltBalances[_token] = new_bal;
-        
-    //     // LEFT OFF HERE... does this logic work? ^
-        
-    //     amountUSD = getDexQuoteUSD(_token, _amount);
-    //     creditsUSD[_player] += amountUSD;
-    // }
-    
-    // //address[] memory thisContractTransfer;
-    // struct PaidEntries {
-    //     address[] gameCode;
-    //     uint256[] ammount;
-    // }
-    // struct PaidEntry {
-    //     address gameCode;
-    //     uint256 ammount;
-    // }
-    
-    // // one player address can have many PaidEntries
-    // //mapping(address => PaidEntries[]) memory playerEntries;
-    // mapping(address => PaidEntry[]) memory playerEntries;
-    
-    // function findGameCode(PaidEntry[] memory entries, address _gameCode) private pure returns (bool) {
-    //     for (uint i; i < entries.length; i++) {
-    //         PaidEntry memory entry = entries[i];
-    //         if (entry.gameCode == _gameCode) {
-    //             // player has already paid for this gameCode
-    //             return true;
-    //         }
-    //     }
-    //     return false;
-    // }
-    
-    // function joinGame(address _gameCode, address _playerAddress) public validGame(_gameCode) {
-    //     require(_playerAddress != address(0x0), "err: no player address :["); // verify _playerAddress input
-    //     address[] playerList = activeGames[gameCode].players;
-    //     for (uint i = 0; i < playerList.length; i++) {
-    //         require(playerList[i] != _playerAddress, "err: player already joined game :[");
-    //     }
-
-    //     // ... LET OFF HERE: player has to pay entry fee somehow
-    //     uint256 gameEntryFee = activeGames[gameCode].entryFeeUSD;
-        
-    //     // ... left off here...
-    //     //  want to keep track of all balances that players send to this contract
-    //     //   but players can pay entry fee in any token they want (respectful approved list)
-        
-        
-    //     // need to check if msg.sender has paid for this gameCode
-    //     PaidEntry[] memory entries = playerEntries[msg.sender];
-    //     bool playerJoined = findGameCode(entries, _gameCode);
-        
-    //     bool playerPaid = findGameCode(entries, _gameCode);
-    //     require(playerPaid, "err: play")
-    //     //bool playerPaid = False;
-        
-    //     for (uint i; i < entries.length; i++) {
-    //         PaidEntry memory entry = entries[i];
-    //         if (entry.gameCode == _gameCode) {
-    //             // player has already paid for this gameCode
-    //             playerPaid = true;
-    //             break;
-    //         }
-    //         newEntry.amount =
-    //     }
-        
-        
-    //     /*
-    //         maintaining value:
-    //         - % of game's prize pool goes back to dex LPs
-    //         - % of game's prize pool goes to buying GTA off the open market (into GTA contract)
-    //         - host wallets must retain a certain amount of GTA in order to create activeGames
-    //             (probably some multiple of the intended player_entry_fee)
-    //     */
-    //     // add player to gameCode mapping
-    //     activeGames[gameCode].gameName.players.push(_playerAddress);
-    // }
-    
-    // function addPlayer(address gameCode, address playerAddress) public validGame(gameCode) {
-    //     Game storage selectedGame = activeGames[gameCode];
-    //     selectedGame.players.push(playerAddress);
-        
-    //     // TOOD: player needs to pay entry fee
-    // }
     
     function addDexRouter(address router) public onlyKeeper {
         require(router != address(0x0), "err: invalid address");
