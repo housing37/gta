@@ -35,7 +35,10 @@
 
     - remaining integrations (algorithms ready to be coded)
         - finalize debits/credits integration
-            w/ updateCredits, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
+            DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
+            DONE - integration w/ _increasePendingDebit, _increaseWhitelistBalance, _settlePendingDebit, _sanityCheck
+            - design a way that ‘hostEndEventWithWinners’ chooses what stable token payout winners
+            - design a way that ‘settleBalances’ chooses a stable token to swap into and hold
 
         - refund players
             call 'processRefunds(event_code)' to refund all entry_fees 

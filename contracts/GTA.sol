@@ -127,8 +127,8 @@ contract GamerTokeAward is IERC20, Ownable {
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
     // mapping of accepted usd stable coins for player deposits
-    mapping(address => bool) public whitelistUsdStables;
-    mapping(address => bool) public whitelistAltTokens;
+    mapping(address => bool) public whitelistStables;
+    mapping(address => bool) public whitelistAlts;
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
@@ -141,6 +141,10 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // max percent of prize pool the host may charge
     uint8 private maxHostFeePerc = 100;
+
+    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
+    mapping(address => uint256) storage whitelistBalances;
+    mapping(address => uint256) storage whitelistPendingDebits;
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -161,12 +165,12 @@ contract GamerTokeAward is IERC20, Ownable {
         return creditsUSD;
     }
 
-    // returns GTA total stable balances - total player credits ('whitelistUsdStables' - 'creditsUSD')
+    // returns GTA total stable balances - total player credits ('whitelistStables' - 'creditsUSD')
     //  can be done simply from client side as well (ie. w/ 'getCredits()', client side can calc balances)
     function getGrossNetBalances() public onlyKeeper {
         uint256 stable_bal = 0;
-        for (uint i=0; i < whitelistUsdStables.length; i++) {
-            stable_bal += IERC20(whitelistUsdStables[i]).balanceOf(address(this));
+        for (uint i=0; i < whitelistStables.length; i++) {
+            stable_bal += IERC20(whitelistStables[i]).balanceOf(address(this));
         }
         
         uint256 owedCredits = 0;
@@ -200,14 +204,17 @@ contract GamerTokeAward is IERC20, Ownable {
             require(game.players[_winners[i]], 'err: invalid player found :/, retry with ALL valid players');
 
             // calc win_usd
-            winner = _winners[i];
-            win_perc = game.winPercs[i];
-            win_pool = game.prizePoolUSD;
-            win_usd = win_perc * win_pool;
+            address winner = _winners[i];
+            uint8 win_perc = game.winPercs[i];
+            uint256 win_pool = game.prizePoolUSD;
+            uint256 win_usd = win_pool * (win_perc/100);
 
-            // send 'win_usd' (amount in stable) to 'winner'
+            // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
+            address tok_addr = 0x0; // stable token address chosen
+            IERC20(tok_addr).transfer(winner, win_usd); // send 'win_usd' amount to 'winner'
 
-            // LEFT OFF HERE... need to design away to choose stables from 'whitelistUsdStables'
+            // syncs w/ 'settleBalances' algorithm
+            _increasePendingDebit(tok_addr, win_usd);
         }
 
         // set game end state (doesn't matter if its about to be deleted)
@@ -254,7 +261,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(!game.launched, 'err: event launched :(');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
         
         // debit entry fee from msg.sender credits (player)
         // creditsUSD[msg.sender] -= game.entryFeeUSD;
@@ -290,7 +297,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(!game.launched, 'err: event launched :(');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAltTokens or whitelistUsdStables');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
         // creditsUSD[msg.sender] -= game.entryFeeUSD;
@@ -363,69 +370,85 @@ contract GamerTokeAward is IERC20, Ownable {
         address sender;
         uint256 amount;
     }
-
-    // LEFT OFF HERE... i'm pretty sure this function still doesn't prevent keeper from lying about deposits
-    function updateCredits(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
-        // Record the gas at the beginning of the function
-        gasStart = gasleft();
+    
+    // invoked by keeper client side, every ~10sec (~blocktime), to ...
+    //  1) update credits logged from 'Transfer' emits
+    //  2) settle 'whitelistBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
+    function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
+        gasStart = gasleft(); // record start gas amount
+        require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
-        //  events are pre-filtered for recipient = this contract address
+        // NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
+        //  1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
+        //  2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
             uint256 tok_amnt = dataArray[i].amount;
+            require(tok_addr != address(0), 'err: found transfer w/ no token address :/');
+            require(src_addr != address(0), 'err: found transfer w/ no sender address :/');
+            require(tok_amnt != 0, 'err: found transfer w/ no amount :/');
+            require(whitelistStables[tok_addr] || whitelistAlts[tok_addr], 'err: found transfer w/ non-whitelist token =(');
+            require(_sanityCheck(tok_addr, tok_amnt), 'err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!');
 
+            // default: if found in 'whitelistStables'
+            uint256 amntUsdCredit = tok_amnt; 
 
-            // ... inputs needed: tok_addr, tok_amnt, src_addr
-            // ... globals needed: stable_addr to generate 'path', 
-
-            // 0) check if tok_addr is in 'whitelistUsdStables'
-            //  * should be on python side? ... and get 'whitelistUsdStables' during 'getLastBlockNumUpdate'?
-            //  ** WARNING ** : cannot 'only' do this on python side: keeper can lie and 'say' its whitelisted
-            //      however, keeper could pre-filter on python side to help save gas (that the contract refunds)
-            bool stableFound = whitelistUsdStables[tok_addr];
-            uint256 amntUsdCredit = tok_amnt; // default, if stableFound == true
-
-            // - if not in whitelistUsdStables, swap alt for stable: tok_addr, tok_amnt
-            if (!stableFound) {
-                // - verify non-stable tok_addr supported in 'whitelistAltTokens'
-                bool altFound = whitelistAltTokens[tok_addr];
-                require(altFound, 'err: alt token not supported =(');
-
-                // - generate path: [tok_addr, stable_addr]
-                address[] memory path = [tok_addr];
-
-                // - select router w/ best price (requires loop through 'routersUniswapV2')
-                uint8 currHighIdx = 37;
-                uint256 currHigh = 0;
-                for (uint i = 0; i < routersUniswapV2.length, i++) {
-                    uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(tok_amnt, path); // quote swap
-                    if (amountsOut[amountsOut.length-1] > currHigh) {
-                        currHigh = amountsOut[amountsOut.length-1];
-                        currHighIdx = i;
-                    }
-                }
-                
-                // - swap w/ path, router, amount
-                amntUsdCredit = swap_v2_wrap(paths[i], routersUniswapV2[currHighIdx], tok_amnt);
+            // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
+            if (!whitelistStables[tok_addr]) {
+                // LEFT OFF HERE ... globals needed: stable_addr to generate 'path'
+                address[] memory path = [tok_addr]; // generate path: [tok_addr, stable_addr]
+                rtrIdx = best_swap_v2_router_idx(path, tok_amnt) // get best price router idx (traverse 'routersUniswapV2')
+                amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt); // swap alt -> stable
             }
 
             // 1) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD'
-            //     - dex fees already taken out
-            //     - optional 'usdStableDepositFeePerc' can be set by keeper
-            // creditsUSD[src_addr] += (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
-            // handles tracking addresses w/ creditsAddrArray
-            uint256 amnt = (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100))
+            //  dex fees already taken out
+            //  'usdStableDepositFeePerc' set by keeper (optional)
+            //  handles tracking addresses w/ creditsAddrArray
+            uint256 amnt = (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
             _updateCredit(src_addr, amnt, false); // false = credit
         }
 
-        // 2) update last block number
+        // update last block number
         lastBlockNumUpdate = _lastBlockNum;
 
-        // -1) calc gas used to this point & and refund to 'keeper' (in wei)
+        // -1) calc gas used to this point & refund to 'keeper' (in wei)
         uint256 gasUsed = gasStart - gasleft(); // calc gas used
         payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
+    }
+
+    // keeper 'SANITY CHECK' for 'settleBalances'
+    function _sanityCheck(address token, uint256 amount) private {
+        // SANITY CHECK: 
+        //  settles whitelist debits accrued during 'hostEndEventWithWinners'
+        //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
+        //  require: keeper calculated (delegated) balance == on-chain balance
+        _settlePendingDebit(token); // sync 'whitelistBalances' w/ 'whitelistPendingDebits'
+        _increaseWhitelistBalance(token, amount); // sync 'whitelistBalances' w/ this 'Transfer' emit
+        uint256 chainBal = IERC20(token).balanceOf(address(this));
+        return whitelistBalances[token] == chainBal;
+    }
+
+    // deduct debits accrued from 'hostEndEventWithWinners'
+    function _settlePendingDebit(address token) private {
+        require(whitelistBalances[tok_addr] >= whitelistPendingDebits[tok_addr], 'err: insefficient balance to settle debit :O');
+        whitelistBalances[tok_addr] -= whitelistPendingDebits[tok_addr];
+        delete whitelistPendingDebits[tok_addr];
+    }
+
+    // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
+    function _increaseWhitelistBalance(address token, uint256 amount) private {
+        require(token != address(0), 'err: no address :{');
+        require(amount != 0, 'err: no amount :{');
+        whitelistBalances[tok_addr] += tok_amnt;
+    }
+
+    // aggregate debits incurred from 'hostEndEventWithWinners'
+    function _increasePendingDebit(address token, uint256 amount) private {
+        // whitelistPendingDebits[tok_addr] += win_usd; // syncs w/ 'settleBalances' algorithm
+        whitelistPendingDebits[token] += amount;
     }
 
     function _updateCredit(address _player, uint256 _amount, bool _debit) private {
@@ -444,7 +467,7 @@ contract GamerTokeAward is IERC20, Ownable {
         }
     }
 
-    // ensure _player address is logged only once in creditsAddrArray
+    // ensures _player address is logged only once in creditsAddrArray (ie. safely)
     function _addCreditsAddrArraySafe(address _player) private returns (bool) {
         require(_player != address(0), "err: invalid _player");
         bool success = _remCreditsAddrArray(_player);
@@ -465,6 +488,21 @@ contract GamerTokeAward is IERC20, Ownable {
             }
         }
         return false;
+    }
+
+    // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
+    function best_swap_v2_router_idx(addressp[] memory path, uint256 amount) private returns (uint8) {
+        uint8 currHighIdx = 37;
+        uint256 currHigh = 0;
+        for (uint i = 0; i < routersUniswapV2.length, i++) {
+            uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
+            if (amountsOut[amountsOut.length-1] > currHigh) {
+                currHigh = amountsOut[amountsOut.length-1];
+                currHighIdx = i;
+            }
+        }
+
+        return currHighIdx;
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
@@ -638,7 +676,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     
     // house_112023: don't think this function is needed anymore, was being used in legacy 'logCredit'
-    //  something like this is indeed now being used in 'updateCredits'
+    //  something like this is indeed now being used in 'settleBalances'
     function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
         require(_token != address(0x0), "err: no token");
         require(_amountIn > 0, "err: no token amount");
