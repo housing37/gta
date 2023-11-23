@@ -120,8 +120,8 @@ contract GamerTokeAward is IERC20, Ownable {
     uint8 private maxHostFeePerc = 100;
 
     // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
-    mapping(address => uint256) storage whitelistBalances;
-    mapping(address => uint256) storage whitelistPendingDebits;
+    mapping(address => uint256) storage private whitelistBalances;
+    mapping(address => uint256) storage private whitelistPendingDebits;
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -149,7 +149,13 @@ contract GamerTokeAward is IERC20, Ownable {
         for (uint i=0; i < whitelistStables.length; i++) {
             stable_bal += IERC20(whitelistStables[i]).balanceOf(address(this));
         }
-        
+
+        // LEFT OFF HERE... does it make any sense to integrate this?
+        // uint256 stable_bal = 0;
+        // for (uint i=0; i < whitelistPendingDebits.length; i++) {
+        //     stable_bal += IERC20(whitelistPendingDebits[i]).balanceOf(address(this));
+        // }
+
         uint256 owedCredits = 0;
         for (uint i=0; i < creditsAddrArray.length; i++) {
             owedCredits += creditsUSD[creditsAddrArray[i]];
@@ -187,6 +193,14 @@ contract GamerTokeAward is IERC20, Ownable {
             uint256 win_usd = win_pool * (win_perc/100);
 
             // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
+            // Deposits… ('settleBalances')
+            //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+            //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+            //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+
+            // Payouts… ('hostEndEventWithWinenrs')
+            //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+            //     I think that’s the best solution for automation
             address tok_addr = 0x0; // stable token address chosen
             IERC20(tok_addr).transfer(winner, win_usd); // send 'win_usd' amount to 'winner'
 
@@ -363,6 +377,14 @@ contract GamerTokeAward is IERC20, Ownable {
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
             if (!whitelistStables[tok_addr]) {
                 // LEFT OFF HERE ... globals needed: stable_addr to generate 'path'
+                // Deposits… ('settleBalances')
+                //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+                //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+                //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+
+                // Payouts… ('hostEndEventWithWinenrs')
+                //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+                //     I think that’s the best solution for automation
                 address[] memory path = [tok_addr]; // generate path: [tok_addr, stable_addr]
                 rtrIdx = best_swap_v2_router_idx(path, tok_amnt) // get best price router idx (traverse 'routersUniswapV2')
                 amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt); // swap alt -> stable
@@ -423,6 +445,7 @@ contract GamerTokeAward is IERC20, Ownable {
 
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
+                delete creditsUSD[_player];
                 _remCreditsAddrArray(_player);
             }
         } else { 
