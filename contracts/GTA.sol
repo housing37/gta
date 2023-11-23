@@ -2,6 +2,10 @@
 pragma solidity ^0.8.0;        
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
     function swapExactTokensForTokens(
@@ -104,8 +108,10 @@ contract GamerTokeAward is IERC20, Ownable {
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
     // mapping of accepted usd stable coins for player deposits
-    mapping(address => bool) public whitelistStables;
     mapping(address => bool) public whitelistAlts;
+    mapping(address => bool) public whitelistStables;
+    uint8 private whitelistStablesIdx;
+    
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
@@ -122,6 +128,12 @@ contract GamerTokeAward is IERC20, Ownable {
     // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
     mapping(address => uint256) storage private whitelistBalances;
     mapping(address => uint256) storage private whitelistPendingDebits;
+
+    struct TxDeposit {
+        address token;
+        address sender;
+        uint256 amount;
+    }
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -154,6 +166,14 @@ contract GamerTokeAward is IERC20, Ownable {
         }
     }
 
+    function setDepositFeePerc(uint8 perc) public onlyKeeper {
+        usdStableDepositFeePerc = perc;
+    }
+
+    function getLastBlockNumUpdate() public view onlyKeeper {
+        return lastBlockNumUpdate;
+    }
+
     function setMaxHostFeePerc(uint8 perc) public onlyKeeper returns (bool) {
         maxHostFeePerc = perc;
         return true;
@@ -184,61 +204,6 @@ contract GamerTokeAward is IERC20, Ownable {
 
         uint256 net_bal = stable_bal - owedCredits;
         return [stable_bal, owedCredits, net_bal];
-    }
-
-    // _winners: [0x1st_place, 0x2nd_place, ...]
-    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
-        require(_winner.length > 0, 'err: no winner :p');
-        require(_winners.length == _distrPercs.length, 'err: winner/percs length mismatch =(');
-
-        // get/validate active game
-        struct storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
-
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
-
-        // check if number of winners lines up with winpercs array lenght set in event create
-        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
-
-        // loop through _winners: distribute 'game.winPercs'
-        for (uint i=0; i < _winners.length; i++) {
-            // check if winner address was a player in the game
-            require(game.players[_winners[i]], 'err: invalid player found :/, retry with ALL valid players');
-
-            // calc win_usd
-            address winner = _winners[i];
-            uint8 win_perc = game.winPercs[i];
-            uint256 win_pool = game.prizePoolUSD;
-            uint256 win_usd = win_pool * (win_perc/100);
-
-            // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
-            // Deposits… ('settleBalances')
-            //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
-            //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-            //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
-
-            // Payouts… ('hostEndEventWithWinenrs')
-            //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
-            //     I think that’s the best solution for automation
-            address tok_addr = 0x0; // stable token address chosen
-            IERC20(tok_addr).transfer(winner, win_usd); // send 'win_usd' amount to 'winner'
-
-            // syncs w/ 'settleBalances' algorithm
-            _increasePendingDebit(tok_addr, win_usd);
-        }
-
-        // set game end state (doesn't matter if its about to be deleted)
-        game.endTime = block.timestamp;
-        game.endBlockNum = block.number;
-        game.ended = true;
-
-        // delete game mapping
-        delete activeGames[_gameCode];
-        activeGameCount--;
-
-        return true;
     }
 
     // host can start event w/ players pre-registerd for gameCode
@@ -356,19 +321,85 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
+    // _winners: [0x1st_place, 0x2nd_place, ...]
+    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
+        require(_gameCode != address(0), 'err: no game code :p');
+        require(_winner.length > 0, 'err: no winner :p');
+        require(_winners.length == _distrPercs.length, 'err: winner/percs length mismatch =(');
 
-    function setDepositFeePerc(uint8 perc) public onlyKeeper {
-        usdStableDepositFeePerc = perc;
+        // get/validate active game
+        struct storage game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
+
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
+
+        // check if number of winners lines up with winpercs array lenght set in event create
+        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
+
+        // loop through _winners: distribute 'game.winPercs'
+        for (uint i=0; i < _winners.length; i++) {
+            // check if winner address was a player in the game
+            require(game.players[_winners[i]], 'err: invalid player found :/, retry with ALL valid players');
+
+            // calc win_usd
+            address winner = _winners[i];
+            uint8 win_perc = game.winPercs[i];
+            uint256 win_pool = game.prizePoolUSD;
+            uint256 win_usd = win_pool * (win_perc/100);
+
+            // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
+            // Deposits… ('settleBalances')
+            //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+            //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+            //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+
+            // Payouts… ('hostEndEventWithWinenrs')
+            //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+            //     I think that’s the best solution for automation
+            address tok_addr = 0x0; // stable token address chosen
+            uint256 currHigh = 0;
+            for (uint 1 = 0; i < whitelistStables.length; i++) {
+                uint256 bal = IERC20(whitelistStables[i]).balanceOf(address(this));
+                if (bal > currHigh) { currHigh = bal; }
+
+
+            }
+
+
+
+            // send 'win_usd' amount to 'winner'
+            IERC20(tok_addr).transfer(winner, win_usd); 
+
+            // syncs w/ 'settleBalances' algorithm
+            _increasePendingDebit(tok_addr, win_usd);
+        }
+
+        // set game end state (doesn't matter if its about to be deleted)
+        game.endTime = block.timestamp;
+        game.endBlockNum = block.number;
+        game.ended = true;
+
+        // delete game mapping
+        delete activeGames[_gameCode];
+        activeGameCount--;
+
+        return true;
     }
 
-    function getLastBlockNumUpdate() public view onlyKeeper {
-        return lastBlockNumUpdate;
-    }
+    // chatGPT
+    function getLiquidity(address tokenAddress, address pairAddress) external view returns (uint) {
+        IUniswapV2Pair pair = IUniswapV2Pair(pairAddress);
+        IERC20 token = IERC20(tokenAddress);
 
-    struct TxDeposit {
-        address token;
-        address sender;
-        uint256 amount;
+        (uint reserve0, uint reserve1, ) = pair.getReserves();
+
+        // Assuming token0 is the ERC-20 token you are interested in
+        if (pair.token0() == tokenAddress) {
+            return reserve0;
+        } else {
+            return reserve1;
+        }
     }
     
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
@@ -401,12 +432,13 @@ contract GamerTokeAward is IERC20, Ownable {
                 // Deposits… ('settleBalances')
                 //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
                 //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-                //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+                //     - the algorithm will choose the best stable in that ratio: w/ the highest value and highest liquidity 
 
                 // Payouts… ('hostEndEventWithWinenrs')
                 //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
                 //     I think that’s the best solution for automation
-                address[] memory path = [tok_addr]; // generate path: [tok_addr, stable_addr]
+                stable_addr = _getNextStableTok();
+                address[] memory path = [tok_addr, stable_addr]; // generate path: [tok_addr, stable_addr]
                 rtrIdx = best_swap_v2_router_idx(path, tok_amnt) // get best price router idx (traverse 'routersUniswapV2')
                 amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt); // swap alt -> stable
             }
@@ -425,6 +457,15 @@ contract GamerTokeAward is IERC20, Ownable {
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
         uint256 gasUsed = gasStart - gasleft(); // calc gas used
         payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
+    }
+
+    // LEFT OFF HERE... support function to choose stable token to use for 'settleBalances'
+    //  note: still needs design for choosing the 'best' out of 'whitelistStables' (ie. liquidity, price, etc.)
+    function _getNextStableTok() private {
+        address stable_addr = whitelistStables[whitelistStablesIdx];
+        whitelistStablesIdx++;
+        if (whitelistStablesIdx >= whitelistStables.length) { whitelistStablesIdx=0; }
+        return stable_addr;
     }
 
     // keeper 'SANITY CHECK' for 'settleBalances'
