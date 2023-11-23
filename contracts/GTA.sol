@@ -133,6 +133,27 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
 
+    function addWhitelistStables(address[] _tokens) public onlyKeeper {
+        for (uint i=0; i < _tokens.length; i++) {
+            whitelistStables[_tokens[i]] = true;
+        }
+    }
+    function remWhitelistStables(address[] _tokens) public onlyKeeper {
+        for (uint i=0; i < _tokens.length; i++) {
+            delete whitelistStables[_tokens[i]];
+        }
+    }
+    function addWhitelistAlts(address[] _tokens) public onlyKeeper {
+        for (uint i=0; i < _tokens.length; i++) {
+            whitelistAlts[_tokens[i]] = true;
+        }
+    }
+    function remWhitelistAlts(address[] _tokens) public onlyKeeper {
+        for (uint i=0; i < _tokens.length; i++) {
+            delete whitelistAlts[_tokens[i]];
+        }
+    }
+
     function setMaxHostFeePerc(uint8 perc) public onlyKeeper returns (bool) {
         maxHostFeePerc = perc;
         return true;
