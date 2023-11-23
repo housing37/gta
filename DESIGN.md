@@ -29,7 +29,7 @@
             - players (entrants/delegates) call 'transfer' (w/ whitelistedStables|Alts) for deposits to GTA contract (for entry_fees)
             - players (entrants/delegates) call 'registerEvent(event_code)' to use credits & register for event_code
             - host can call 'hostRegisterEvent(player, event_code)' to pay for a player's registration
-            - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
+            # - host can call 'hostRegisterEventClaim(player, event_code)' to freely register players w/ enough credits
             - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
             - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
@@ -37,7 +37,7 @@
         - finalize debits/credits integration
             DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
             DONE - integration w/ _increasePendingDebit, _increaseWhitelistBalance, _settlePendingDebit, _sanityCheck
-            - design a way that ‘hostEndEventWithWinners’ chooses what stable token payout winners
+            - design a way that ‘hostEndEventWithWinners’ chooses what stable token to payout winners with
             - design a way that ‘settleBalances’ chooses a stable token to swap into and hold
 
         - refund players
@@ -50,6 +50,16 @@
                  *required: mint amount < buy & burn amount
 
     - hanging blockers / tasks / edge-cases to solve
+        - PROBLEM -> 'hostEndEventWithWinners' & 'settleBalances': need to determine which stables to hold and payout
+          SOLUTION: -> analyze ratio to control stables used most often, while analyzing current drop/spike in value or volume
+            Deposits… 'settleBalances'
+                The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+                - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+                - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+
+            Payouts… 'hostEndEventWithWinners'
+                When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+
         - PROBLEM -> hostRegisterEventClaim: 
             someone could listen for 'Transfer' events to GTA contract
              and then use 'hostRegisterEventClaim' to immediately take the credits
