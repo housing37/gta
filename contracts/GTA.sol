@@ -366,8 +366,6 @@ contract GamerTokeAward is IERC20, Ownable {
 
             }
 
-
-
             // send 'win_usd' amount to 'winner'
             IERC20(tok_addr).transfer(winner, win_usd); 
 
@@ -387,7 +385,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    // chatGPT
+    // chatGPT... LEFT OFF HERE... do something witht this shit!
     function getLiquidity(address tokenAddress, address pairAddress) external view returns (uint) {
         IUniswapV2Pair pair = IUniswapV2Pair(pairAddress);
         IERC20 token = IERC20(tokenAddress);
