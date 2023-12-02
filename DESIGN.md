@@ -50,6 +50,18 @@
                  *required: mint amount < buy & burn amount
 
     - hanging blockers / tasks / edge-cases to solve
+        - PROBLEM...
+            - what happens if deposit amount < gas fee for swap tx
+            - need to revert tx or avoid running it
+            - need to somehow check for last/avg gas fee for swap txs
+    
+        - SOLUTION...
+            - only pulsechain for this code base (assures swap tx fees < $1)
+            - keeper sets min deposit amnt, within a pre-set range (allows keeper to work w/ the market)
+            - current tx swap gas fee is checked/tracked through each interation
+                - if "current tx swap gas fee" > "keeper set min deposit"
+                    then use 'swap gas fee' as 'min deposit requirement'
+
         - PROBLEM -> 'hostEndEventWithWinners' & 'settleBalances': need to determine which stables to hold and payout
           SOLUTION: -> analyze ratio to control stables used most often, while analyzing current drop/spike in value or volume
             Deposits… 'settleBalances'
