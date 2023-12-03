@@ -473,24 +473,27 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
     //  1) update credits logged from 'Transfer' emits
-    //  2) settle 'whitelistBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
+    //  2) convert alt deposits to stables (if needed)
+    //  3) settle 'creditsUSD', 'whitelistBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
         uint256 gasStart = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
-        // NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
-        //  1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
-        //  2) recipient = this contract address (else '_sanityCheck' fails)
+        //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
+        //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
+        //      2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            require(dataArray[i].token != address(0), 'err: found transfer w/ no token address :/');
             if (!whitelistStables[dataArray[i].token] && !whitelistAlts[dataArray[i].token]) { continue; } // skip non-whitelist tokens
-
+            
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
             uint256 tok_amnt = dataArray[i].amount;
-            require(src_addr != address(0), 'err: found transfer w/ no sender address :/');
-            require(tok_amnt != 0, 'err: found transfer w/ no amount :/');
+            if (tok_addr == address(0) || src_addr == address(0)) { continue; } // skip 0x0 addresses
+            if (tok_amnt == 0) { continue; } // skip 0 amount
+
+            // verifiy keeper sent legit amounts from their 'Transfer' event captures (FAIL = revert everything)
+            //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
             require(_sanityCheck(tok_addr, tok_amnt), 'err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!');
 
             // default: if found in 'whitelistStables'
@@ -502,9 +505,10 @@ contract GamerTokeAward is IERC20, Ownable {
                 // LEFT OFF HERE ... globals needed: stable_addr to generate 'path'
                 // Payouts… ('hostEndEventWithWinenrs') ... <>
                 // Deposits… ('settleBalances')
-                //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
-                //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-                //     - the algorithm will choose the best stable in that ratio: w/ the highest value and highest liquidity 
+                //     DONE - The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+                //     DONE - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+                //     DONE - algorithm to itterate through stable list, allowing ratio in list to control the frequency (simple)
+                //      N/A - algorithm to choose best stable in that ratio: w/ the highest value & highest liquidity (complex)
 
                 // LEFT OFF HERE ... 
                 //  PROBLEM...
@@ -520,10 +524,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 //   DONE - keeper sets boolean for min deposit refunds enabled
                 //   DONE - if min dpeosit refunds enabled, 
                 //           then deposits are refunded and gas fee loss is logged
-
-                // LEFT OFF HERE 110223_2040 ... i think the above 'solution' is now integrated below
-                //  ... need to go back and review full algorithm again... (should be ready for a commit)
-
+                
                 // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTok();
                 address[] memory path = [tok_addr, stable_addr];
@@ -563,12 +564,12 @@ contract GamerTokeAward is IERC20, Ownable {
                 amntUsdCredit -= altSwapFee;                
             }
 
-            // 1) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD'
-            //  dex fees already taken out
-            //  'usdStableDepositFeePerc' set by keeper (optional)
-            //  handles tracking addresses w/ creditsAddrArray
+            // 1) debit deposit fees from 'amntUsdCredit' (keeper optional)
             uint256 depositFee = amntUsdCredit * (usdStableDepositFeePerc/100);
             uint256 amnt = amntUsdCredit - depositFee;
+
+            // 2) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD' _ all fees removed
+            //  handles tracking addresses w/ creditsAddrArray
             _updateCredit(src_addr, amnt, false); // false = credit
 
             // notify client side, deposit successful
@@ -579,8 +580,7 @@ contract GamerTokeAward is IERC20, Ownable {
         lastBlockNumUpdate = _lastBlockNum;
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
-        uint256 gasUsed = gasStart - gasleft(); // calc gas used
-        payable(msg.sender).transfer(gasUsed * tx.gasprice); // gasprice in wei
+        payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
     // LEFT OFF HERE... support function to choose stable token to use for 'settleBalances'
