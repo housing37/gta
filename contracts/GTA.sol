@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0;        
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
 
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
@@ -48,8 +47,9 @@ contract GamerTokeAward is IERC20, Ownable {
 
     /* _ DEX SUPPORT _ */ // WARNING: router addresses only for testing (remove for launch)
     // usd stable coins for 'getDexQuoteUSD'
-    address private constant TOK_eDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    address private constant TOK_eDAI_pcwrap = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
+    address private constant TOK_pDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    address private constant TOK_eDAI = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
+    address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
     
     // PulseXSwapRouter 'v1' ref: MM tx | PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
     address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
@@ -227,6 +227,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // msg.sender can add themself to any game (debits from msg.sender credits)
     //  *WARNING* preferred way for user registration, after manual transfer to this contract
     //     (instead of providing address to host and waiting for host to claim)
+    // UPDATE_120223: make deposit then tweet to register
+    //              1) send stable|alt deposit to gta contract
+    //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
     function registerEvent(address gameCode) public returns (bool) {
         require(gameCode != address(0), 'err: no game code ;o');
 
@@ -292,43 +295,42 @@ contract GamerTokeAward is IERC20, Ownable {
     // host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
     //  *WARNING* players should not share their addresses with anyone 'except' the host
     //      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
-    function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
-        require(player != address(0), 'err: no player ;l');
+    // function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
+    //     require(player != address(0), 'err: no player ;l');
 
-        // get/validate active game
-        struct storage game = activeGames[gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+    //     // get/validate active game
+    //     struct storage game = activeGames[gameCode];
+    //     require(game.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+    //     // check if msg.sender is game host
+    //     require(game.host == msg.sender, 'err: only host :/');
 
-        // check if game launched
-        require(!game.launched, 'err: event launched :(');
+    //     // check if game launched
+    //     require(!game.launched, 'err: event launched :(');
 
-        // check player for enough credits
-        require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
+    //     // check player for enough credits
+    //     require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
 
-        // debit entry fee from player credits
-        // creditsUSD[player] -= game.entryFeeUSD;
-        // handles tracking addresses w/ creditsAddrArray
-        _updateCredit(player, game.entryFeeUSD, true); // true = debit
+    //     // debit entry fee from player credits
+    //     // creditsUSD[player] -= game.entryFeeUSD;
+    //     // handles tracking addresses w/ creditsAddrArray
+    //     _updateCredit(player, game.entryFeeUSD, true); // true = debit
 
-        // -1) add player to game event
-        // game.players.push(player);
-        game.players[player] = true;
-        game.playerCnt += 1;
+    //     // -1) add player to game event
+    //     // game.players.push(player);
+    //     game.players[player] = true;
+    //     game.playerCnt += 1;
 
-        return true;
-    }
+    //     return true;
+    // }
 
     // _winners: [0x1st_place, 0x2nd_place, ...]
     function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
         require(_winner.length > 0, 'err: no winner :p');
-        require(_winners.length == _distrPercs.length, 'err: winner/percs length mismatch =(');
 
         // get/validate active game
-        struct storage game = activeGames[_gameCode];
+        struct memory game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I')
 
         // check if msg.sender is game host
@@ -349,21 +351,43 @@ contract GamerTokeAward is IERC20, Ownable {
             uint256 win_usd = win_pool * (win_perc/100);
 
             // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
-            // Deposits… ('settleBalances')
-            //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
-            //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-            //     - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
-
+            // Deposits… ('settleBalances') ...
             // Payouts… ('hostEndEventWithWinenrs')
             //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
             //     I think that’s the best solution for automation
+            /**
+                whats the best stable coin to use?
+                    observations...
+                     - any single payout should not be distributed w/ more than 1 stable (too confusing for player)
+                     - all stables have inherit risks and cannot be algorithmically pre-determined 
+                     - best for to keeper to maintain a list manually (and just start with one)
+                     - keeper can influence how often a stable is used by controlling multiple entries
+
+                    choosing stable to use...
+                     - loop through stables list, payout each winner in a different stable
+                        first check contract's stable balance to make sure it can cover
+                         if not, try another stable in the list
+                         if yes, check the value of the stable coin on the open market
+                            want to use the stable with the lowest value
+                     - keeper controls the number of times a stable is listed for payout
+                        this allows the keeper to control how often a stable is used
+                     
+
+                    LEFT OFF HERE ... writting all this shit ^
+                    
+             */
             address tok_addr = 0x0; // stable token address chosen
             uint256 currHigh = 0;
+            uint256 currHighIdx = 0;
             for (uint 1 = 0; i < whitelistStables.length; i++) {
                 uint256 bal = IERC20(whitelistStables[i]).balanceOf(address(this));
-                if (bal > currHigh) { currHigh = bal; }
+                if (bal > currHigh) { 
+                    currHigh = bal; 
+                    currHighIdx = i;
+                }
 
-
+                address pair = address(0x0); // ?
+                uint256 liq = _getLiquidityInPair(whitelistStables[1], pair);
             }
 
             // send 'win_usd' amount to 'winner'
@@ -385,26 +409,73 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    // chatGPT... LEFT OFF HERE... do something witht this shit!
-    function getLiquidity(address tokenAddress, address pairAddress) external view returns (uint) {
-        IUniswapV2Pair pair = IUniswapV2Pair(pairAddress);
-        IERC20 token = IERC20(tokenAddress);
+    // support hostEndEventWithWinners
+    function _getLiquidityInPair(address _token, address _pair) private view returns (uint256) {
+        require(_token != address(0), 'err: no token :O');
+        require(_pair != address(0), 'err: no pair :O');
 
-        (uint reserve0, uint reserve1, ) = pair.getReserves();
+        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
+        require(_token == pair.token0() || _token == pair.token1(), 'err: invalid token->pair address :P');
 
-        // Assuming token0 is the ERC-20 token you are interested in
-        if (pair.token0() == tokenAddress) {
-            return reserve0;
-        } else {
-            return reserve1;
-        }
+        (uint reserve0, uint reserve1) = pair.getReserves();
+        if (_token == pair.token0()) { return reserve0; }
+        else { return reserve1; }
+    }
+
+    // support hostEndEventWithWinners (120223: not in use)
+    function _getPairLiquidity(address _token1, address _token2, address _factoryAddress) private view returns (uint256, uint256) {
+        require(_token1 != address(0), 'err: no token1 :O');
+        require(_token2 != address(0), 'err: no token2 :O');
+
+        IUniswapV2Factory public uniswapFactory = IUniswapV2Factory(_factoryAddress);
+        address pair = uniswapFactory.getPair(_token1, _token2);
+        require(pair != address(0), 'err: pair does not exist');
+
+        tok_liq_1 = _getLiquidityInPair(_token1, pair);
+        tok_liq_2 = _getLiquidityInPair(_token2, pair);
+        return (tok_liq_1, tok_liq_2);
     }
     
+    // minimum deposits allowed (in usd value)
+    uint8 public constant minPlayerDepositUSD_floor = 1; // 1 USD 
+    uint8 public constant minPlayerDepositUSD_ceiling = 100; // 100 USD
+    uint8 public minPlayerDepositUSD = 0; // dynamic, set by keeper
+    uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
+
+    // enbale/disable refunds for less than min deposit
+    bool public enableMinDepositRefunds = true;
+
+    // track gas fee wei losses due min deposit refunds
+    uint256 private accruedGasFeeRefundLoss = 0;
+
+    // minimum usd entry fee that host can create event with
+    uint256 public minEventEntryFeeUSD = 0;
+
+    // emit to client side when mnimium deposit refund is not met
+    event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
+
+    // emit to client side when deposit processed (after sender's manual transfer to contract)
+    event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
+
+    function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
+        require(_amount > minPlayerDepositUSD, 'err: amount must be greater than minPlayerDepositUSD =)');
+        minEventEntryFeeUSD = _amount;
+    }
+
+    function getAccruedGFRL() public view onlyKeeper returns (uint256) {
+        return accruedGasFeeRefundLoss;
+    }
+
+    function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
+        require(minPlayerDepositUSD_floor <= _amount && _amount <= minPlayerDepositUSD_ceiling, 'err: invalid amount =)');
+        minPlayerDepositUSD = _amount;
+    }
+
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
     //  1) update credits logged from 'Transfer' emits
     //  2) settle 'whitelistBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
-        gasStart = gasleft(); // record start gas amount
+        uint256 gasStart = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
@@ -412,41 +483,96 @@ contract GamerTokeAward is IERC20, Ownable {
         //  1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
         //  2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
+            require(dataArray[i].token != address(0), 'err: found transfer w/ no token address :/');
+            if (!whitelistStables[dataArray[i].token] && !whitelistAlts[dataArray[i].token]) { continue; } // skip non-whitelist tokens
+
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
             uint256 tok_amnt = dataArray[i].amount;
-            require(tok_addr != address(0), 'err: found transfer w/ no token address :/');
             require(src_addr != address(0), 'err: found transfer w/ no sender address :/');
             require(tok_amnt != 0, 'err: found transfer w/ no amount :/');
-            require(whitelistStables[tok_addr] || whitelistAlts[tok_addr], 'err: found transfer w/ non-whitelist token =(');
             require(_sanityCheck(tok_addr, tok_amnt), 'err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!');
 
             // default: if found in 'whitelistStables'
             uint256 amntUsdCredit = tok_amnt; 
+            uint256 altSwapFee = 0; // gas fee loss for swap: alt -> stable
 
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
             if (!whitelistStables[tok_addr]) {
                 // LEFT OFF HERE ... globals needed: stable_addr to generate 'path'
+                // Payouts… ('hostEndEventWithWinenrs') ... <>
                 // Deposits… ('settleBalances')
                 //     The keeper will maintain a ratio of which stable to convert to most often for deposits. 
                 //     - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
                 //     - the algorithm will choose the best stable in that ratio: w/ the highest value and highest liquidity 
 
-                // Payouts… ('hostEndEventWithWinenrs')
-                //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
-                //     I think that’s the best solution for automation
+                // LEFT OFF HERE ... 
+                //  PROBLEM...
+                //   - what happens if deposit amount < gas fee for swap tx
+                //   - need to revert tx or avoid running it
+                //   - need to somehow check for last/avg gas fee for swap txs
+                //
+                //  SOLUTION...
+                //   DONE - only pulsechain for this code base (assures swap tx fees < $1)
+                //   DONE - keeper sets min deposit amnt, within a pre-set $1 - $100 range
+                //           this allows keeper to work w/ the market, assuring gas fee < min deposit
+                //           this model allows us to not have to worry about current tx swap gas fees
+                //   DONE - keeper sets boolean for min deposit refunds enabled
+                //   DONE - if min dpeosit refunds enabled, 
+                //           then deposits are refunded and gas fee loss is logged
+
+                // LEFT OFF HERE 110223_2040 ... i think the above 'solution' is now integrated below
+                //  ... need to go back and review full algorithm again... (should be ready for a commit)
+
+                // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTok();
-                address[] memory path = [tok_addr, stable_addr]; // generate path: [tok_addr, stable_addr]
-                rtrIdx = best_swap_v2_router_idx(path, tok_amnt) // get best price router idx (traverse 'routersUniswapV2')
-                amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt); // swap alt -> stable
+                address[] memory path = [tok_addr, stable_addr];
+
+                // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
+                (uint8 rtrIdx, uint256 stableAmnt) = best_swap_v2_router_idx_quote(path, tok_amnt);
+
+                // if refunds enabled & stable amount quote is below min deposit required
+                //  process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+                if (enableMinDepositRefunds && stableAmnt < minPlayerDepositUSD) {  
+                    // log gas used for refund
+                    uint256 start_trans = gasleft();
+
+                    // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+                    IERC20(tok_addr).transfer(src_addr, tok_amnt); 
+
+                    // log gas used for refund
+                    uint256 gasfeeloss = (start_trans - gasleft()) * tx.gasprice;
+                    accruedGasFeeRefundLoss += gasfeeloss;
+
+                    // notify client listeners that refund was processed
+                    emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gasfeeloss, accruedGasFeeRefundLoss);
+
+                    // skip to next transfer in 'dataArray'
+                    continue;
+                }
+
+                // swap tok_amnt alt -> stable (log swap fee / gas loss)
+                uint256 start_swap = gasleft();
+                amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt);
+                uint256 gasfeeloss = (start_swap - gasleft()) * tx.gasprice;
+
+                // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
+                (uint8 rtrIdx, altSwapFee) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], gasfeeloss);
+
+                // debit swap fee from 'amntUsdCredit'
+                amntUsdCredit -= altSwapFee;                
             }
 
             // 1) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD'
             //  dex fees already taken out
             //  'usdStableDepositFeePerc' set by keeper (optional)
             //  handles tracking addresses w/ creditsAddrArray
-            uint256 amnt = (amntUsdCredit - (amntUsdCredit * usdStableDepositFeePerc/100));
+            uint256 depositFee = amntUsdCredit * (usdStableDepositFeePerc/100);
+            uint256 amnt = amntUsdCredit - depositFee;
             _updateCredit(src_addr, amnt, false); // false = credit
+
+            // notify client side, deposit successful
+            emit DepositProcessed(src_addr, tok_addr, tok_amnt, altSwapFee, depositFee, amnt);
         }
 
         // update last block number
@@ -538,7 +664,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function best_swap_v2_router_idx(addressp[] memory path, uint256 amount) private returns (uint8) {
+    function best_swap_v2_router_idx_quote(addressp[] memory path, uint256 amount) private returns (uint8) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint i = 0; i < routersUniswapV2.length, i++) {
@@ -549,7 +675,7 @@ contract GamerTokeAward is IERC20, Ownable {
             }
         }
 
-        return currHighIdx;
+        return (currHighIdx, currHigh);
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
@@ -625,22 +751,22 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // house_112023: don't think this function is needed anymore, was being used in legacy 'logCredit'
     //  something like this is indeed now being used in 'settleBalances'
-    function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
-        require(_token != address(0x0), "err: no token");
-        require(_amountIn > 0, "err: no token amount");
-        path = [_token, dai_ethmain_pcwrap]
-        uint256 curr_low = 37373737; // unlikely that any amnt will equal 37373737
-        rtrs = routersUniswapV2;
-        for (uint i; i < rtrs.length; i++) {
-            router = rtrs[i];
-            uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(_amountIn, path); // quote swap
-            uint256 amnt = amountsOut[amountsOut.length -1];
-            if (curr_low == 37373737 || curr_low > amnt) {
-                curr_low = amnt;
-            }
-        }
-        return curr_low;
-    }
+    // function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
+    //     require(_token != address(0x0), "err: no token");
+    //     require(_amountIn > 0, "err: no token amount");
+    //     path = [_token, dai_ethmain_pcwrap]
+    //     uint256 curr_low = 37373737; // unlikely that any amnt will equal 37373737
+    //     rtrs = routersUniswapV2;
+    //     for (uint i; i < rtrs.length; i++) {
+    //         router = rtrs[i];
+    //         uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(_amountIn, path); // quote swap
+    //         uint256 amnt = amountsOut[amountsOut.length -1];
+    //         if (curr_low == 37373737 || curr_low > amnt) {
+    //             curr_low = amnt;
+    //         }
+    //     }
+    //     return curr_low;
+    // }
     
     // LEFT OFF HERE... legacy code that was trying to use this contract code's
     //   to handle all ERC20 token transfers to it
@@ -736,11 +862,11 @@ contract GamerTokeAward is IERC20, Ownable {
     function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
-    
+
     // _winPercs: [%_1st_place, %_2nd_place, ...]
     function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= 1, "required: entry fee >= 1 USD :/");
+        require(_entryFeeUSD >= eventMinimumEntryFeeUSD, "required: entry fee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'host fee too high');
         require(_winPercs.length > 0, 'no winners? :O');
 
