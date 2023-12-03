@@ -135,6 +135,36 @@ contract GamerTokeAward is IERC20, Ownable {
         uint256 amount;
     }
 
+    // minimum deposits allowed (in usd value)
+    uint8 public constant minPlayerDepositUSD_floor = 1; // 1 USD 
+    uint8 public constant minPlayerDepositUSD_ceiling = 100; // 100 USD
+    uint8 public minPlayerDepositUSD = 0; // dynamic, set by keeper
+    uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
+
+    // enbale/disable refunds for less than min deposit
+    bool public enableMinDepositRefunds = true;
+
+    // track gas fee wei losses due min deposit refunds
+    uint256 private accruedGasFeeRefundLoss = 0;
+
+    // minimum usd entry fee that host can create event with
+    uint256 public minEventEntryFeeUSD = 0;
+
+    // EVENTS
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    
+    // emit to client side when mnimium deposit refund is not met
+    event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
+
+    // emit to client side when deposit processed (after sender's manual transfer to contract)
+    event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
+
+    // notify client side that an event distribution (winner payout) has occurred successuflly
+    event EndEventDistribution(address winner, uint32 win_usd, address stable, uint16 win_place, uint8 win_perc, uint32 win_pool_usd);
+
+    // notify client side that an end event has occurred successfully
+    event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
+
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         // Set creator to owner & keeper
@@ -230,6 +260,8 @@ contract GamerTokeAward is IERC20, Ownable {
     // UPDATE_120223: make deposit then tweet to register
     //              1) send stable|alt deposit to gta contract
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
+    //                  OR ... for free play w/ host register
+    //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
     function registerEvent(address gameCode) public returns (bool) {
         require(gameCode != address(0), 'err: no game code ;o');
 
@@ -323,12 +355,6 @@ contract GamerTokeAward is IERC20, Ownable {
 
     //     return true;
     // }
-
-    // notify client side that an event distribution (winner payout) has occurred successuflly
-    event EndEventDistribution(address winner, uint32 win_usd, address stable, uint16 win_place, uint8 win_perc, uint32 win_pool_usd);
-
-    // notify client side that an end event has occurred successfully
-    event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
 
     // _winners: [0x1st_place, 0x2nd_place, ...]
     function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
@@ -457,27 +483,6 @@ contract GamerTokeAward is IERC20, Ownable {
         tok_liq_2 = _getLiquidityInPair(_token2, pair);
         return (tok_liq_1, tok_liq_2);
     }
-    
-    // minimum deposits allowed (in usd value)
-    uint8 public constant minPlayerDepositUSD_floor = 1; // 1 USD 
-    uint8 public constant minPlayerDepositUSD_ceiling = 100; // 100 USD
-    uint8 public minPlayerDepositUSD = 0; // dynamic, set by keeper
-    uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
-
-    // enbale/disable refunds for less than min deposit
-    bool public enableMinDepositRefunds = true;
-
-    // track gas fee wei losses due min deposit refunds
-    uint256 private accruedGasFeeRefundLoss = 0;
-
-    // minimum usd entry fee that host can create event with
-    uint256 public minEventEntryFeeUSD = 0;
-
-    // emit to client side when mnimium deposit refund is not met
-    event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
-
-    // emit to client side when deposit processed (after sender's manual transfer to contract)
-    event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
 
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
         require(_amount > minPlayerDepositUSD, 'err: amount must be greater than minPlayerDepositUSD =)');
@@ -511,10 +516,11 @@ contract GamerTokeAward is IERC20, Ownable {
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
             uint256 tok_amnt = dataArray[i].amount;
+            
             if (tok_addr == address(0) || src_addr == address(0)) { continue; } // skip 0x0 addresses
             if (tok_amnt == 0) { continue; } // skip 0 amount
 
-            // verifiy keeper sent legit amounts from their 'Transfer' event captures (FAIL = revert everything)
+            // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
             //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
             require(_sanityCheck(tok_addr, tok_amnt), 'err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!');
 
@@ -605,8 +611,7 @@ contract GamerTokeAward is IERC20, Ownable {
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
-    // LEFT OFF HERE... support function to choose stable token to use for 'settleBalances'
-    //  note: still needs design for choosing the 'best' out of 'whitelistStables' (ie. liquidity, price, etc.)
+    // traverse 'whiltelistStables' using 'whitelistStablesIdx'
     function _getNextStableTok() private {
         address stable_addr = whitelistStables[whitelistStablesIdx];
         whitelistStablesIdx++;
@@ -645,6 +650,7 @@ contract GamerTokeAward is IERC20, Ownable {
         whitelistPendingDebits[token] += amount;
     }
 
+    // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredit(address _player, uint256 _amount, bool _debit) private {
         if (_debit) { 
             // ensure there is enough credit before debit
@@ -806,9 +812,6 @@ contract GamerTokeAward is IERC20, Ownable {
         _transfer(msg.sender, _recipient, _amount);
         return true;
     }
-    
-    // EVENTS
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     // MODIFIERS
     modifier onlyAdmins(address gameCode) {
