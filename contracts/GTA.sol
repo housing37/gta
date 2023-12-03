@@ -110,8 +110,7 @@ contract GamerTokeAward is IERC20, Ownable {
     // mapping of accepted usd stable coins for player deposits
     mapping(address => bool) public whitelistAlts;
     mapping(address => bool) public whitelistStables;
-    uint8 private whitelistStablesIdx;
-    
+    uint8 private whitelistStablesUseIdx; // _getNextStableTok()
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
@@ -611,11 +610,11 @@ contract GamerTokeAward is IERC20, Ownable {
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
-    // traverse 'whiltelistStables' using 'whitelistStablesIdx'
+    // traverse 'whiltelistStables' using 'whitelistStablesUseIdx'
     function _getNextStableTok() private {
-        address stable_addr = whitelistStables[whitelistStablesIdx];
-        whitelistStablesIdx++;
-        if (whitelistStablesIdx >= whitelistStables.length) { whitelistStablesIdx=0; }
+        address stable_addr = whitelistStables[whitelistStablesUseIdx];
+        whitelistStablesUseIdx++;
+        if (whitelistStablesUseIdx >= whitelistStables.length) { whitelistStablesUseIdx=0; }
         return stable_addr;
     }
 
