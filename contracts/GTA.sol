@@ -155,6 +155,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // emit to client side when mnimium deposit refund is not met
     event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
 
+    // emit to client side when deposit fails; only due to min deposit fail (120323)
+    event DepositFailed(address sender, address token, uint256 tokenAmount, uint256 stableAmount, uint256 minDepositUSD, bool refundsEnabled);
+
     // emit to client side when deposit processed (after sender's manual transfer to contract)
     event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
 
@@ -559,21 +562,27 @@ contract GamerTokeAward is IERC20, Ownable {
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
                 (uint8 rtrIdx, uint256 stableAmnt) = best_swap_v2_router_idx_quote(path, tok_amnt);
 
-                // if refunds enabled & stable amount quote is below min deposit required
-                //  process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                if (enableMinDepositRefunds && stableAmnt < minPlayerDepositUSD) {  
-                    // log gas used for refund
-                    uint256 start_trans = gasleft();
+                // if stable amount quote is below min deposit required
+                if (stableAmnt < minPlayerDepositUSD) {  
 
-                    // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    IERC20(tok_addr).transfer(src_addr, tok_amnt); 
+                    // if rehunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+                    if (enableMinDepositRefunds) {
+                        // log gas used for refund
+                        uint256 start_trans = gasleft();
 
-                    // log gas used for refund
-                    uint256 gasfeeloss = (start_trans - gasleft()) * tx.gasprice;
-                    accruedGasFeeRefundLoss += gasfeeloss;
+                        // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+                        IERC20(tok_addr).transfer(src_addr, tok_amnt); 
 
-                    // notify client listeners that refund was processed
-                    emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gasfeeloss, accruedGasFeeRefundLoss);
+                        // log gas used for refund
+                        uint256 gasfeeloss = (start_trans - gasleft()) * tx.gasprice;
+                        accruedGasFeeRefundLoss += gasfeeloss;
+
+                        // notify client listeners that refund was processed
+                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gasfeeloss, accruedGasFeeRefundLoss);
+                    }
+
+                    // notify client side, deposit failed
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, minPlayerDepositUSD, enableMinDepositRefunds);
 
                     // skip to next transfer in 'dataArray'
                     continue;
