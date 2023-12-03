@@ -1,6 +1,22 @@
 # product design (GTA = gamer token award)
 
 ## GTA.sol finalized design & integration ##
+    - remaining integrations (algorithms ready to be coded)
+        DONE - finalize debits/credits integration
+            DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
+            DONE - integration w/ _increasePendingDebit, _increaseWhitelistBalance, _settlePendingDebit, _sanityCheck
+            DONE - design a way that ‘hostEndEventWithWinners’ chooses what stable token to payout winners with
+            DONE - design a way that ‘settleBalances’ chooses a stable token to swap into and hold
+
+        - refund players
+            call 'processRefunds(event_code)' to refund all entry_fees 
+             required: event_code has 'expired' and not yet 'launched'
+
+        - GTA token distribution (minting & burning)
+             1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
+             2) host & winners get minted some amount after event ends
+                 *required: mint amount < buy & burn amount
+                 
     - current integration
         - owner model _ modifier onlyOwner()
             - mint(address to, uint256 amount)
@@ -33,52 +49,36 @@
             - host calls 'hostStartEvent(event_code)' to launch the event (set 'launched' in struct)
             - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
-    - remaining integrations (algorithms ready to be coded)
-        - finalize debits/credits integration
-            DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
-            DONE - integration w/ _increasePendingDebit, _increaseWhitelistBalance, _settlePendingDebit, _sanityCheck
-            - design a way that ‘hostEndEventWithWinners’ chooses what stable token to payout winners with
-            - design a way that ‘settleBalances’ chooses a stable token to swap into and hold
-
-        - refund players
-            call 'processRefunds(event_code)' to refund all entry_fees 
-             required: event_code has 'expired' and not yet 'launched'
-
-        - GTA token distribution (minting & burning)
-             1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
-             2) host & winners get minted some amount after event ends
-                 *required: mint amount < buy & burn amount
-
     - hanging blockers / tasks / edge-cases to solve
-        - PROBLEM...
-            - what happens if deposit amount < gas fee for swap tx
-            - need to revert tx or avoid running it
-            - need to somehow check for last/avg gas fee for swap txs
+        DONE - PROBLEM...
+            DONE - what happens if deposit amount < gas fee for swap tx
+            DONE - need to revert tx or avoid running it
+             N/A - need to somehow check for last/avg gas fee for swap txs
     
-        - SOLUTION...
-            - only pulsechain for this code base (assures swap tx fees < $1)
-            - keeper sets min deposit amnt, within a pre-set range (allows keeper to work w/ the market)
-            - current tx swap gas fee is checked/tracked through each interation
-                - if "current tx swap gas fee" > "keeper set min deposit"
-                    then use 'swap gas fee' as 'min deposit requirement'
+        DONE - SOLUTION...
+            DONE - only pulsechain for this code base (assures swap tx fees < $1)
+            DONE - keeper sets min deposit amnt, within a pre-set range (allows keeper to work w/ the market)
+            DONE - current tx swap gas fee is checked/tracked through each interation
+                N/A - if "current tx swap gas fee" > "keeper set min deposit"
+                    N/A - then use 'swap gas fee' as 'min deposit requirement'
 
-        - PROBLEM -> 'hostEndEventWithWinners' & 'settleBalances': need to determine which stables to hold and payout
-          SOLUTION: -> analyze ratio to control stables used most often, while analyzing current drop/spike in value or volume
+        DONE - PROBLEM -> 'hostEndEventWithWinners' & 'settleBalances': need to determine which stables to hold and payout
+          DONE - SOLUTION: -> analyze ratio to control stables used most often, while analyzing current drop/spike in value or volume
             Deposits… 'settleBalances'
-                The keeper will maintain a ratio of which stable to convert to most often for deposits. 
-                - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-                - the algorithm will choose the best stable in that ratio with the highest value and highest liquidity 
+                DONE - The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+                DONE - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+                DONE - the algorithm will choose the best stable in that ratio with the highest value or highest liquidity, etc.
 
             Payouts… 'hostEndEventWithWinners'
-                When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+                DONE - When an event ends, the algorithm will choose the stable with the highest balance and lowest market value, to use for payouts 
 
-        - PROBLEM -> hostRegisterEventClaim: 
+        DONE - PROBLEM -> hostRegisterEventClaim: 
             someone could listen for 'Transfer' events to GTA contract
              and then use 'hostRegisterEventClaim' to immediately take the credits
-          SOLUTION: -> get rid of 'hostRegisterEventClaim' -> simplest solution so far
+          DONE - SOLUTION: -> get rid of 'hostRegisterEventClaim' -> simplest solution so far
                         and players are REQUIRED to 'registerEvent(event_code)' manually on blockexplorer :/
 
-          SOLUTION: -> *FAIL* -> *DOES NOT WORK* people can still track the 'tranfer' events and lie about recieving addresses for invites
+          FAIL - SOLUTION: -> *FAIL* -> *DOES NOT WORK* people can still track the 'tranfer' events and lie about recieving addresses for invites
                         what if 'Game' struct maintains 'address[] playerInvites'?
                          and 'hostRegisterEventClaim(player, event_code)' can only claim credits
                             from addresses in 'game[event_code].playerInvites'
@@ -87,9 +87,9 @@
                             2) players can provide the host thier address used for 'transfer' 
                                 then, hosts can 'hostRegisterEventClaim(player, event_code)' for players that have been invited to their event_code
 
-        - PROBLEM -> updateCredits: 
+        DONE - PROBLEM -> updateCredits: 
             ensure that keeper cannot lie when calling 'updateCredits' (for deposits)
-          SOLUTION: -> maintain mapping(address => uint256) for 'whitelistBalances' & 'whitelistPendingDebits'
+          DONE - SOLUTION: -> maintain mapping(address => uint256) for 'whitelistBalances' & 'whitelistPendingDebits'
                         append to 'whitelistPendingDebits' during 'hostEndEventWithWinners'
                         settle 'whitelistPendingDebits' into 'whitelistBalances' during 'updateCredits' call from keeper
                         if 'whitelistBalances[token]' != 'IERC20(token).balanceOf', then KEEPER LIED
