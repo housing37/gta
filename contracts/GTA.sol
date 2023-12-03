@@ -110,7 +110,7 @@ contract GamerTokeAward is IERC20, Ownable {
     // mapping of accepted usd stable coins for player deposits
     mapping(address => bool) public whitelistAlts;
     mapping(address => bool) public whitelistStables;
-    uint8 private whitelistStablesUseIdx; // _getNextStableTok()
+    uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
@@ -406,42 +406,23 @@ contract GamerTokeAward is IERC20, Ownable {
                         this allows the keeper to control how often a stable is used
                         LEFT OFF HERE ... not sure if this case matters anymore, w/ new algorithm ^
              */
-            
-            // loop through white list stables, generate stables available (ok for debit)
-            address[] memory stablesAvail = []; // stables available to cover debit
-            for (uint 1 = 0; i < whitelistStables.length; i++) {
 
-                // get balnce for this whitelist stable (push to stablesAvail if has enough)
-                uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
-                if (stableBal > win_usd * 10**18) { 
-                    stablesAvail.push(whitelistStables[i]);
-                }
-            }
+            // loop through white list stables, generate stables available (bals ok for debit)
+            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
 
             // traverse stables available for debit, select stable w/ the lowest market value
-            uint256 currLowVal = 0;
-            address currLowValStable = 0x0;
-            for (uint i=0; i < stablesAvail.length, i++) {
-                
-                // get quote for this available stable (track lowest value; traverses 'routersUniswapV2')
-                address stable_addr = stablesAvail[i];
-                (uint8 rtrIdx, uint256 stableValue) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1000000 * 10**18);
-                if (stableValue < currLowVal || currLowVal == 0) {
-                    currLowVal = stableValue;
-                    currLowValStable = stable_addr;
-                }
-            }
+            (address stable, uint256 lowest_val) = _getStableTokenLowMarketValue(stables_avail);
 
-            require(currLowValStable != address(0), 'err: stable address is 0 _ :+0');
+            require(stable != address(0), 'err: low market stable address is 0 _ :+0');
 
             // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-            IERC20(currLowValStable).transfer(winner, win_usd * 10**18); 
+            IERC20(stable).transfer(winner, win_usd * 10**18); 
 
             // syncs w/ 'settleBalances' algorithm
             _increasePendingDebit(tok_addr, win_usd);
 
             // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, win_usd, currLowValStable, i, win_perc, win_pool);
+            emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
         }
 
         // set game end state (doesn't matter if its about to be deleted)
@@ -457,6 +438,37 @@ contract GamerTokeAward is IERC20, Ownable {
         emit EndEventActivity(block.timestamp, block.number, activeGameCount, _gameCode, _winners);
         
         return true;
+    }
+
+    function _getStableTokenLowMarketValue(address[] memory stables) private view returns ((address, uint256)) {
+        // traverse stables available for debit, select stable w/ the lowest market value
+        uint256 currLowVal = 0;
+        address currLowValStable = 0x0;
+        for (uint i=0; i < stables.length, i++) {
+            
+            // get quote for this available stable (track lowest value; traverses 'routersUniswapV2')
+            address stable_addr = stables[i];
+            (uint8 rtrIdx, uint256 stableValue) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
+            if (stableValue < currLowVal || currLowVal == 0) {
+                currLowVal = stableValue;
+                currLowValStable = stable_addr;
+            }
+        }
+        return (currLowValstable, currLowVal);
+    }
+
+    function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
+        // loop through white list stables, generate stables available (ok for debit)
+        address[] memory stablesAvail = []; // stables available to cover debit
+        for (uint 1 = 0; i < whitelistStables.length; i++) {
+
+            // get balnce for this whitelist stable (push to stablesAvail if has enough)
+            uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
+            if (stableBal > _debitAmntUSD * 10**18) { 
+                stablesAvail.push(whitelistStables[i]);
+            }
+        }
+        return stablesAvail;
     }
 
     // support hostEndEventWithWinners
@@ -556,7 +568,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 //           then deposits are refunded and gas fee loss is logged
 
                 // get stable coin to use & create swap path to it
-                stable_addr = _getNextStableTok();
+                stable_addr = _getNextStableTokDeposit();
                 address[] memory path = [tok_addr, stable_addr];
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
@@ -620,7 +632,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // traverse 'whiltelistStables' using 'whitelistStablesUseIdx'
-    function _getNextStableTok() private {
+    function _getNextStableTokDeposit() private {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
         whitelistStablesUseIdx++;
         if (whitelistStablesUseIdx >= whitelistStables.length) { whitelistStablesUseIdx=0; }
