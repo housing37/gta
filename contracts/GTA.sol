@@ -324,6 +324,12 @@ contract GamerTokeAward is IERC20, Ownable {
     //     return true;
     // }
 
+    // notify client side that an event distribution (winner payout) has occurred successuflly
+    event EndEventDistribution(address winner, uint32 win_usd, address stable, uint16 win_place, uint8 win_perc, uint32 win_pool_usd);
+
+    // notify client side that an end event has occurred successfully
+    event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
+
     // _winners: [0x1st_place, 0x2nd_place, ...]
     function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
@@ -336,13 +342,13 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // check if number of winners lines up with winpercs array lenght set in event create
+        // check if # of _winners == .winPercs array length (set during eventCreate)
         require(game.winPercs.length == _winners.length, 'err: number of winners =(')
 
         // loop through _winners: distribute 'game.winPercs'
         for (uint i=0; i < _winners.length; i++) {
-            // check if winner address was a player in the game
-            require(game.players[_winners[i]], 'err: invalid player found :/, retry with ALL valid players');
+            // verify winner address was registered in the game
+            require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
             // calc win_usd
             address winner = _winners[i];
@@ -353,7 +359,8 @@ contract GamerTokeAward is IERC20, Ownable {
             // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
             // Deposits… ('settleBalances') ...
             // Payouts… ('hostEndEventWithWinenrs')
-            //     When an event ends, the algorithm will choose the stable with the highest balance and lowest liquidity, to use for payouts 
+            //     When an event ends, the contract algorithm will choose the stable w/ highest current balance 
+            //      and lowest market value on dexes, to use for payouts 
             //     I think that’s the best solution for automation
             /**
                 whats the best stable coin to use?
@@ -361,40 +368,52 @@ contract GamerTokeAward is IERC20, Ownable {
                      - any single payout should not be distributed w/ more than 1 stable (too confusing for player)
                      - all stables have inherit risks and cannot be algorithmically pre-determined 
                      - best for to keeper to maintain a list manually (and just start with one)
-                     - keeper can influence how often a stable is used by controlling multiple entries
+                     - keeper can influence how often a stable is used by controlling ratios of multiple entries
 
                     choosing stable to use...
-                     - loop through stables list, payout each winner in a different stable
-                        first check contract's stable balance to make sure it can cover
-                         if not, try another stable in the list
-                         if yes, check the value of the stable coin on the open market
-                            want to use the stable with the lowest value
+                     - loop through stables list for each payout (debit)
+                        1) create list of stables w/ high enough balance to cover current debit
+                        2) from that list, choose stable w/ lowest market value
                      - keeper controls the number of times a stable is listed for payout
                         this allows the keeper to control how often a stable is used
-                     
-
-                    LEFT OFF HERE ... writting all this shit ^
-                    
+                        LEFT OFF HERE ... not sure if this case matters anymore, w/ new algorithm ^
              */
-            address tok_addr = 0x0; // stable token address chosen
-            uint256 currHigh = 0;
-            uint256 currHighIdx = 0;
+            
+            // loop through white list stables, generate stables available (ok for debit)
+            address[] memory stablesAvail = []; // stables available to cover debit
             for (uint 1 = 0; i < whitelistStables.length; i++) {
-                uint256 bal = IERC20(whitelistStables[i]).balanceOf(address(this));
-                if (bal > currHigh) { 
-                    currHigh = bal; 
-                    currHighIdx = i;
-                }
 
-                address pair = address(0x0); // ?
-                uint256 liq = _getLiquidityInPair(whitelistStables[1], pair);
+                // get balnce for this whitelist stable (push to stablesAvail if has enough)
+                uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
+                if (stableBal > win_usd * 10**18) { 
+                    stablesAvail.push(whitelistStables[i]);
+                }
             }
 
-            // send 'win_usd' amount to 'winner'
-            IERC20(tok_addr).transfer(winner, win_usd); 
+            // traverse stables available for debit, select stable w/ the lowest market value
+            uint256 currLowVal = 0;
+            address currLowValStable = 0x0;
+            for (uint i=0; i < stablesAvail.length, i++) {
+                
+                // get quote for this available stable (track lowest value; traverses 'routersUniswapV2')
+                address stable_addr = stablesAvail[i];
+                (uint8 rtrIdx, uint256 stableValue) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1000000 * 10**18);
+                if (stableValue < currLowVal || currLowVal == 0) {
+                    currLowVal = stableValue;
+                    currLowValStable = stable_addr;
+                }
+            }
+
+            require(currLowValStable != address(0), 'err: stable address is 0 _ :+0');
+
+            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
+            IERC20(currLowValStable).transfer(winner, win_usd * 10**18); 
 
             // syncs w/ 'settleBalances' algorithm
             _increasePendingDebit(tok_addr, win_usd);
+
+            // notify client side that an end event distribution occurred successfully
+            emit EndEventDistribution(winner, win_usd, currLowValStable, i, win_perc, win_pool);
         }
 
         // set game end state (doesn't matter if its about to be deleted)
@@ -406,6 +425,9 @@ contract GamerTokeAward is IERC20, Ownable {
         delete activeGames[_gameCode];
         activeGameCount--;
 
+        // notify client side that an end event occurred successfully
+        emit EndEventActivity(block.timestamp, block.number, activeGameCount, _gameCode, _winners);
+        
         return true;
     }
 
@@ -524,7 +546,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 //   DONE - keeper sets boolean for min deposit refunds enabled
                 //   DONE - if min dpeosit refunds enabled, 
                 //           then deposits are refunded and gas fee loss is logged
-                
+
                 // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTok();
                 address[] memory path = [tok_addr, stable_addr];
@@ -794,7 +816,7 @@ contract GamerTokeAward is IERC20, Ownable {
         bool isHost = msg.sender == activeGames[gameCode].host;
         bool isKeeper = msg.sender == keeper;
         bool isOwner = msg.sender == owner;
-        require(isKeeper || isOwner || isHost, 'err: only host :/*');
+        require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
     }
     modifier onlyHost(address gameCode) {
