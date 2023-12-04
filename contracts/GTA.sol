@@ -385,11 +385,9 @@ contract GamerTokeAward is IERC20, Ownable {
             uint256 win_usd = win_pool * (win_perc/100);
 
             // loop through 'whitelistStables', generate stables available (bals ok for debit)
-            //  *WARNING* whitelistStables could have duplicates (set by keeper)
             address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
 
-            // traverse stables available for debit, select stable w/ the lowest market value
-            //  *WARNING* stables_avail could have duplicates (set by keeper)
+            // traverse stables available for debit, select stable w/ the lowest market value            
             address stable = _getStableTokenLowMarketValue(stables_avail);
             require(stable != address(0), 'err: low market stable address is 0 _ :+0');
 
@@ -418,26 +416,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    function _getStableTokenLowMarketValue(address[] memory stables) private view returns ((address, uint256)) {
-        // traverse stables available for debit, select stable w/ the lowest market value
-        uint256 curr_high_tok_val = 0;
-        address curr_low_val_stable = 0x0;
-        for (uint i=0; i < stables.length, i++) {
-            
-            // get quote for this available stable (traverses 'routersUniswapV2')
-            //  looking for the stable that returns the most when swapped 'from' WPLS
-            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
-            track lowest value; 
-            address stable_addr = stables[i];
-            (uint8 rtrIdx, uint256 tok_val) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
-            if (tok_val >= curr_high_tok_val) {
-                curr_high_tok_val = tok_val;
-                curr_low_val_stable = stable_addr;
-            }
-        }
-        return curr_low_val_stable;
-    }
-
+    // *WARNING* whitelistStables could have duplicates (set by keeper)
     function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
         address[] memory stablesAvail = []; // stables available to cover debit
@@ -450,6 +429,26 @@ contract GamerTokeAward is IERC20, Ownable {
             }
         }
         return stablesAvail;
+    }
+
+    // *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
+    function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
+        // traverse stables available for debit, select stable w/ the lowest market value
+        uint256 curr_high_tok_val = 0;
+        address curr_low_val_stable = 0x0;
+        for (uint i=0; i < stables.length, i++) {
+            
+            // get quote for this available stable (traverses 'routersUniswapV2')
+            //  looking for the stable that returns the most when swapped 'from' WPLS
+            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
+            address stable_addr = stables[i];
+            (uint8 rtrIdx, uint256 tok_val) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
+            if (tok_val >= curr_high_tok_val) {
+                curr_high_tok_val = tok_val;
+                curr_low_val_stable = stable_addr;
+            }
+        }
+        return curr_low_val_stable;
     }
 
     // support hostEndEventWithWinners
