@@ -167,6 +167,10 @@ contract GamerTokeAward is IERC20, Ownable {
     // notify client side that an end event has occurred successfully
     event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
 
+    // LEFT OFF HERE ... need to finish these 2 event designs
+    event ProcessedRefund();
+    event CanceledEvent();
+
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
         // Set creator to owner & keeper
@@ -177,6 +181,10 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(address(0), msg.sender, totalSupply);
     }
 
+    function myCredits() public view returns (uint32) {
+        return creditsUSD[msg.sender];
+    }
+    
     function addWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
             whitelistStables[_tokens[i]] = true;
@@ -462,7 +470,7 @@ contract GamerTokeAward is IERC20, Ownable {
         bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
         require(isValidSender, 'err: only player or host can cancel event :<>')
 
-        // verify the game has not launched and expired time has passed
+        // verify the game has not launched & expire time has indeed passed
         require(!evt.launched, 'err: event code launched already :<>');
         require(evt.expTime < block.timestamp, 'err: event code not expired :<>');
 
@@ -475,16 +483,21 @@ contract GamerTokeAward is IERC20, Ownable {
             address stable = _getStableTokenLowMarketValue(stables_avail);
             require(stable != address(0), 'err: low market stable address is 0 _ :+0');            
 
-            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-            IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
+            // REFUND ENTRY FEE 
+            //  NOTE: refunding full entry fee means refunding w/o service fees removed
+            // send 'entryFeeUSD' back to player on chain (using lowest market value whitelist stable)
+            // IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
 
-            // LEFT OFF HERE ... 
-            //  should refund be given in creditsUSD (logged in contract) 
-            //   or in stable token sent back player wallet
+            // credit 'entryFeeUSD' back to player in 'mapping(address => uint256) creditsUSD'
+            _updateCredit(evt.players[i], evt.entryFeeUSD, false); // false = credit (tracks addresses w/ creditsAddrArray)
 
-            // note: debit from 'creditsUSD' occurred during 'registerEvent'
+            // LEFT OFF HERE ...
+            //  NOTE: refunding full entry fee means refunding w/o service fees removed
+
+            emit ProcessedRefund();
         }
 
+        emit CanceledEvent();
     }
 
     // support hostEndEventWithWinners
