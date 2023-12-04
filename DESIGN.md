@@ -1,5 +1,12 @@
 # product design (GTA = gamer token award)
 
+## client service integration, twitter last-to-tweet ##
+    // UPDATE_120223: make deposit then tweet to register
+    //              1) send stable|alt deposit to gta contract
+    //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
+    //                  OR ... for free play w/ host register
+    //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
+    
 ## GTA.sol finalized design & integration ##
     - remaining integrations (algorithms ready to be coded)
         DONE - finalize debits/credits integration
@@ -16,7 +23,7 @@
              1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
              2) host & winners get minted some amount after event ends
                  *required: mint amount < buy & burn amount
-                 
+
     - current integration
         - owner model _ modifier onlyOwner()
             - mint(address to, uint256 amount)
@@ -50,6 +57,47 @@
             - host calls 'hostEndEventWithWinners(event_code, winners)', validates and pays out winners in stables
 
     - hanging blockers / tasks / edge-cases to solve
+        DONE -  // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
+                // Deposits… ('settleBalances')
+                //     DONE - The keeper will maintain a ratio of which stable to convert to most often for deposits. 
+                //     DONE - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
+                //     DONE - algorithm to itterate through stable list, allowing ratio in list to control the frequency (simple)
+                //      N/A - algorithm to choose best stable in that ratio: w/ the highest value & highest liquidity (complex)
+                    // LEFT OFF HERE ... 
+                    //  PROBLEM...
+                    //   - what happens if deposit amount < gas fee for swap tx
+                    //   - need to revert tx or avoid running it
+                    //   - need to somehow check for last/avg gas fee for swap txs
+                    //
+                    //  SOLUTION...
+                    //   DONE - only pulsechain for this code base (assures swap tx fees < $1)
+                    //   DONE - keeper sets min deposit amnt, within a pre-set $1 - $100 range
+                    //           this allows keeper to work w/ the market, assuring gas fee < min deposit
+                    //           this model allows us to not have to worry about current tx swap gas fees
+                    //   DONE - keeper sets boolean for min deposit refunds enabled
+                    //   DONE - if min dpeosit refunds enabled, 
+                    //           then deposits are refunded and gas fee loss is logged
+                // Payouts… ('hostEndEventWithWinenrs')
+                //     DONE - When an event ends, the contract algorithm will choose a stable w/ suffecient balance to handle debit
+                //      DONE - and lowest market value on dexes, to use for payouts 
+                //     I think that’s the best solution for automation
+                /**
+                    whats the best stable coin to use?
+                        observations...
+                            - any single payout should not be distributed w/ more than 1 stable (too confusing for player)
+                            - all stables have inherit risks and cannot be algorithmically pre-determined 
+                            - best for to keeper to maintain a list manually (and just start with one)
+                            - keeper can influence how often a stable is used by controlling ratios of multiple entries
+
+                        choosing stable to use...
+                            - loop through stables list for each payout (debit)
+                            1) create list of stables w/ high enough balance to cover current debit
+                            2) from that list, choose stable w/ lowest market value
+                            - keeper controls the number of times a stable is listed for payout
+                            this allows the keeper to control how often a stable is used
+                            LEFT OFF HERE ... not sure if this case matters anymore, w/ new algorithm ^
+                    */ 
+
         DONE - PROBLEM...
             DONE - what happens if deposit amount < gas fee for swap tx
             DONE - need to revert tx or avoid running it

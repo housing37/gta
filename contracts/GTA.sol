@@ -384,35 +384,13 @@ contract GamerTokeAward is IERC20, Ownable {
             uint256 win_pool = game.prizePoolUSD;
             uint256 win_usd = win_pool * (win_perc/100);
 
-            // LEFT OFF HERE... need to design away to choose stables from 'whitelistStables'
-            // Deposits… ('settleBalances') ...
-            // Payouts… ('hostEndEventWithWinenrs')
-            //     When an event ends, the contract algorithm will choose the stable w/ highest current balance 
-            //      and lowest market value on dexes, to use for payouts 
-            //     I think that’s the best solution for automation
-            /**
-                whats the best stable coin to use?
-                    observations...
-                     - any single payout should not be distributed w/ more than 1 stable (too confusing for player)
-                     - all stables have inherit risks and cannot be algorithmically pre-determined 
-                     - best for to keeper to maintain a list manually (and just start with one)
-                     - keeper can influence how often a stable is used by controlling ratios of multiple entries
-
-                    choosing stable to use...
-                     - loop through stables list for each payout (debit)
-                        1) create list of stables w/ high enough balance to cover current debit
-                        2) from that list, choose stable w/ lowest market value
-                     - keeper controls the number of times a stable is listed for payout
-                        this allows the keeper to control how often a stable is used
-                        LEFT OFF HERE ... not sure if this case matters anymore, w/ new algorithm ^
-             */
-
-            // loop through white list stables, generate stables available (bals ok for debit)
+            // loop through 'whitelistStables', generate stables available (bals ok for debit)
+            //  *WARNING* whitelistStables could have duplicates (set by keeper)
             address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
 
             // traverse stables available for debit, select stable w/ the lowest market value
-            (address stable, uint256 lowest_val) = _getStableTokenLowMarketValue(stables_avail);
-
+            //  *WARNING* stables_avail could have duplicates (set by keeper)
+            address stable = _getStableTokenLowMarketValue(stables_avail);
             require(stable != address(0), 'err: low market stable address is 0 _ :+0');
 
             // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
@@ -442,19 +420,22 @@ contract GamerTokeAward is IERC20, Ownable {
 
     function _getStableTokenLowMarketValue(address[] memory stables) private view returns ((address, uint256)) {
         // traverse stables available for debit, select stable w/ the lowest market value
-        uint256 currLowVal = 0;
-        address currLowValStable = 0x0;
+        uint256 curr_high_tok_val = 0;
+        address curr_low_val_stable = 0x0;
         for (uint i=0; i < stables.length, i++) {
             
-            // get quote for this available stable (track lowest value; traverses 'routersUniswapV2')
+            // get quote for this available stable (traverses 'routersUniswapV2')
+            //  looking for the stable that returns the most when swapped 'from' WPLS
+            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
+            track lowest value; 
             address stable_addr = stables[i];
-            (uint8 rtrIdx, uint256 stableValue) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
-            if (stableValue < currLowVal || currLowVal == 0) {
-                currLowVal = stableValue;
-                currLowValStable = stable_addr;
+            (uint8 rtrIdx, uint256 tok_val) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
+            if (tok_val >= curr_high_tok_val) {
+                curr_high_tok_val = tok_val;
+                curr_low_val_stable = stable_addr;
             }
         }
-        return (currLowValstable, currLowVal);
+        return curr_low_val_stable;
     }
 
     function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
@@ -544,28 +525,6 @@ contract GamerTokeAward is IERC20, Ownable {
 
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
             if (!whitelistStables[tok_addr]) {
-                // LEFT OFF HERE ... globals needed: stable_addr to generate 'path'
-                // Payouts… ('hostEndEventWithWinenrs') ... <>
-                // Deposits… ('settleBalances')
-                //     DONE - The keeper will maintain a ratio of which stable to convert to most often for deposits. 
-                //     DONE - if any stable drops in value or liquidity, the keeper can choose to lower the ratio for that stable
-                //     DONE - algorithm to itterate through stable list, allowing ratio in list to control the frequency (simple)
-                //      N/A - algorithm to choose best stable in that ratio: w/ the highest value & highest liquidity (complex)
-
-                // LEFT OFF HERE ... 
-                //  PROBLEM...
-                //   - what happens if deposit amount < gas fee for swap tx
-                //   - need to revert tx or avoid running it
-                //   - need to somehow check for last/avg gas fee for swap txs
-                //
-                //  SOLUTION...
-                //   DONE - only pulsechain for this code base (assures swap tx fees < $1)
-                //   DONE - keeper sets min deposit amnt, within a pre-set $1 - $100 range
-                //           this allows keeper to work w/ the market, assuring gas fee < min deposit
-                //           this model allows us to not have to worry about current tx swap gas fees
-                //   DONE - keeper sets boolean for min deposit refunds enabled
-                //   DONE - if min dpeosit refunds enabled, 
-                //           then deposits are refunded and gas fee loss is logged
 
                 // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTokDeposit();
