@@ -395,7 +395,7 @@ contract GamerTokeAward is IERC20, Ownable {
             IERC20(stable).transfer(winner, win_usd * 10**18); 
 
             // syncs w/ 'settleBalances' algorithm
-            _increasePendingDebit(tok_addr, win_usd);
+            _increaseWhitelistPendingDebit(tok_addr, win_usd);
 
             // notify client side that an end event distribution occurred successfully
             emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
@@ -449,6 +449,42 @@ contract GamerTokeAward is IERC20, Ownable {
             }
         }
         return curr_low_val_stable;
+    }
+
+    function cancelEventProcessRefunds(address _eventCode) public {
+        require(_eventCode != address(0), 'err: no event code :<>');
+
+        // get/validate active event
+        struct storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid event code :<>')
+        
+        // check for valid sender to cancel (only registered players, host, or keeper)
+        bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
+        require(isValidSender, 'err: only player or host can cancel event :<>')
+
+        // verify the game has not launched and expired time has passed
+        require(!evt.launched, 'err: event code launched already :<>');
+        require(evt.expTime < block.timestamp, 'err: event code not expired :<>');
+
+        //  loop through players, choose stable for refund, transfer from IERC20
+        for (uint i=0; i < evt.players.length; i++) {
+            // loop through 'whitelistStables', generate stables available (bals ok for debit)
+            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
+
+            // traverse stables available for debit, select stable w/ the lowest market value            
+            address stable = _getStableTokenLowMarketValue(stables_avail);
+            require(stable != address(0), 'err: low market stable address is 0 _ :+0');            
+
+            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
+            IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
+
+            // LEFT OFF HERE ... 
+            //  should refund be given in creditsUSD (logged in contract) 
+            //   or in stable token sent back player wallet
+
+            // note: debit from 'creditsUSD' occurred during 'registerEvent'
+        }
+
     }
 
     // support hostEndEventWithWinners
@@ -624,7 +660,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
-    function _increasePendingDebit(address token, uint256 amount) private {
+    function _increaseWhitelistPendingDebit(address token, uint256 amount) private {
         whitelistPendingDebits[token] += amount;
     }
 
