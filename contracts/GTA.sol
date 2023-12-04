@@ -223,6 +223,20 @@ contract GamerTokeAward is IERC20, Ownable {
         return creditsUSD;
     }
 
+    function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
+        require(_amount > minPlayerDepositUSD, 'err: amount must be greater than minPlayerDepositUSD =)');
+        minEventEntryFeeUSD = _amount;
+    }
+
+    function getAccruedGFRL() public view onlyKeeper returns (uint256) {
+        return accruedGasFeeRefundLoss;
+    }
+
+    function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
+        require(minPlayerDepositUSD_floor <= _amount && _amount <= minPlayerDepositUSD_ceiling, 'err: invalid amount =)');
+        minPlayerDepositUSD = _amount;
+    }
+
     // returns GTA total stable balances - total player credits ('whitelistStables' - 'creditsUSD')
     //  can be done simply from client side as well (ie. w/ 'getCredits()', client side can calc balances)
     function getGrossNetBalances() public onlyKeeper {
@@ -246,22 +260,51 @@ contract GamerTokeAward is IERC20, Ownable {
         return [stable_bal, owedCredits, net_bal];
     }
 
-    // host can start event w/ players pre-registerd for gameCode
-    function hostStartEvent(address _gameCode) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
+    // _winPercs: [%_1st_place, %_2nd_place, ...]
+    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
+        require(_startTime > block.timestamp, "err: start too soon :/");
+        require(_entryFeeUSD >= eventMinimumEntryFeeUSD, "required: entry fee too low :/");
+        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high');
+        require(_winPercs.length > 0, 'no winners? :O');
 
-        // get/validate active game
-        struct storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
+        // verify msg.sender has enough GTA to host
+        uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
+        require(bal >= (_entryFeeUSD * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+        // verify active game name/code doesn't exist yet
+        address gameCode = generateAddressHash(msg.sender, gameName);
+        require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
-        // set game launched state
-        game.launchTime = block.timestamp;
-        game.launchBlockNum = block.number;
-        game.launched = true;
-        return true;
+        // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
+        Game storage newGame = activeGames[gameCode];
+        //Game storage newGame; // create new default empty struct
+        
+        // set properties for default empty 'Game' struct
+        newGame.host = msg.sender;
+        newGame.gameName = _gameName;
+        newGame.entryFeeUSD = _entryFeeUSD;
+        newGame.hostFeePerc = _hostFeePerc;
+        newGame.winPercs = _winPercs;
+        newGame.createTime = block.timestamp;
+        newGame.startTime = _startTime;
+        newGame.expTime = _startTime + gameExpSec;
+        newGame.playerCnt = 0;
+        newGame.prizePoolUSD = 0;
+        newGame.launched = false;
+        newGame.ended = false;
+        newGame.expired = false;
+
+        // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
+        activeGames[gameCode] = newGame;
+        
+        // log new code in gameCodes array, for 'activeGames' support in 'cleanExpiredGames'
+        gameCodes.push(gameCode);
+        
+        // increment 'activeGameCount', for 'activeGames' support in 'cleanExpiredGames'
+        activeGameCount++;
+        
+        // return gameCode to caller
+        return gameCode;
     }
 
     // msg.sender can add themself to any game (debits from msg.sender credits)
@@ -334,131 +377,6 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    // host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
-    //  *WARNING* players should not share their addresses with anyone 'except' the host
-    //      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
-    // function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
-    //     require(player != address(0), 'err: no player ;l');
-
-    //     // get/validate active game
-    //     struct storage game = activeGames[gameCode];
-    //     require(game.host != address(0), 'err: invalid game code :I');
-
-    //     // check if msg.sender is game host
-    //     require(game.host == msg.sender, 'err: only host :/');
-
-    //     // check if game launched
-    //     require(!game.launched, 'err: event launched :(');
-
-    //     // check player for enough credits
-    //     require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
-
-    //     // debit entry fee from player credits
-    //     // creditsUSD[player] -= game.entryFeeUSD;
-    //     // handles tracking addresses w/ creditsAddrArray
-    //     _updateCredit(player, game.entryFeeUSD, true); // true = debit
-
-    //     // -1) add player to game event
-    //     // game.players.push(player);
-    //     game.players[player] = true;
-    //     game.playerCnt += 1;
-
-    //     return true;
-    // }
-
-    // _winners: [0x1st_place, 0x2nd_place, ...]
-    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
-        require(_winner.length > 0, 'err: no winner :p');
-
-        // get/validate active game
-        struct memory game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
-
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
-
-        // check if # of _winners == .winPercs array length (set during eventCreate)
-        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
-
-        // loop through _winners: distribute 'game.winPercs'
-        for (uint i=0; i < _winners.length; i++) {
-            // verify winner address was registered in the game
-            require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
-
-            // calc win_usd
-            address winner = _winners[i];
-            uint8 win_perc = game.winPercs[i];
-            uint256 win_pool = game.prizePoolUSD;
-            uint256 win_usd = win_pool * (win_perc/100);
-
-            // loop through 'whitelistStables', generate stables available (bals ok for debit)
-            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
-
-            // traverse stables available for debit, select stable w/ the lowest market value            
-            address stable = _getStableTokenLowMarketValue(stables_avail);
-            require(stable != address(0), 'err: low market stable address is 0 _ :+0');
-
-            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-            IERC20(stable).transfer(winner, win_usd * 10**18); 
-
-            // syncs w/ 'settleBalances' algorithm
-            _increaseWhitelistPendingDebit(tok_addr, win_usd);
-
-            // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
-        }
-
-        // set game end state (doesn't matter if its about to be deleted)
-        game.endTime = block.timestamp;
-        game.endBlockNum = block.number;
-        game.ended = true;
-
-        // delete game mapping
-        delete activeGames[_gameCode];
-        activeGameCount--;
-
-        // notify client side that an end event occurred successfully
-        emit EndEventActivity(block.timestamp, block.number, activeGameCount, _gameCode, _winners);
-        
-        return true;
-    }
-
-    // *WARNING* whitelistStables could have duplicates (set by keeper)
-    function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
-        // loop through white list stables, generate stables available (ok for debit)
-        address[] memory stablesAvail = []; // stables available to cover debit
-        for (uint 1 = 0; i < whitelistStables.length; i++) {
-
-            // get balnce for this whitelist stable (push to stablesAvail if has enough)
-            uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
-            if (stableBal > _debitAmntUSD * 10**18) { 
-                stablesAvail.push(whitelistStables[i]);
-            }
-        }
-        return stablesAvail;
-    }
-
-    // *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
-    function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
-        // traverse stables available for debit, select stable w/ the lowest market value
-        uint256 curr_high_tok_val = 0;
-        address curr_low_val_stable = 0x0;
-        for (uint i=0; i < stables.length, i++) {
-            
-            // get quote for this available stable (traverses 'routersUniswapV2')
-            //  looking for the stable that returns the most when swapped 'from' WPLS
-            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
-            address stable_addr = stables[i];
-            (uint8 rtrIdx, uint256 tok_val) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
-            if (tok_val >= curr_high_tok_val) {
-                curr_high_tok_val = tok_val;
-                curr_low_val_stable = stable_addr;
-            }
-        }
-        return curr_low_val_stable;
-    }
-
     // cancel event and process refunds (host, players, keeper)
     //  host|keeper can cancel if event not 'launched' yet
     //  players can cancel if event not 'launched' & 'expTime' has passed
@@ -523,45 +441,80 @@ contract GamerTokeAward is IERC20, Ownable {
         emit CanceledEvent();
     }
 
-    // support hostEndEventWithWinners
-    function _getLiquidityInPair(address _token, address _pair) private view returns (uint256) {
-        require(_token != address(0), 'err: no token :O');
-        require(_pair != address(0), 'err: no pair :O');
+    // host can start event w/ players pre-registerd for gameCode
+    function hostStartEvent(address _gameCode) public returns (bool) {
+        require(_gameCode != address(0), 'err: no game code :p');
 
-        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
-        require(_token == pair.token0() || _token == pair.token1(), 'err: invalid token->pair address :P');
+        // get/validate active game
+        struct storage game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
 
-        (uint reserve0, uint reserve1) = pair.getReserves();
-        if (_token == pair.token0()) { return reserve0; }
-        else { return reserve1; }
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
+
+        // set game launched state
+        game.launchTime = block.timestamp;
+        game.launchBlockNum = block.number;
+        game.launched = true;
+        return true;
     }
 
-    // support hostEndEventWithWinners (120223: not in use)
-    function _getPairLiquidity(address _token1, address _token2, address _factoryAddress) private view returns (uint256, uint256) {
-        require(_token1 != address(0), 'err: no token1 :O');
-        require(_token2 != address(0), 'err: no token2 :O');
+    // _winners: [0x1st_place, 0x2nd_place, ...]
+    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
+        require(_gameCode != address(0), 'err: no game code :p');
+        require(_winner.length > 0, 'err: no winner :p');
 
-        IUniswapV2Factory public uniswapFactory = IUniswapV2Factory(_factoryAddress);
-        address pair = uniswapFactory.getPair(_token1, _token2);
-        require(pair != address(0), 'err: pair does not exist');
+        // get/validate active game
+        struct memory game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I')
 
-        tok_liq_1 = _getLiquidityInPair(_token1, pair);
-        tok_liq_2 = _getLiquidityInPair(_token2, pair);
-        return (tok_liq_1, tok_liq_2);
-    }
+        // check if msg.sender is game host
+        require(game.host == msg.sender, 'err: only host :/');
 
-    function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
-        require(_amount > minPlayerDepositUSD, 'err: amount must be greater than minPlayerDepositUSD =)');
-        minEventEntryFeeUSD = _amount;
-    }
+        // check if # of _winners == .winPercs array length (set during eventCreate)
+        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
 
-    function getAccruedGFRL() public view onlyKeeper returns (uint256) {
-        return accruedGasFeeRefundLoss;
-    }
+        // loop through _winners: distribute 'game.winPercs'
+        for (uint i=0; i < _winners.length; i++) {
+            // verify winner address was registered in the game
+            require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
-    function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
-        require(minPlayerDepositUSD_floor <= _amount && _amount <= minPlayerDepositUSD_ceiling, 'err: invalid amount =)');
-        minPlayerDepositUSD = _amount;
+            // calc win_usd
+            address winner = _winners[i];
+            uint8 win_perc = game.winPercs[i];
+            uint256 win_pool = game.prizePoolUSD;
+            uint256 win_usd = win_pool * (win_perc/100);
+
+            // loop through 'whitelistStables', generate stables available (bals ok for debit)
+            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
+
+            // traverse stables available for debit, select stable w/ the lowest market value            
+            address stable = _getStableTokenLowMarketValue(stables_avail);
+            require(stable != address(0), 'err: low market stable address is 0 _ :+0');
+
+            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
+            IERC20(stable).transfer(winner, win_usd * 10**18); 
+
+            // syncs w/ 'settleBalances' algorithm
+            _increaseWhitelistPendingDebit(tok_addr, win_usd);
+
+            // notify client side that an end event distribution occurred successfully
+            emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
+        }
+
+        // set game end state (doesn't matter if its about to be deleted)
+        game.endTime = block.timestamp;
+        game.endBlockNum = block.number;
+        game.ended = true;
+
+        // delete game mapping
+        delete activeGames[_gameCode];
+        activeGameCount--;
+
+        // notify client side that an end event occurred successfully
+        emit EndEventActivity(block.timestamp, block.number, activeGameCount, _gameCode, _winners);
+        
+        return true;
     }
 
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
@@ -666,6 +619,68 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
+    }
+
+    // *WARNING* whitelistStables could have duplicates (set by keeper)
+    function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
+        // loop through white list stables, generate stables available (ok for debit)
+        address[] memory stablesAvail = []; // stables available to cover debit
+        for (uint 1 = 0; i < whitelistStables.length; i++) {
+
+            // get balnce for this whitelist stable (push to stablesAvail if has enough)
+            uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
+            if (stableBal > _debitAmntUSD * 10**18) { 
+                stablesAvail.push(whitelistStables[i]);
+            }
+        }
+        return stablesAvail;
+    }
+
+    // *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
+    function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
+        // traverse stables available for debit, select stable w/ the lowest market value
+        uint256 curr_high_tok_val = 0;
+        address curr_low_val_stable = 0x0;
+        for (uint i=0; i < stables.length, i++) {
+            
+            // get quote for this available stable (traverses 'routersUniswapV2')
+            //  looking for the stable that returns the most when swapped 'from' WPLS
+            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
+            address stable_addr = stables[i];
+            (uint8 rtrIdx, uint256 tok_val) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
+            if (tok_val >= curr_high_tok_val) {
+                curr_high_tok_val = tok_val;
+                curr_low_val_stable = stable_addr;
+            }
+        }
+        return curr_low_val_stable;
+    }
+
+    // support hostEndEventWithWinners
+    function _getLiquidityInPair(address _token, address _pair) private view returns (uint256) {
+        require(_token != address(0), 'err: no token :O');
+        require(_pair != address(0), 'err: no pair :O');
+
+        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
+        require(_token == pair.token0() || _token == pair.token1(), 'err: invalid token->pair address :P');
+
+        (uint reserve0, uint reserve1) = pair.getReserves();
+        if (_token == pair.token0()) { return reserve0; }
+        else { return reserve1; }
+    }
+
+    // support hostEndEventWithWinners (120223: not in use)
+    function _getPairLiquidity(address _token1, address _token2, address _factoryAddress) private view returns (uint256, uint256) {
+        require(_token1 != address(0), 'err: no token1 :O');
+        require(_token2 != address(0), 'err: no token2 :O');
+
+        IUniswapV2Factory public uniswapFactory = IUniswapV2Factory(_factoryAddress);
+        address pair = uniswapFactory.getPair(_token1, _token2);
+        require(pair != address(0), 'err: pair does not exist');
+
+        tok_liq_1 = _getLiquidityInPair(_token1, pair);
+        tok_liq_2 = _getLiquidityInPair(_token2, pair);
+        return (tok_liq_1, tok_liq_2);
     }
 
     // traverse 'whiltelistStables' using 'whitelistStablesUseIdx'
@@ -944,53 +959,6 @@ contract GamerTokeAward is IERC20, Ownable {
     function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
-
-    // _winPercs: [%_1st_place, %_2nd_place, ...]
-    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
-        require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= eventMinimumEntryFeeUSD, "required: entry fee too low :/");
-        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high');
-        require(_winPercs.length > 0, 'no winners? :O');
-
-        // verify msg.sender has enough GTA to host
-        uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
-        require(bal >= (_entryFeeUSD * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
-
-        // verify active game name/code doesn't exist yet
-        address gameCode = generateAddressHash(msg.sender, gameName);
-        require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
-
-        // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
-        Game storage newGame = activeGames[gameCode];
-        //Game storage newGame; // create new default empty struct
-        
-        // set properties for default empty 'Game' struct
-        newGame.host = msg.sender;
-        newGame.gameName = _gameName;
-        newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.hostFeePerc = _hostFeePerc;
-        newGame.winPercs = _winPercs;
-        newGame.createTime = block.timestamp;
-        newGame.startTime = _startTime;
-        newGame.expTime = _startTime + gameExpSec;
-        newGame.playerCnt = 0;
-        newGame.prizePoolUSD = 0;
-        newGame.launched = false;
-        newGame.ended = false;
-        newGame.expired = false;
-
-        // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
-        activeGames[gameCode] = newGame;
-        
-        // log new code in gameCodes array, for 'activeGames' support in 'cleanExpiredGames'
-        gameCodes.push(gameCode);
-        
-        // increment 'activeGameCount', for 'activeGames' support in 'cleanExpiredGames'
-        activeGameCount++;
-        
-        // return gameCode to caller
-        return gameCode;
-    }
     
     function payWinners() {
         /*
@@ -1102,3 +1070,39 @@ contract GamerTokeAward is IERC20, Ownable {
         owner = newOwner;
     }
 }
+
+/*****************/
+/*** DEAD CODE ***/
+/*****************/
+
+// host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
+//  *WARNING* players should not share their addresses with anyone 'except' the host
+//      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
+// function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
+//     require(player != address(0), 'err: no player ;l');
+
+//     // get/validate active game
+//     struct storage game = activeGames[gameCode];
+//     require(game.host != address(0), 'err: invalid game code :I');
+
+//     // check if msg.sender is game host
+//     require(game.host == msg.sender, 'err: only host :/');
+
+//     // check if game launched
+//     require(!game.launched, 'err: event launched :(');
+
+//     // check player for enough credits
+//     require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
+
+//     // debit entry fee from player credits
+//     // creditsUSD[player] -= game.entryFeeUSD;
+//     // handles tracking addresses w/ creditsAddrArray
+//     _updateCredit(player, game.entryFeeUSD, true); // true = debit
+
+//     // -1) add player to game event
+//     // game.players.push(player);
+//     game.players[player] = true;
+//     game.playerCnt += 1;
+
+//     return true;
+// }
