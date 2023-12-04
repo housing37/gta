@@ -459,6 +459,9 @@ contract GamerTokeAward is IERC20, Ownable {
         return curr_low_val_stable;
     }
 
+    // cancel event and process refunds (host, players, keeper)
+    //  host|keeper can cancel if event not 'launched' yet
+    //  players can cancel if event not 'launched' & 'expTime' has passed
     function cancelEventProcessRefunds(address _eventCode) public {
         require(_eventCode != address(0), 'err: no event code :<>');
 
@@ -468,35 +471,55 @@ contract GamerTokeAward is IERC20, Ownable {
         
         // check for valid sender to cancel (only registered players, host, or keeper)
         bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
-        require(isValidSender, 'err: only player or host can cancel event :<>')
+        require(isValidSender, 'err: only players or host :<>');
 
-        // verify the game has not launched & expire time has indeed passed
-        require(!evt.launched, 'err: event code launched already :<>');
-        require(evt.expTime < block.timestamp, 'err: event code not expired :<>');
+        // for host|player|keeper cancel, verify event not launched
+        require(!evt.launched, 'err: event started :<>'); 
+
+        // for player cancel, also verify event expTime must be passed 
+        if (evt.players[msg.sender]) {
+            require(evt.expTime < block.timestamp, 'err: event code not expired :<>');
+        } 
 
         //  loop through players, choose stable for refund, transfer from IERC20
         for (uint i=0; i < evt.players.length; i++) {
-            // loop through 'whitelistStables', generate stables available (bals ok for debit)
-            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
+            // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
+                // //  refunding full 'entryFeeUSD' means refunding w/o service fees removed
+                // //   *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
+                //
+                // // loop through 'whitelistStables', generate stables available (bals ok for debit)
+                // address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
+                //
+                // // traverse stables available for debit, select stable w/ the lowest market value            
+                // address stable = _getStableTokenLowMarketValue(stables_avail);
+                // require(stable != address(0), 'err: low market stable address is 0 _ :+0');            
+                //
+                // // send 'entryFeeUSD' back to player on chain (using lowest market value whitelist stable)
+                // IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
 
-            // traverse stables available for debit, select stable w/ the lowest market value            
-            address stable = _getStableTokenLowMarketValue(stables_avail);
-            require(stable != address(0), 'err: low market stable address is 0 _ :+0');            
+            // (OPTION_1) _ REFUND ENTRY FEE (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+            //  all fees of all kind MUST be removed 
+            //      in 'settleBalances' (before call to '_updateCredit')
+            //          - OR - 
+            //      in 'registerEvent|hostRegisterEvent'
+            //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+            //      - 'settleBalances' credits 'creditsUSD' AFTER all fees removed
+            //      - 'registerEvent|hostRegisterEvent' debits 'entryFeeUSD' from 'creditsUSD' (AFTER all fees removed)
+            //      - 'cancelEventProcessRefunds' credits 'entryFeeUSD' to 'creditsUSD' (w/o regard for any fees)
 
-            // REFUND ENTRY FEE 
-            //  NOTE: refunding full entry fee means refunding w/o service fees removed
-            // send 'entryFeeUSD' back to player on chain (using lowest market value whitelist stable)
-            // IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
+            // LEFT OFF HERE ... need to update 'Games' struct 
+            //      'Games' needs 'entryFeeUSD_net' or something like that
+            //          need a param to track 'entryFeeUSD' - 'all service fees' (except host fee)
+            //          ultimately: need a function like '_getRefundUSD(entryFeeUSD)'
 
             // credit 'entryFeeUSD' back to player in 'mapping(address => uint256) creditsUSD'
             _updateCredit(evt.players[i], evt.entryFeeUSD, false); // false = credit (tracks addresses w/ creditsAddrArray)
 
-            // LEFT OFF HERE ...
-            //  NOTE: refunding full entry fee means refunding w/o service fees removed
-
+            // notify listeners of processed refund
             emit ProcessedRefund();
         }
 
+        // notify listeners of canceled event
         emit CanceledEvent();
     }
 
@@ -622,6 +645,13 @@ contract GamerTokeAward is IERC20, Ownable {
             // 1) debit deposit fees from 'amntUsdCredit' (keeper optional)
             uint256 depositFee = amntUsdCredit * (usdStableDepositFeePerc/100);
             uint256 amnt = amntUsdCredit - depositFee;
+
+            // LEFT OFF HERE ... take out all fees, this may need to be done in 'registerEvent|hostRegisterEvent'
+            //  all fees of all kinds MUST be removed before call to '_updateCredit' in 'settleBalances'
+            //   allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+            //      - 'settleBalances' credits 'creditsUSD' AFTER all fees removed
+            //      - 'registerEvent|hostRegisterEvent' debits 'entryFeeUSD' from 'creditsUSD' (AFTER all fees removed)
+            //      - 'cancelEventProcessRefunds' credits 'entryFeeUSD' to 'creditsUSD' (w/o regard for any fees)
 
             // 2) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD' _ all fees removed
             //  handles tracking addresses w/ creditsAddrArray
