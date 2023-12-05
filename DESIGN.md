@@ -6,7 +6,7 @@
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
     //                  OR ... for free play w/ host register
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
-    
+
 ## GTA.sol finalized design & integration ##
     - remaining integrations (algorithms ready to be coded)
         DONE - finalize debits/credits integration
@@ -16,10 +16,11 @@
             DONE - design a way that ‘settleBalances’ chooses a stable token to swap into and hold
 
         - refund players
-            call 'processRefunds(event_code)' to refund all entry_fees 
+            call 'cancelEventProcessRefunds(event_code)' to refund all entry_fees 
              required: event_code has 'expired' and not yet 'launched'
 
         - GTA token distribution (minting & burning)
+                - ref: 'registerEvent', 'hostRegisterEvent', 'cancelEventProcessRefunds', 'settleBalances' (maybe)
              1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
              2) host & winners get minted some amount after event ends
                  *required: mint amount < buy & burn amount

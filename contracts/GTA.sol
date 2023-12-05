@@ -61,32 +61,48 @@ contract GamerTokeAward is IERC20, Ownable {
         
     /* _ GAME SUPPORT _ */
     struct Game {
-        address host;
-        string gameName;
-        uint256 entryFeeUSD;
-        uint8 hostFeePerc;
-        uint8[] winPercs;
-        // address[] players;
-        mapping(address => bool) players;
-        uint256 playerCnt;
-        uint256 prizePoolUSD;
+        address host;           // input param
+        string gameName;        // input param
+        uint32 entryFeeUSD;     // input param
+        uint32 prizePoolUSD;    // entryFeeUSD * playerCnt
+
+        uint8 hostFeePerc;      // % of prizePoolUSD (dynamic)
+        uint8 keeperFeePerc;    // % of prizePoolUSD (1% ?)
+        uint8 serviceFeePerc;   // % of prizePoolUSD (10% ?)
+        uint8 supportFeePerc;   // % of prizePoolUSD (needed ?)
+        uint8 buyAndBurnPerc;   // % of serviceFeeUSD (50% ?)
+        uint8 mintDistrPerc;    // % of ?
+        uint8[] winPercs;       // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
+
+        uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
+        uint32 keeperFeeUSD;    // prizePoolUSD * keeperFeePerc
+        uint32 serviceFeeUSD;   // prizePoolUSD * serviceFeePerc
+        uint32 supportFeeUSD;   // prizePoolUSD * supportFeePerc (needed?)
+        uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
+        
+        mapping(address => bool) players; // true = registerd 
+        uint32 playerCnt;       // length or players; max 4,294,967,295
+
         uint256 createTime;
-        uint256 startTime;
+        uint256 createBlockNum;
+        uint256 startTime;      // host scheduled
         uint256 launchTime;
         uint256 launchBlockNum;
         uint256 endTime;
         uint256 endBlockNum;
+        uint256 expTime;
+        uint256 expBlockNum;
+
         bool launched;
         bool ended;
         bool expired;
-        uint256 expTime;
     }
     
     // map generated gameCode address to Game structs
     mapping(address => Game) public activeGames;
     
     // required GTA balance ratio to host game (ratio of entry_fee desired)
-    uint16 public hostRequirementPercent = 100; // max = 65,535 (uint16 max)
+    uint16 public hostRequirementPerc = 100; // max = 65,535 (uint16 max)
     
     // track activeGameCount to loop through 'gameCodes', for cleaning expired 'activeGames'
     uint256 public activeGameCount = 0;
@@ -119,10 +135,13 @@ contract GamerTokeAward is IERC20, Ownable {
     // usd deposit fee taken out of amount used for creditsUSD updates
     //  - this is a simple fee 'per deposit' (goes to contract)
     //  - keeper has the option to set this fee
-    uint256 private usdStableDepositFeePerc = 0;
+    uint256 private depositFeePerc = 0;
 
     // max percent of prize pool the host may charge
-    uint8 private maxHostFeePerc = 100;
+    uint8 public maxHostFeePerc = 100; // % of prize pool
+
+    // service held by contract for all defi services
+    uint8 public serviceFeePerc = 0; // % of prize pool
 
     // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
     mapping(address => uint256) storage private whitelistBalances;
@@ -207,7 +226,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     function setDepositFeePerc(uint8 perc) public onlyKeeper {
-        usdStableDepositFeePerc = perc;
+        depositFeePerc = perc;
     }
 
     function getLastBlockNumUpdate() public view onlyKeeper {
@@ -260,16 +279,26 @@ contract GamerTokeAward is IERC20, Ownable {
         return [stable_bal, owedCredits, net_bal];
     }
 
-    // _winPercs: [%_1st_place, %_2nd_place, ...]
+    function _getTotalForUintArray(uint8 _arr) returns (uint8) {
+        uint8 t = 0;
+        for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
+        return t;
+    }
+
+    // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
     function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= eventMinimumEntryFeeUSD, "required: entry fee too low :/");
-        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high');
+        require(_entryFeeUSD >= minEventEntryFeeUSD, "required: entry fee too low :/");
+        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length > 0, 'no winners? :O');
+        require(_getTotalForUintArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
 
-        // verify msg.sender has enough GTA to host
-        uint256 bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
-        require(bal >= (_entryFeeUSD * (hostRequirementPercent/100)), "err: not enough GTA to host :/");
+        // verify msg.sender has enough GTA to host, by comparing against 'hostRequirementPerc' of '_entryFreeUSD'
+        uint256 gta_bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
+
+        // get stable quote for host's gta_bal (traverses 'routersUniswapV2')
+        (uint8 rtrIdx, uint256 stable_quote) = best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
+        require(stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100)), "err: not enough GTA to host :/");
 
         // verify active game name/code doesn't exist yet
         address gameCode = generateAddressHash(msg.sender, gameName);
@@ -283,16 +312,12 @@ contract GamerTokeAward is IERC20, Ownable {
         newGame.host = msg.sender;
         newGame.gameName = _gameName;
         newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.hostFeePerc = _hostFeePerc;
-        newGame.winPercs = _winPercs;
+        newGame.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
+        newGame.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
         newGame.createTime = block.timestamp;
+        newGame.createBlockNum = block.number;
         newGame.startTime = _startTime;
         newGame.expTime = _startTime + gameExpSec;
-        newGame.playerCnt = 0;
-        newGame.prizePoolUSD = 0;
-        newGame.launched = false;
-        newGame.ended = false;
-        newGame.expired = false;
 
         // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
         activeGames[gameCode] = newGame;
@@ -327,14 +352,12 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
-        
+
         // debit entry fee from msg.sender credits (player)
-        // creditsUSD[msg.sender] -= game.entryFeeUSD;
-        // handles tracking addresses w/ creditsAddrArray
-        _updateCredit(msg.sender, uint256 game.entryFeeUSD, true); // true = debit
+        //  tracks addresses w/ creditsAddrArray
+        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
-        // game.players.push(msg.sender);
         game.players[msg.sender] = true;
         game.playerCnt += 1;
         
@@ -365,8 +388,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
-        // creditsUSD[msg.sender] -= game.entryFeeUSD;
-        // handles tracking addresses w/ creditsAddrArray
+        //  tracks addresses w/ creditsAddrArray
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
@@ -452,7 +474,50 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // set game launched state
+        // LEFT OFF HERE ... 
+        //  calc 'prizePoolUSD' from all 'entryFeeUSD' collected, deduct all service fees
+        //      (AFTER debit from '_updateCredit')
+        //  GTA token distribution (minting & burning)
+        //   ref: 'registerEvent', 'hostRegisterEvent', 'cancelEventProcessRefunds', 'settleBalances' (maybe)
+        //  1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
+        //  2) host & winners get minted some amount after event ends
+        //      *required: mint amount < buy & burn amount
+
+        // LEFT OFF HERE ... 
+        //  current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs'
+        //   - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+        //   - 'hostFeePerc' & 'serviceFeePerc' & 'winPercs' -> taken from calc'd 'prizePoolUSD'
+        //
+        //      'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
+        //      hostFeeUSD = 'prizePoolUSD' * 'hostFeePerc'
+        //      serviceFeeUSD = 'prizePoolUSD' * 'serviceFeePerc'
+        //      'prizePoolUSD' -= hostFeeUSD
+        //      'prizePoolUSD' -= serviceFeeUSD
+        //      payout0 = 'prizePoolUSD' * winPercs[0]
+        //      payout1 = 'prizePoolUSD' * winPercs[1]
+        //      payout2 = 'prizePoolUSD' * winPercs[2]
+        //      payoutX = 'prizePoolUSD' * winPercs[X]
+        //
+        //      LEFT OF HERE ... what do we do with this logic? ^
+        
+        evt.prizePoolUSD = evt.entryFeeUSD * evt.playerCnt
+        evt.hostFeeUSD = prizePoolUSD * hostFeePerc
+        evt.serviceFeeUSD = prizePoolUSD * serviceFeePerc
+        prizePoolUSD -= hostFeeUSD
+        prizePoolUSD -= serviceFeeUSD
+        uint8 payout0 = prizePoolUSD * winPercs[0]
+        uint8 payout1 = prizePoolUSD * winPercs[1]
+        uint8 payout2 = prizePoolUSD * winPercs[2]
+        uint8 payoutX = prizePoolUSD * winPercs[X]
+
+	    // LEFT OFF HERE … with integration started ^
+        
+        //  working with entryFeeUSD
+        //      -> do distribute: depositFeePerc, hostFeePerc, winPercs
+        // -2) update game hostFeeUSD, winUSDs
+
+        // set event fee calculations & prizePoolUSD
+        // set event launched state
         game.launchTime = block.timestamp;
         game.launchBlockNum = block.number;
         game.launched = true;
@@ -596,7 +661,7 @@ contract GamerTokeAward is IERC20, Ownable {
             }
 
             // 1) debit deposit fees from 'amntUsdCredit' (keeper optional)
-            uint256 depositFee = amntUsdCredit * (usdStableDepositFeePerc/100);
+            uint256 depositFee = amntUsdCredit * (depositFeePerc/100);
             uint256 amnt = amntUsdCredit - depositFee;
 
             // LEFT OFF HERE ... take out all fees, this may need to be done in 'registerEvent|hostRegisterEvent'
@@ -723,11 +788,11 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredit(address _player, uint256 _amount, bool _debit) private {
+    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
             // ensure there is enough credit before debit
-            require(creditsUSD[_player] >= _amount, 'err: invalid credits to debit :[');
-            creditsUSD[_player] -= _amount;
+            require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
+            creditsUSD[_player] -= _amountUSD;
 
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
@@ -735,7 +800,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 _remCreditsAddrArray(_player);
             }
         } else { 
-            creditsUSD[_player] += _amount; 
+            creditsUSD[_player] += _amountUSD; 
             _addCreditsAddrArraySafe[_player]; // removes first
         }
     }
@@ -940,8 +1005,8 @@ contract GamerTokeAward is IERC20, Ownable {
     
     // GETTERS / SETTERS
     function getHostRequirementForEntryFee(uint256 _entryFeeUSD) public pure returns (uint256) {
-        return _entryFeeUSD * (hostRequirementPercent/100);
-        // can also just get the public class var directly: 'hostRequirementPercent'
+        return _entryFeeUSD * (hostRequirementPerc/100);
+        // can also just get the public class var directly: 'hostRequirementPerc'
     }
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
