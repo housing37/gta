@@ -429,7 +429,7 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // for player cancel, also verify event expTime must be passed 
         if (evt.players[msg.sender]) {
-            require(evt.expTime < block.timestamp, 'err: event code not expired :<>');
+            require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
         } 
 
         //  loop through players, choose stable for refund, transfer from IERC20
@@ -497,59 +497,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    function _launchEvent(Game storage _evt) private returns (Game storage ) {
-        // set event fee calculations & prizePoolUSD
-        // set event launched state
-        _evt.launchTime = block.timestamp;
-        _evt.launchBlockNum = block.number;
-        _evt.launched = true;
-        return _evt;
-    }
-
-    function _generatePrizePool(Game storage _evt) private returns (Game storage) {
-        /* DEDUCTING FEES
-            current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
-             - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-             - all other fees -> taken from 'prizePoolUSD' generated below
-
-            Formula ...
-                'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
-                'hostFeeUSD' = 'prizePoolUSD' * 'hostFeePerc'
-                'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
-                'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
-                'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
-                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
-        */
-
-        // calc individual player fees & refund for 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
-        _evt.hostFeeUSD_ind = _evt.entryFeeUSD * _evt.hostFeePerc;
-        _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * _evt.keeperFeePerc;
-        _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * _evt.serviceFeePerc;
-        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * _evt.supportFeePerc; // optional
-        _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
-
-        // calc idividual refunds and total refunds (if needed)
-        _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
-        _evt.refundsUSD = evt.refundUSD_ind * evt.playerCnt;
-        
-        // calc all fees from 'prizePoolUSD'
-        _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
-        _evt.keeperFeeUSD = _evt.prizePoolUSD * (_evt.keeperFeePerc/100);
-        _evt.serviceFeeUSD = _evt.prizePoolUSD * (_evt.serviceFeePerc/100);
-        _evt.supportFeeUSD = _evt.prizePoolUSD * (_evt.supportFeePerc/100); // optional
-        _evt.totalFeesUSD = _evt.hostFeeUSD + _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
-
-        // calc 'prizePoolUSD' from 'entryFeeUSD' & deduct all fees
-        _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
-        
-        // calc payouts (after all fees deducted)
-        for (uint i=0; i < _evt.winPercs.length; i++) {
-            _evt.payouts.push(_evt.prizePoolUSD * _evt.winPercs[i]);
-        }
-
-        return _evt;
-    }
-
+    // LEFT OFF HERE ... need to payout 'host' & 'keeper'
     // _winners: [0x1st_place, 0x2nd_place, ...]
     function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
@@ -712,6 +660,61 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
+    }
+
+    // set event params to launched state
+    function _launchEvent(Game storage _evt) private returns (Game storage ) {
+        // set event fee calculations & prizePoolUSD
+        // set event launched state
+        _evt.launchTime = block.timestamp;
+        _evt.launchBlockNum = block.number;
+        _evt.launched = true;
+        return _evt;
+    }
+
+    // calculate prize pool, payouts, fees, refunds, totals
+    function _generatePrizePool(Game storage _evt) private returns (Game storage) {
+        /* DEDUCTING FEES
+            current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
+             - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+             - all other fees -> taken from 'prizePoolUSD' generated below
+
+            Formula ...
+                'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
+                'hostFeeUSD' = 'prizePoolUSD' * 'hostFeePerc'
+                'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
+                'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
+                'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
+                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
+        */
+
+        // calc individual player fees & refund for 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
+        _evt.hostFeeUSD_ind = _evt.entryFeeUSD * _evt.hostFeePerc;
+        _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * _evt.keeperFeePerc;
+        _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * _evt.serviceFeePerc;
+        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * _evt.supportFeePerc; // optional
+        _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
+
+        // calc idividual refunds and total refunds (if needed)
+        _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
+        _evt.refundsUSD = evt.refundUSD_ind * evt.playerCnt;
+        
+        // calc all fees from 'prizePoolUSD'
+        _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
+        _evt.keeperFeeUSD = _evt.prizePoolUSD * (_evt.keeperFeePerc/100);
+        _evt.serviceFeeUSD = _evt.prizePoolUSD * (_evt.serviceFeePerc/100);
+        _evt.supportFeeUSD = _evt.prizePoolUSD * (_evt.supportFeePerc/100); // optional
+        _evt.totalFeesUSD = _evt.hostFeeUSD + _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+
+        // calc 'prizePoolUSD' from 'entryFeeUSD' & deduct all fees
+        _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
+        
+        // calc payouts (after all fees deducted)
+        for (uint i=0; i < _evt.winPercs.length; i++) {
+            _evt.payouts.push(_evt.prizePoolUSD * _evt.winPercs[i]);
+        }
+
+        return _evt;
     }
 
     // *WARNING* whitelistStables could have duplicates (set by keeper)
