@@ -14,7 +14,7 @@
              1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
              2) host & winners get minted some amount after event ends
                  *required: mint amount < buy & burn amount
-                 
+
         DONE - finalize debits/credits integration
             DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
             DONE - integration w/ _increasePendingDebit, _increaseWhitelistBalance, _settlePendingDebit, _sanityCheck
@@ -29,16 +29,21 @@
 
     - current integration
         - DEDUCTING FEES
-            current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
-            N/A - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-            DONE - all other fees -> taken from generated 'prizePoolUSD'
+            current service fees: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
+             - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+             - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
+             - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
+             - win payouts -> taken from net 'prizePoolUSD' generated below
+
             Formula ...
-                'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
-                'hostFeeUSD' = 'prizePoolUSD' * 'hostFeePerc'
-                'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
-                'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
-                'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
-                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
+                keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
+                serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
+                supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
+
+                GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
+                    hostFeeUSD = prizePoolUSD * hostFeePerc
+                NET prizePoolUSD -= hostFeeUSD
+                    payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
 
         - REFUNDING FEES
             (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
