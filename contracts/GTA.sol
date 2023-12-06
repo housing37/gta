@@ -141,7 +141,7 @@ contract GamerTokeAward is IERC20, Ownable {
 
     // usd credits for players to pay entryFeeUSD to join games
     mapping(address => uint256) private creditsUSD;
-    address[] storage private creditsAddrArray;
+    address[] storage private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
 
     // usd deposit fee taken out of amount used for creditsUSD updates
     //  - this is a simple fee 'per deposit' (goes to contract)
@@ -189,7 +189,7 @@ contract GamerTokeAward is IERC20, Ownable {
     event DepositFailed(address sender, address token, uint256 tokenAmount, uint256 stableAmount, uint256 minDepositUSD, bool refundsEnabled);
 
     // emit to client side when deposit processed (after sender's manual transfer to contract)
-    event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
+    event DepositProcessed(address sender, address token, uint256 amount, uint256 stable_swap_fee, uint256 depositFee, uint256 balance);
 
     // notify client side that an event distribution (winner payout) has occurred successuflly
     event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
@@ -200,6 +200,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // notify client side that an event has been canceled
     event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
     event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prizePoolUSD, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
+
+    // notify client side that someoen cracked the burn code and burned all gta in this contract
+    event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -365,7 +368,6 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (player)
-        //  tracks addresses w/ creditsAddrArray
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
@@ -399,7 +401,6 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
-        //  tracks addresses w/ creditsAddrArray
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
@@ -449,7 +450,7 @@ contract GamerTokeAward is IERC20, Ownable {
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredit(evt.players[i], evt.refundUSD_ind, false); // false = credit (tracks addresses w/ creditsAddrArray)
+            _updateCredit(evt.players[i], evt.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.players[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
@@ -457,6 +458,41 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // notify listeners of canceled event
         emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
+    }
+
+    // code required to burn all GTA in the contract
+    //  uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    uint16 private BURN_CODE; 
+    uint64 public BURN_CODE_GUESS_CNT = 0;
+    function setBurnCode(uint16 bc) public onlyKeeper {
+        require(bc != BURN_CODE, 'err: same burn code ={}');
+        BURN_CODE = bc;
+    }
+    function getBurnCode() public onlyKeeper returns (uint16) {
+        return BURN_CODE;
+    }
+
+    // public can try to guess the burn code (earn half the balance, burn the rest)
+    function burnGTA(uint16 burnCode) public {
+        BURN_CODE_GUESS_CNT++; // keep track of guess count
+        uint256 bal = IERC20(address(this)).balanceOf(address(this));
+
+        // verify burn code & balance to burn
+        require(burnCode == BURN_CODE, 'err: invalid burn_code, guess again :p');        
+        require(bal > 0, 'err: no GTA to burn :p');
+
+        // burn it.. burn it real good (half burn, half to cracker)
+        uint256 bal_burn = (bal/2);
+        uint256 bal_earn = bal - (bal/2);
+        IERC20(address(this)).transfer(address(0), bal_burn);
+        IERC20(address(this)).transfer(msg.sender, bal_earn);
+
+        // notify the world that shit was burned
+        emit BurnedGTA(bal, msg.sender, BURN_CODE_GUESS_CNT);
+
+        // reset guess count
+        BURN_CODE_GUESS_CNT = 0;
     }
 
     // host can start event w/ players pre-registerd for gameCode
@@ -561,8 +597,8 @@ contract GamerTokeAward is IERC20, Ownable {
             require(_sanityCheck(tok_addr, tok_amnt), 'err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!');
 
             // default: if found in 'whitelistStables'
-            uint256 amntUsdCredit = tok_amnt; 
-            uint256 altSwapFee = 0; // gas fee loss for swap: alt -> stable
+            uint256 stable_credit_amnt = tok_amnt; 
+            uint256 stable_swap_fee = 0; // gas fee loss for swap: alt -> stable
 
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
             if (!whitelistStables[tok_addr]) {
@@ -602,33 +638,28 @@ contract GamerTokeAward is IERC20, Ownable {
 
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                amntUsdCredit = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt);
+                stable_credit_amnt = swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt);
                 uint256 gasfeeloss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
-                (uint8 rtrIdx, altSwapFee) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], gasfeeloss);
+                (uint8 rtrIdx, stable_swap_fee) = best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], gasfeeloss);
 
-                // debit swap fee from 'amntUsdCredit'
-                amntUsdCredit -= altSwapFee;                
+                // debit swap fee from 'stable_credit_amnt'
+                stable_credit_amnt -= stable_swap_fee;                
             }
 
-            // 1) debit deposit fees from 'amntUsdCredit' (keeper optional)
-            uint256 depositFee = amntUsdCredit * (depositFeePerc/100);
-            uint256 amnt = amntUsdCredit - depositFee;
+            // 1) debit deposit fees from 'stable_credit_amnt' (keeper optional)
+            uint256 depositFee = stable_credit_amnt * (depositFeePerc/100);
+            uint256 stable_net_amnt = stable_credit_amnt - depositFee; 
 
-            // LEFT OFF HERE ... take out all fees, this may need to be done in 'registerEvent|hostRegisterEvent'
-            //  all fees of all kinds MUST be removed before call to '_updateCredit' in 'settleBalances'
-            //   allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
-            //      - 'settleBalances' credits 'creditsUSD' AFTER all fees removed
-            //      - 'registerEvent|hostRegisterEvent' debits 'entryFeeUSD' from 'creditsUSD' (AFTER all fees removed)
-            //      - 'cancelEventProcessRefunds' credits 'entryFeeUSD' to 'creditsUSD' (w/o regard for any fees)
+            // convert wei to ether (uint256 to uint32)
+            uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
 
-            // 2) add 'amntUsdCredit' to 'mapping(src_addr => amount) creditsUSD' _ all fees removed
-            //  handles tracking addresses w/ creditsAddrArray
-            _updateCredit(src_addr, amnt, false); // false = credit
+            // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
+            _updateCredit(src_addr, usd_net_amnt, false); // false = credit
 
             // notify client side, deposit successful
-            emit DepositProcessed(src_addr, tok_addr, tok_amnt, altSwapFee, depositFee, amnt);
+            emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, net_amnt);
         }
 
         // update last block number
@@ -638,17 +669,22 @@ contract GamerTokeAward is IERC20, Ownable {
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
-    function _transferBestStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
+    function _getBestDebitStableUSD(uint32 _amountUSD) private returns (address) {
         // loop through 'whitelistStables', generate stables available (bals ok for debit)
         address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
 
         // traverse stables available for debit, select stable w/ the lowest market value            
         address stable = _getStableTokenLowMarketValue(stables_avail);
         require(stable != address(0), 'err: low market stable address is 0 _ :+0');
+        return stable;
+    }
+
+    function _transferBestStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
+        // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
+        address stable = _getBestDebitStableUSD(_amountUSD);
 
         // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
-
         return stable;
     }
 
@@ -709,9 +745,14 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // calc total fees for all 'entryFeeUSD' paid
         _evt.keeperFeeUSD = _evt.keeperFeeUSD_ind * _evt.playerCnt;
-        _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt;
+        _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt; // GROSS
         _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt; // optional
         _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+
+        // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
+        //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
+        _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
+        _evt.serviceFeeUSD -= _evt.buyAndBurnUSD // NET
 
         // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
         _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
@@ -845,11 +886,11 @@ contract GamerTokeAward is IERC20, Ownable {
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
                 delete creditsUSD[_player];
-                _remCreditsAddrArray(_player);
+                _remCreditsAddrArray(_player); // 'getGrossNetBalances' support
             }
         } else { 
             creditsUSD[_player] += _amountUSD; 
-            _addCreditsAddrArraySafe[_player]; // removes first
+            _addCreditsAddrArraySafe[_player]; // 'getGrossNetBalances' support
         }
     }
 
