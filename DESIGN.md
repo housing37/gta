@@ -24,8 +24,37 @@
              1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
              2) host & winners get minted some amount after event ends
                  *required: mint amount < buy & burn amount
+                 
+        - payout keeper and host (in ‘hostEndEvent’)
 
     - current integration
+        - DEDUCTING FEES
+            current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
+            N/A - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+            DONE - all other fees -> taken from generated 'prizePoolUSD'
+            Formula ...
+                'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
+                'hostFeeUSD' = 'prizePoolUSD' * 'hostFeePerc'
+                'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
+                'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
+                'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
+                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
+
+        - REFUNDING FEES
+            (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
+             refunding full 'entryFeeUSD' means refunding w/o service fees removed
+              *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
+
+            (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+             service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
+             deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
+              this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+                 - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
+                 - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
+                 - 'hostStartEvent' calcs 'prizePoolUSD' & 'payouts'
+                 - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
+                 - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
+
         - owner model _ modifier onlyOwner()
             - mint(address to, uint256 amount)
             - transferOwnership(address newOwner)

@@ -72,12 +72,23 @@ contract GamerTokeAward is IERC20, Ownable {
         uint8 supportFeePerc;   // % of prizePoolUSD (needed ?)
         uint8 buyAndBurnPerc;   // % of serviceFeeUSD (50% ?)
         uint8 mintDistrPerc;    // % of ?
-        uint8[] winPercs;       // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
+        uint8[] winPercs;       // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD + keeperFeeUSD + supportFeeUSD)
+        uint32[] payouts;       // prizePoolUSD * winPercs[]
 
         uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
         uint32 keeperFeeUSD;    // prizePoolUSD * keeperFeePerc
         uint32 serviceFeeUSD;   // prizePoolUSD * serviceFeePerc
-        uint32 supportFeeUSD;   // prizePoolUSD * supportFeePerc (needed?)
+        uint32 supportFeeUSD;   // prizePoolUSD * supportFeePerc (optional)
+        uint32 totalFeesUSD;    // _evt.hostFeeUSD + _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+
+        uint32 hostFeeUSD_ind;      // entryFeeUSD * hostFeePerc
+        uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
+        uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
+        uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc (optional)
+        uint32 refundUSD_ind;       // entryFeeUSD - (keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind)
+        uint32 refundsUSD;          // refundUSD_ind * evt.playerCnt
+        uint32 totalFeesUSD_ind;    // _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind
+
         uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
         
         mapping(address => bool) players; // true = registerd 
@@ -186,9 +197,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // notify client side that an end event has occurred successfully
     event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
 
-    // LEFT OFF HERE ... need to finish these 2 event designs
-    event ProcessedRefund();
-    event CanceledEvent();
+    // notify client side that an event has been canceled
+    event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
+    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prizePoolUSD, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
     // CONSTRUCTOR
     constructor(uint256 initialSupply) {
@@ -344,7 +355,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(gameCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        struct storage game = activeGames[gameCode];
+        Game storage game = activeGames[gameCode];
         require(game.host != address(0), 'err: invalid game code :I')
 
         // check if game launched
@@ -375,7 +386,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(_gameCode != address(0), 'err: no game code ;l');
 
         // get/validate active game
-        struct storage game = activeGames[_gameCode];
+        Game storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
@@ -406,7 +417,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
-        struct storage evt = activeGames[_eventCode];
+        Game storage evt = activeGames[_eventCode];
         require(evt.host != address(0), 'err: invalid event code :<>')
         
         // check for valid sender to cancel (only registered players, host, or keeper)
@@ -424,8 +435,8 @@ contract GamerTokeAward is IERC20, Ownable {
         //  loop through players, choose stable for refund, transfer from IERC20
         for (uint i=0; i < evt.players.length; i++) {
             // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
-                // //  refunding full 'entryFeeUSD' means refunding w/o service fees removed
-                // //   *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
+            //  refunding full 'entryFeeUSD' means refunding w/o service fees removed
+            //   *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
                 //
                 // // loop through 'whitelistStables', generate stables available (bals ok for debit)
                 // address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
@@ -437,30 +448,25 @@ contract GamerTokeAward is IERC20, Ownable {
                 // // send 'entryFeeUSD' back to player on chain (using lowest market value whitelist stable)
                 // IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
 
-            // (OPTION_1) _ REFUND ENTRY FEE (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
-            //  all fees of all kind MUST be removed 
-            //      in 'settleBalances' (before call to '_updateCredit')
-            //          - OR - 
-            //      in 'registerEvent|hostRegisterEvent'
+            // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+            //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
+            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
             //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
-            //      - 'settleBalances' credits 'creditsUSD' AFTER all fees removed
-            //      - 'registerEvent|hostRegisterEvent' debits 'entryFeeUSD' from 'creditsUSD' (AFTER all fees removed)
-            //      - 'cancelEventProcessRefunds' credits 'entryFeeUSD' to 'creditsUSD' (w/o regard for any fees)
+            //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
+            //      - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
+            //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payouts'
+            //      - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
+            //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
-            // LEFT OFF HERE ... need to update 'Games' struct 
-            //      'Games' needs 'entryFeeUSD_net' or something like that
-            //          need a param to track 'entryFeeUSD' - 'all service fees' (except host fee)
-            //          ultimately: need a function like '_getRefundUSD(entryFeeUSD)'
-
-            // credit 'entryFeeUSD' back to player in 'mapping(address => uint256) creditsUSD'
-            _updateCredit(evt.players[i], evt.entryFeeUSD, false); // false = credit (tracks addresses w/ creditsAddrArray)
+            // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+            _updateCredit(evt.players[i], evt.refundUSD_ind, false); // false = credit (tracks addresses w/ creditsAddrArray)
 
             // notify listeners of processed refund
-            emit ProcessedRefund();
+            emit ProcessedRefund(evt.players[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
         }
 
         // notify listeners of canceled event
-        emit CanceledEvent();
+        emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
     }
 
     // host can start event w/ players pre-registerd for gameCode
@@ -468,60 +474,80 @@ contract GamerTokeAward is IERC20, Ownable {
         require(_gameCode != address(0), 'err: no game code :p');
 
         // get/validate active game
-        struct storage game = activeGames[_gameCode];
+        Game storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I')
 
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
+        // calc/set 'prizePoolUSD' & 'payouts' from 'entryFeeUSD' collected
+        //  deduct all service fees (AFTER 'registerEvent|hostRegisterEvent)
+        game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
+        game = _launchEvent(game); // set event state to 'launched = true'
+
         // LEFT OFF HERE ... 
-        //  calc 'prizePoolUSD' from all 'entryFeeUSD' collected, deduct all service fees
-        //      (AFTER debit from '_updateCredit')
         //  GTA token distribution (minting & burning)
         //   ref: 'registerEvent', 'hostRegisterEvent', 'cancelEventProcessRefunds', 'settleBalances' (maybe)
         //  1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
         //  2) host & winners get minted some amount after event ends
         //      *required: mint amount < buy & burn amount
 
-        // LEFT OFF HERE ... 
-        //  current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs'
-        //   - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-        //   - 'hostFeePerc' & 'serviceFeePerc' & 'winPercs' -> taken from calc'd 'prizePoolUSD'
-        //
-        //      'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
-        //      hostFeeUSD = 'prizePoolUSD' * 'hostFeePerc'
-        //      serviceFeeUSD = 'prizePoolUSD' * 'serviceFeePerc'
-        //      'prizePoolUSD' -= hostFeeUSD
-        //      'prizePoolUSD' -= serviceFeeUSD
-        //      payout0 = 'prizePoolUSD' * winPercs[0]
-        //      payout1 = 'prizePoolUSD' * winPercs[1]
-        //      payout2 = 'prizePoolUSD' * winPercs[2]
-        //      payoutX = 'prizePoolUSD' * winPercs[X]
-        //
-        //      LEFT OF HERE ... what do we do with this logic? ^
-        
-        evt.prizePoolUSD = evt.entryFeeUSD * evt.playerCnt
-        evt.hostFeeUSD = prizePoolUSD * hostFeePerc
-        evt.serviceFeeUSD = prizePoolUSD * serviceFeePerc
-        prizePoolUSD -= hostFeeUSD
-        prizePoolUSD -= serviceFeeUSD
-        uint8 payout0 = prizePoolUSD * winPercs[0]
-        uint8 payout1 = prizePoolUSD * winPercs[1]
-        uint8 payout2 = prizePoolUSD * winPercs[2]
-        uint8 payoutX = prizePoolUSD * winPercs[X]
+	    // LEFT OFF HERE … need to design how 'evt.buyAndBurnPerc|USD' comes into play
 
-	    // LEFT OFF HERE … with integration started ^
-        
-        //  working with entryFeeUSD
-        //      -> do distribute: depositFeePerc, hostFeePerc, winPercs
-        // -2) update game hostFeeUSD, winUSDs
+        return true;
+    }
 
+    function _launchEvent(Game storage _evt) private returns (Game storage ) {
         // set event fee calculations & prizePoolUSD
         // set event launched state
-        game.launchTime = block.timestamp;
-        game.launchBlockNum = block.number;
-        game.launched = true;
-        return true;
+        _evt.launchTime = block.timestamp;
+        _evt.launchBlockNum = block.number;
+        _evt.launched = true;
+        return _evt;
+    }
+
+    function _generatePrizePool(Game storage _evt) private returns (Game storage) {
+        /* DEDUCTING FEES
+            current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
+             - 'depositFeePerc' -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+             - all other fees -> taken from 'prizePoolUSD' generated below
+
+            Formula ...
+                'prizePoolUSD' = 'evt.entryFeeUSD' * 'evt.playerCnt'
+                'hostFeeUSD' = 'prizePoolUSD' * 'hostFeePerc'
+                'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
+                'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
+                'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
+                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
+        */
+
+        // calc individual player fees & refund for 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
+        _evt.hostFeeUSD_ind = _evt.entryFeeUSD * _evt.hostFeePerc;
+        _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * _evt.keeperFeePerc;
+        _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * _evt.serviceFeePerc;
+        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * _evt.supportFeePerc; // optional
+        _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
+
+        // calc idividual refunds and total refunds (if needed)
+        _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
+        _evt.refundsUSD = evt.refundUSD_ind * evt.playerCnt;
+        
+        // calc all fees from 'prizePoolUSD'
+        _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
+        _evt.keeperFeeUSD = _evt.prizePoolUSD * (_evt.keeperFeePerc/100);
+        _evt.serviceFeeUSD = _evt.prizePoolUSD * (_evt.serviceFeePerc/100);
+        _evt.supportFeeUSD = _evt.prizePoolUSD * (_evt.supportFeePerc/100); // optional
+        _evt.totalFeesUSD = _evt.hostFeeUSD + _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+
+        // calc 'prizePoolUSD' from 'entryFeeUSD' & deduct all fees
+        _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
+        
+        // calc payouts (after all fees deducted)
+        for (uint i=0; i < _evt.winPercs.length; i++) {
+            _evt.payouts.push(_evt.prizePoolUSD * _evt.winPercs[i]);
+        }
+
+        return _evt;
     }
 
     // _winners: [0x1st_place, 0x2nd_place, ...]
@@ -566,6 +592,8 @@ contract GamerTokeAward is IERC20, Ownable {
             // notify client side that an end event distribution occurred successfully
             emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
         }
+
+        // LEFT OFF HERE ... need to payout 'host' & 'keeper'
 
         // set game end state (doesn't matter if its about to be deleted)
         game.endTime = block.timestamp;
