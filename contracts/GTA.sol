@@ -73,7 +73,7 @@ contract GamerTokeAward is IERC20, Ownable {
         uint8 buyAndBurnPerc;   // % of serviceFeeUSD (50% ?)
         uint8 mintDistrPerc;    // % of ?
         uint8[] winPercs;       // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD + keeperFeeUSD + supportFeeUSD)
-        uint32[] payouts;       // prizePoolUSD * winPercs[]
+        uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
 
         uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
         uint32 keeperFeeUSD;    // prizePoolUSD * keeperFeePerc
@@ -113,16 +113,16 @@ contract GamerTokeAward is IERC20, Ownable {
     mapping(address => Game) public activeGames;
     
     // required GTA balance ratio to host game (ratio of entry_fee desired)
-    uint16 public hostRequirementPerc = 100; // max = 65,535 (uint16 max)
+    uint8 public hostRequirementPerc = 100; // max = 65,535 (uint16 max)
     
     // track activeGameCount to loop through 'gameCodes', for cleaning expired 'activeGames'
-    uint256 public activeGameCount = 0;
+    uint64 public activeGameCount = 0;
 
     // track gameCodes, for cleaning expired 'activeGames'
     address[] storage private gameCodes;
     
     // game experation time _ 1 day = 86400 seconds
-    uint64 private gameExpSec = 86400 * 1;
+    uint32 private gameExpSec = 86400 * 1; // max 4,294,967,295
     
     // // maintain whitelist tokens that can be used for deposit
     // mapping(address => bool) public depositTokens;
@@ -192,10 +192,10 @@ contract GamerTokeAward is IERC20, Ownable {
     event DepositProcessed(address sender, address token, uint256 amount, uint256 altSwapFee, uint256 depositFee, uint256 balance);
 
     // notify client side that an event distribution (winner payout) has occurred successuflly
-    event EndEventDistribution(address winner, uint32 win_usd, address stable, uint16 win_place, uint8 win_perc, uint32 win_pool_usd);
+    event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
 
     // notify client side that an end event has occurred successfully
-    event EndEventActivity(uint64 block_timestamp, uint256 block_number, uint256 activeGameCount, string memory gameCodeEnded, address[] memory winners);
+    event EndEventActivity(address evtCode, address host, address[] memory winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint64 block_timestamp, uint256 block_number);
 
     // notify client side that an event has been canceled
     event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
@@ -454,7 +454,7 @@ contract GamerTokeAward is IERC20, Ownable {
             //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
             //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
             //      - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
-            //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payouts'
+            //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payoutsUSD'
             //      - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
@@ -480,7 +480,7 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // calc/set 'prizePoolUSD' & 'payouts' from 'entryFeeUSD' collected
+        // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
         //  deduct all service fees (AFTER 'registerEvent|hostRegisterEvent)
         game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
         game = _launchEvent(game); // set event state to 'launched = true'
@@ -520,40 +520,27 @@ contract GamerTokeAward is IERC20, Ownable {
 
             // calc win_usd
             address winner = _winners[i];
-            uint8 win_perc = game.winPercs[i];
-            uint256 win_pool = game.prizePoolUSD;
-            uint256 win_usd = win_pool * (win_perc/100);
+            uint256 win_usd = game.payoutsUSD[i];
 
-            // loop through 'whitelistStables', generate stables available (bals ok for debit)
-            address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
-
-            // traverse stables available for debit, select stable w/ the lowest market value            
-            address stable = _getStableTokenLowMarketValue(stables_avail);
-            require(stable != address(0), 'err: low market stable address is 0 _ :+0');
-
-            // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-            IERC20(stable).transfer(winner, win_usd * 10**18); 
+            // pay winner
+            address stable = _transferBestStable(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
-            _increaseWhitelistPendingDebit(tok_addr, win_usd);
+            _increaseWhitelistPendingDebit(stable, win_usd);
 
             // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, win_usd, stable, i, win_perc, win_pool);
+            emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
         }
 
-        // LEFT OFF HERE ... need to payout 'host' & 'keeper'
+        // pay host & keeper
+        address stable_host = _transferBestStable(game.host, game.hostFeeUSD);
+        address stable_keep = _transferBestStable(keeper, game.keeperFeeUSD);
 
-        // set game end state (doesn't matter if its about to be deleted)
-        game.endTime = block.timestamp;
-        game.endBlockNum = block.number;
-        game.ended = true;
-
-        // delete game mapping
-        delete activeGames[_gameCode];
-        activeGameCount--;
+        // set event params to end state
+        game = _endEvent(game, _gameCode);
 
         // notify client side that an end event occurred successfully
-        emit EndEventActivity(block.timestamp, block.number, activeGameCount, _gameCode, _winners);
+        emit EndEventActivity(_gameCode, game.host, _winners, game.prizePoolUSD, game.hostFeeUSD, game.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
     }
@@ -662,6 +649,33 @@ contract GamerTokeAward is IERC20, Ownable {
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
+    function _transferBestStable(address _receiver, uint32 _amountUSD) private returns (address) {
+        // loop through 'whitelistStables', generate stables available (bals ok for debit)
+        address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
+
+        // traverse stables available for debit, select stable w/ the lowest market value            
+        address stable = _getStableTokenLowMarketValue(stables_avail);
+        require(stable != address(0), 'err: low market stable address is 0 _ :+0');
+
+        // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
+        IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
+
+        return stable;
+    }
+
+    // set event param to end state
+    function _endEvent(Game storage _evt, address _evtCode) private returns (Game storage) {
+        // set game end state (doesn't matter if its about to be deleted)
+        _evt.endTime = block.timestamp;
+        _evt.endBlockNum = block.number;
+        _evt.ended = true;
+
+        // delete game mapping
+        delete activeGames[_evtCode];
+        activeGameCount--;
+        return _evt;
+    }
+
     // set event params to launched state
     function _launchEvent(Game storage _evt) private returns (Game storage ) {
         // set event fee calculations & prizePoolUSD
@@ -672,7 +686,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return _evt;
     }
 
-    // calculate prize pool, payouts, fees, refunds, totals
+    // calculate prize pool, payoutsUSD, fees, refunds, totals
     function _generatePrizePool(Game storage _evt) private returns (Game storage) {
         /* DEDUCTING FEES
             current service fees: 'depositFeePerc', 'hostFeePerc', 'winPercs', 'serviceFeePerc', 'supportFeePerc'
@@ -685,7 +699,7 @@ contract GamerTokeAward is IERC20, Ownable {
                 'serviceFeeUSD' = 'prizePoolUSD' * 'serviceFeePerc'
                 'supportFeeUSD' = 'prizePoolUSD' * 'supportFeePerc'
                 'prizePoolUSD' -= (hostFeeUSD + serviceFeeUSD + supportFeeUSD)
-                payouts[i] = 'prizePoolUSD' * 'winPercs[i]'
+                payoutsUSD[i] = 'prizePoolUSD' * 'winPercs[i]'
         */
 
         // calc individual player fees & refund for 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
@@ -709,16 +723,16 @@ contract GamerTokeAward is IERC20, Ownable {
         // calc 'prizePoolUSD' from 'entryFeeUSD' & deduct all fees
         _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
         
-        // calc payouts (after all fees deducted)
+        // calc payoutsUSD (after all fees deducted)
         for (uint i=0; i < _evt.winPercs.length; i++) {
-            _evt.payouts.push(_evt.prizePoolUSD * _evt.winPercs[i]);
+            _evt.payoutsUSD.push(_evt.prizePoolUSD * _evt.winPercs[i]);
         }
 
         return _evt;
     }
 
     // *WARNING* whitelistStables could have duplicates (set by keeper)
-    function _getStableTokensAvailDebit(uint256 _debitAmntUSD) private view returns (address[] memory) {
+    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
         address[] memory stablesAvail = []; // stables available to cover debit
         for (uint 1 = 0; i < whitelistStables.length; i++) {
