@@ -46,19 +46,21 @@
                     payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
 
         - REFUNDING FEES
-            (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
-             refunding full 'entryFeeUSD' means refunding w/o service fees removed
-              *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
+           (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
+             // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
+             //address stable = _transferBestStableUSD(evt.players[i], evt.refundUSD_ind);
 
-            (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+           (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
              service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
              deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
               this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
                  - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
                  - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
-                 - 'hostStartEvent' calcs 'prizePoolUSD' & 'payouts'
+                 - 'hostStartEvent' calcs 'prizePoolUSD' & 'payoutsUSD'
                  - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
                  - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
+             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+             //_updateCredit(evt.players[i], evt.refundUSD_ind, false); // false = credit (tracks addresses w/ creditsAddrArray)
 
         - owner model _ modifier onlyOwner()
             - mint(address to, uint256 amount)

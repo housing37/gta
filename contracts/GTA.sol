@@ -290,7 +290,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return [stable_bal, owedCredits, net_bal];
     }
 
-    function _getTotalForUintArray(uint8 _arr) returns (uint8) {
+    function _getTotalsOfArray(uint8 _arr) returns (uint8) {
         uint8 t = 0;
         for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
         return t;
@@ -302,7 +302,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(_entryFeeUSD >= minEventEntryFeeUSD, "required: entry fee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length > 0, 'no winners? :O');
-        require(_getTotalForUintArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
+        require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
 
         // verify msg.sender has enough GTA to host, by comparing against 'hostRequirementPerc' of '_entryFreeUSD'
         uint256 gta_bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
@@ -435,18 +435,8 @@ contract GamerTokeAward is IERC20, Ownable {
         //  loop through players, choose stable for refund, transfer from IERC20
         for (uint i=0; i < evt.players.length; i++) {
             // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
-            //  refunding full 'entryFeeUSD' means refunding w/o service fees removed
-            //   *required: subtract all fees of all kind from 'entryFeeUSD' .... LEFT OFF HERE
-                //
-                // // loop through 'whitelistStables', generate stables available (bals ok for debit)
-                // address[] memory stables_avail = _getStableTokensAvailDebit(win_usd);
-                //
-                // // traverse stables available for debit, select stable w/ the lowest market value            
-                // address stable = _getStableTokenLowMarketValue(stables_avail);
-                // require(stable != address(0), 'err: low market stable address is 0 _ :+0');            
-                //
-                // // send 'entryFeeUSD' back to player on chain (using lowest market value whitelist stable)
-                // IERC20(stable).transfer(evt.players[i], evt.entryFeeUSD * 10**18); 
+            // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
+            // address stable = _transferBestStableUSD(evt.players[i], evt.refundUSD_ind);
 
             // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
@@ -522,7 +512,7 @@ contract GamerTokeAward is IERC20, Ownable {
             uint256 win_usd = game.payoutsUSD[i];
 
             // pay winner
-            address stable = _transferBestStable(winner, win_usd);
+            address stable = _transferBestStableUSD(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
             _increaseWhitelistPendingDebit(stable, win_usd);
@@ -532,8 +522,8 @@ contract GamerTokeAward is IERC20, Ownable {
         }
 
         // pay host & keeper
-        address stable_host = _transferBestStable(game.host, game.hostFeeUSD);
-        address stable_keep = _transferBestStable(keeper, game.keeperFeeUSD);
+        address stable_host = _transferBestStableUSD(game.host, game.hostFeeUSD);
+        address stable_keep = _transferBestStableUSD(keeper, game.keeperFeeUSD);
 
         // set event params to end state
         game = _endEvent(game, _gameCode);
@@ -648,7 +638,7 @@ contract GamerTokeAward is IERC20, Ownable {
         payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
     }
 
-    function _transferBestStable(address _receiver, uint32 _amountUSD) private returns (address) {
+    function _transferBestStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // loop through 'whitelistStables', generate stables available (bals ok for debit)
         address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
 
