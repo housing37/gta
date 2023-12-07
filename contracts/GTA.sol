@@ -473,6 +473,12 @@ contract GamerTokeAward is IERC20, Ownable {
         return BURN_CODE;
     }
 
+    // percent of 'serviceFeeUSD' to buy and burn w/ each event
+    uint8 public buyAndBurnPerc = 50; // 50%
+    function setBuyAndBurnPerc(uint8 _perc) public onlyKeeper {
+        buyAndBurnPerc = _perc;
+    }
+
     // public can try to guess the burn code (earn half the balance, burn the rest)
     function burnGTA(uint16 burnCode) public {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
@@ -483,8 +489,8 @@ contract GamerTokeAward is IERC20, Ownable {
         require(bal > 0, 'err: no GTA to burn :p');
 
         // burn it.. burn it real good (half burn, half to cracker)
-        uint256 bal_burn = (bal/2);
-        uint256 bal_earn = bal - (bal/2);
+        uint256 bal_burn = bal * (buyAndBurnPerc/100);
+        uint256 bal_earn = bal - bal_burn;
         IERC20(address(this)).transfer(address(0), bal_burn);
         IERC20(address(this)).transfer(msg.sender, bal_earn);
 
@@ -507,7 +513,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(game.host == msg.sender, 'err: only host :/');
 
         // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
-        //  deduct all service fees (AFTER 'registerEvent|hostRegisterEvent)
+        //  calc/deduct all fees & generate 'buyAndBurnUSD' from 'serviceFeeUSD'
         game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
         game = _launchEvent(game); // set event state to 'launched = true'
 
@@ -561,6 +567,11 @@ contract GamerTokeAward is IERC20, Ownable {
         address stable_host = _transferBestStableUSD(game.host, game.hostFeeUSD);
         address stable_keep = _transferBestStableUSD(keeper, game.keeperFeeUSD);
 
+        // buy GTA from open market (using 'buyAndBurnUSD')
+        uint256 gta_amnt_out = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(), game.buyAndBurnUSD);
+
+        // LEFT OFF HERE ... mint GTA to winners
+
         // set event params to end state
         game = _endEvent(game, _gameCode);
 
@@ -568,6 +579,14 @@ contract GamerTokeAward is IERC20, Ownable {
         emit EndEventActivity(_gameCode, game.host, _winners, game.prizePoolUSD, game.hostFeeUSD, game.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
+    }
+
+    // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'routersUniswapV2')
+    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) private returns (uint256) {
+        address[] memory path = [stable, address(this)];
+        (uint8 rtrIdx, uint256 gta_amnt) = best_swap_v2_router_idx_quote(path, _buyAndBurnUSD * 10**18);
+        uint256 gta_amnt_out = swap_v2_wrap(path, routersUniswapV2[rtrIdx], _buyAndBurnUSD * 10**18);
+        return gta_amnt_out;
     }
 
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
