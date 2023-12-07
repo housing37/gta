@@ -544,6 +544,12 @@ contract GamerTokeAward is IERC20, Ownable {
         // check if # of _winners == .winPercs array length (set during eventCreate)
         require(game.winPercs.length == _winners.length, 'err: number of winners =(')
 
+        // buy GTA from open market (using 'buyAndBurnUSD')
+        uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(), game.buyAndBurnUSD);
+
+        // calc 'gta_amnt_mint' using 'playerMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
+        uint256 gta_amnt_mint = (gta_amnt_burn * (playerMintPerc/100)) / _winners.length;
+
         // loop through _winners: distribute 'game.winPercs'
         for (uint i=0; i < _winners.length; i++) {
             // verify winner address was registered in the game
@@ -559,6 +565,9 @@ contract GamerTokeAward is IERC20, Ownable {
             // syncs w/ 'settleBalances' algorithm
             _increaseWhitelistPendingDebit(stable, win_usd);
 
+            // mint GTA to this winner (amount is same for all winners)
+            _mint(winner, gta_amnt_mint);
+
             // notify client side that an end event distribution occurred successfully
             emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
         }
@@ -566,11 +575,6 @@ contract GamerTokeAward is IERC20, Ownable {
         // pay host & keeper
         address stable_host = _transferBestStableUSD(game.host, game.hostFeeUSD);
         address stable_keep = _transferBestStableUSD(keeper, game.keeperFeeUSD);
-
-        // buy GTA from open market (using 'buyAndBurnUSD')
-        uint256 gta_amnt_out = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(), game.buyAndBurnUSD);
-
-        // LEFT OFF HERE ... mint GTA to winners
 
         // set event params to end state
         game = _endEvent(game, _gameCode);
@@ -768,6 +772,8 @@ contract GamerTokeAward is IERC20, Ownable {
         _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt; // optional
         _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
 
+        // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
+        //                      or do we want to let the host choose?
         // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
         //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
         _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
@@ -1213,6 +1219,13 @@ contract GamerTokeAward is IERC20, Ownable {
 
     function mint(address to, uint256 amount) public onlyOwner returns (bool) {
         require(to != address(0), "Mint: cannot mint to the zero address");
+        require(amount > 0, 'err: cannot mint 0 GTA :[]');
+        return _mint(to, amount);
+    }
+
+    function _mint(address to, uint256 amount) private returns (bool) {
+        require(to != address(0), "err: cannot mint no body :[+]");
+        require(amount > 0, 'err: cannot mint 0 GTA :[+]');
 
         _totalSupply = _totalSupply + amount;
         _balances[to] = _balances[to] + amount;
@@ -1221,7 +1234,7 @@ contract GamerTokeAward is IERC20, Ownable {
         return true;
     }
 
-    function _transfer(address sender, address recipient, uint256 amount) internal {
+    function _transfer(address sender, address recipient, uint256 amount) private {
         require(sender != address(0), "ERC20: transfer from the zero address");
         require(recipient != address(0), "ERC20: transfer to the zero address");
         require(_balances[sender] >= amount, "ERC20: transfer amount exceeds balance");
@@ -1230,7 +1243,7 @@ contract GamerTokeAward is IERC20, Ownable {
         emit Transfer(sender, recipient, amount);
     }
 
-    function _approve(address owner, address spender, uint256 amount) internal {
+    function _approve(address owner, address spender, uint256 amount) private {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
         _allowances[owner][spender] = amount;

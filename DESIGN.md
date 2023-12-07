@@ -8,12 +8,12 @@
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
 
 ## GTA.sol finalized design & integration ##
-    - remaining integrations (algorithms ready to be coded)
-        - GTA token distribution (minting & burning)
+    DONE - remaining integrations (algorithms ready to be coded)
+        DONE - GTA token distribution (minting & burning)
                 - ref: 'registerEvent', 'hostRegisterEvent', 'cancelEventProcessRefunds', 'settleBalances' (maybe)
-             1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
-             2) host & winners get minted some amount after event ends
-                 *required: mint amount < buy & burn amount
+             DONE - 1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)
+             DONE - 2) host & winners get minted some amount after event ends
+                        DONE - *required: mint amount < buy & burn amount
 
         DONE - finalize debits/credits integration
             DONE - integration w/ settleBalances, hostEndEventWithWinners, whitelistBalances, whitelistPendingDebits
