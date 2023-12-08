@@ -7,6 +7,17 @@
     //                  OR ... for free play w/ host register
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
 
+## cleanup notes ... ##
+    // pulsex routers and tokens
+    // PulseXSwapRouter 'v1' ref: MM tx | PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
+    address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
+    address private constant ROUTER_pulsex_v1 = address(0x98bf93ebf5c380C0e6Ae8e192A7e2AE08edAcc02);
+    address private constant ROUTER_pulsex_v2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9);
+
+    address private constant TOK_pDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+    address private constant TOK_eDAI = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
+    address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
+
 ## GTA.sol finalized design & integration ##
     DONE - remaining integrations (algorithms ready to be coded)
         DONE - GTA token distribution (minting & burning)

@@ -31,6 +31,11 @@ interface IUniswapV2 {
 }
 contract GamerTokeAward is IERC20, Ownable {
 
+    /* terminology...
+            join -> game, event, activity
+        register -> player, delegates, users, participants, entrants
+            payout -> winnings, earnings, rewards, recipients 
+    */
     /* _ ADMIN SUPPORT _ */
     address public owner;
     address private keeper; // 37, curator, manager, caretaker, keeper
@@ -44,142 +49,136 @@ contract GamerTokeAward is IERC20, Ownable {
     /* _ TOKEN SUPPORT MAPPINGS _ */
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;
-
-    /* _ DEX SUPPORT _ */ // WARNING: router addresses only for testing (remove for launch)
-    // usd stable coins for 'getDexQuoteUSD'
-    address private constant TOK_pDAI = address(0x6B175474E89094C44Da98b954EedeAC495271d0F);
-    address private constant TOK_eDAI = address(0xefD766cCb38EaF1dfd701853BFCe31359239F305);
+    
+    /* _ DEX GLOBAL SUPPORT _ */
+    address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
     address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
-    
-    // PulseXSwapRouter 'v1' ref: MM tx | PulseXRouter02 'v1|2' ref: https://www.irccloud.com/pastebin/6ftmqWuk
-    address private constant ROUTER_pulsex_vX = address(0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27);
-    address private constant ROUTER_pulsex_v1 = address(0x98bf93ebf5c380C0e6Ae8e192A7e2AE08edAcc02);
-    address private constant ROUTER_pulsex_v2 = address(0x165C3410fC91EF562C50559f7d2289fEbed552d9);
-    
-    // array of all dex routers to check for 'getDexQuoteUSD'
-    address[] storage private routersUniswapV2 = [ROUTER_pulsex_v1, ROUTER_pulsex_v2, ROUTER_pulsex_vX];
         
     /* _ GAME SUPPORT _ */
     struct Game {
+        /** cons */
         address host;           // input param
         string gameName;        // input param
         uint32 entryFeeUSD;     // input param
-        uint32 prizePoolUSD;    // entryFeeUSD * playerCnt
-
-        uint8 hostFeePerc;      // % of prizePoolUSD (dynamic)
-        uint8 keeperFeePerc;    // % of prizePoolUSD (1% ?)
-        uint8 serviceFeePerc;   // % of prizePoolUSD (10% ?)
-        uint8 supportFeePerc;   // % of prizePoolUSD (needed ?)
-        uint8 buyAndBurnPerc;   // % of serviceFeeUSD (50% ?)
-        uint8 mintDistrPerc;    // % of ?
-        uint8[] winPercs;       // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD + keeperFeeUSD + supportFeeUSD)
-        uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
-
-        uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
-        uint32 keeperFeeUSD;    // prizePoolUSD * keeperFeePerc
-        uint32 serviceFeeUSD;   // prizePoolUSD * serviceFeePerc
-        uint32 supportFeeUSD;   // prizePoolUSD * supportFeePerc (optional)
-        uint32 totalFeesUSD;    // _evt.hostFeeUSD + _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
-
-        uint32 hostFeeUSD_ind;      // entryFeeUSD * hostFeePerc
-        uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
-        uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
-        uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc (optional)
-        uint32 refundUSD_ind;       // entryFeeUSD - (keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind)
-        uint32 refundsUSD;          // refundUSD_ind * evt.playerCnt
-        uint32 totalFeesUSD_ind;    // _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind
-
-        uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
         
+        /** EVENT SUPPORT - mostly host set */
+        uint256 createTime;     // 'createGame'
+        uint256 createBlockNum; // 'createGame'
+        uint256 startTime;      // host scheduled start time
+        uint256 launchTime;     // 'hostStartEvent'
+        uint256 launchBlockNum; // 'hostStartEvent'
+        uint256 endTime;        // 'hostEndGameWithWinners'
+        uint256 endBlockNum;    // 'hostEndGameWithWinners'
+        uint256 expTime;        // expires if not launched by this time
+        uint256 expBlockNum;    // 'cancelEventProcessRefunds'
+        bool launched;  // 'hostStartEvent'
+        bool ended;     // 'hostEndEventWithWinners'
+        bool expired;   // 'cancelEventProcessRefunds'
+
         mapping(address => bool) players; // true = registerd 
         uint32 playerCnt;       // length or players; max 4,294,967,295
 
-        uint256 createTime;
-        uint256 createBlockNum;
-        uint256 startTime;      // host scheduled
-        uint256 launchTime;
-        uint256 launchBlockNum;
-        uint256 endTime;
-        uint256 endBlockNum;
-        uint256 expTime;
-        uint256 expBlockNum;
+        /** host set */
+        uint8 hostFeePerc;      // x% of prizePoolUSD
 
-        bool launched;
-        bool ended;
-        bool expired;
+        /** keeper set */
+        uint8 keeperFeePerc;    // 1% of total entryFeeUSD
+        uint8 serviceFeePerc;   // 10% of total entryFeeUSD
+        uint8 supportFeePerc;   // 0% of total entryFeeUSD
+        uint8 buyAndBurnPerc;   // 50% of serviceFeeUSD
+
+        // uint8 mintDistrPerc;    // % of ?
+        
+        /** _generatePrizePool */
+        uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
+        uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
+        uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
+        uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
+        uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
+        uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
+
+        uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
+        uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
+        
+        uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
+        uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
+        uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
+        uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
+        uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
+        uint32 refundsUSD;          // refundUSD_ind * evt.playerCnt
+        uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
+
+        uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
     }
     
-    // map generated gameCode address to Game structs
+    // map generated gameCode address to Game struct
     mapping(address => Game) public activeGames;
     
-    // required GTA balance ratio to host game (ratio of entry_fee desired)
+    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
     uint8 public hostRequirementPerc = 100; // max = 65,535 (uint16 max)
     
+    // LEFT OFF HERE ... both 'activeGameCount' & 'gameCodes' appear to only support 'cleanExpiredGames'
+    //      ... not sure if these 2 globals are needed (if cleanExpiredGames is not needed)
     // track activeGameCount to loop through 'gameCodes', for cleaning expired 'activeGames'
     uint64 public activeGameCount = 0;
-
     // track gameCodes, for cleaning expired 'activeGames'
-    address[] storage private gameCodes;
+    address[] private gameCodes;
     
-    // game experation time _ 1 day = 86400 seconds
-    uint32 private gameExpSec = 86400 * 1; // max 4,294,967,295
+    // game experation time (keeper control)
+    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
     
-    // // maintain whitelist tokens that can be used for deposit
-    // mapping(address => bool) public depositTokens;
-    
-    // // maintain local mapping of this contracts ERC20 token balances
-    // mapping(address => uint256) private gtaAltBalances;
-    // uint256 private gtaAltBalsLastBlockNum = 0;
-    
-    // track last block # that 'creditsUSD' has been udpated with
-    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-
-    // mapping of accepted usd stable coins for player deposits
-    mapping(address => bool) public whitelistAlts;
-    mapping(address => bool) public whitelistStables;
-    uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
-
-    // usd credits for players to pay entryFeeUSD to join games
-    mapping(address => uint256) private creditsUSD;
-    address[] storage private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
-
-    // usd deposit fee taken out of amount used for creditsUSD updates
-    //  - this is a simple fee 'per deposit' (goes to contract)
-    //  - keeper has the option to set this fee
-    uint256 private depositFeePerc = 0;
-
-    // max percent of prize pool the host may charge
-    uint8 public maxHostFeePerc = 100; // % of prize pool
-
-    // service held by contract for all defi services
-    uint8 public serviceFeePerc = 0; // % of prize pool
-
-    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
-    mapping(address => uint256) storage private whitelistBalances;
-    mapping(address => uint256) storage private whitelistPendingDebits;
-
+    /** _ DEFI SUPPORT _ */
+    // used for deposits in keeper call to 'settleBalances'
     struct TxDeposit {
         address token;
         address sender;
         uint256 amount;
     }
 
+    // track last block # used to update 'creditsUSD' in 'settleBalances'
+    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
+
+    // mapping of accepted usd stable & alts for player deposits
+    mapping(address => bool) public whitelistAlts;
+    mapping(address => bool) public whitelistStables;
+    uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
+
+    // usd credits used to process player deposits, registers, refunds
+    mapping(address => uint256) private creditsUSD;
+
+    // LEFT OFF HERE ... is this needed??
+    address[] private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
+
+    // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper control)
+    uint256 private depositFeePerc = 0;
+
+    // max % of prizePoolUSD the host may charge (keeper control)
+    uint8 public maxHostFeePerc = 100;
+
+    // service held by contract for defi services (% of total entryFeeUSD collected)
+    uint8 public serviceFeePerc = 0;
+
+    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
+    mapping(address => uint256) private whitelistBalances;
+    mapping(address => uint256) private whitelistPendingDebits;
+
     // minimum deposits allowed (in usd value)
     uint8 public constant minPlayerDepositUSD_floor = 1; // 1 USD 
     uint8 public constant minPlayerDepositUSD_ceiling = 100; // 100 USD
     uint8 public minPlayerDepositUSD = 0; // dynamic, set by keeper
-    uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
+    // uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
 
     // enbale/disable refunds for less than min deposit
     bool public enableMinDepositRefunds = true;
 
-    // track gas fee wei losses due min deposit refunds
-    uint256 private accruedGasFeeRefundLoss = 0;
+    // track gas fee wei losses due to min deposit refunds
+    uint256 private accruedGasFeeRefundLoss = 0; // LEFT OFF HERE ... keeper control reset?
 
-    // minimum usd entry fee that host can create event with
+    // min entryFeeUSD host can create event with (keeper control)
     uint256 public minEventEntryFeeUSD = 0;
 
-    // EVENTS
+    /** EVENT SUPPORT */
+    // changing owners
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
     
     // emit to client side when mnimium deposit refund is not met
@@ -310,6 +309,7 @@ contract GamerTokeAward is IERC20, Ownable {
         // verify msg.sender has enough GTA to host, by comparing against 'hostRequirementPerc' of '_entryFreeUSD'
         uint256 gta_bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
 
+        // LEFT OFF HERE ... should integrate 'getHostRequirementForEntryFee' for this algorithm below (checking host gta bal)
         // get stable quote for host's gta_bal (traverses 'routersUniswapV2')
         (uint8 rtrIdx, uint256 stable_quote) = best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
         require(stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100)), "err: not enough GTA to host :/");
@@ -1027,25 +1027,7 @@ contract GamerTokeAward is IERC20, Ownable {
         }
         return false;
     }
-    
-    // house_112023: don't think this function is needed anymore, was being used in legacy 'logCredit'
-    //  something like this is indeed now being used in 'settleBalances'
-    // function getDexQuoteUSD(address _token, uint256 _amountIn) private view returns (uint256) {
-    //     require(_token != address(0x0), "err: no token");
-    //     require(_amountIn > 0, "err: no token amount");
-    //     path = [_token, dai_ethmain_pcwrap]
-    //     uint256 curr_low = 37373737; // unlikely that any amnt will equal 37373737
-    //     rtrs = routersUniswapV2;
-    //     for (uint i; i < rtrs.length; i++) {
-    //         router = rtrs[i];
-    //         uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(_amountIn, path); // quote swap
-    //         uint256 amnt = amountsOut[amountsOut.length -1];
-    //         if (curr_low == 37373737 || curr_low > amnt) {
-    //             curr_low = amnt;
-    //         }
-    //     }
-    //     return curr_low;
-    // }
+
     
     // LEFT OFF HERE... legacy code that was trying to use this contract code's
     //   to handle all ERC20 token transfers to it
@@ -1110,17 +1092,13 @@ contract GamerTokeAward is IERC20, Ownable {
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
     }
-    function addDepositToken(address _token) public onlyKeeper {
-        depositTokens[_token] = true;
-    }
-    function removeDepositToken(address _token) public onlyKeeper {
-        delete depositTokens[_token];
-    }
+
     
     // GETTERS / SETTERS
     function getHostRequirementForEntryFee(uint256 _entryFeeUSD) public pure returns (uint256) {
         return _entryFeeUSD * (hostRequirementPerc/100);
         // can also just get the public class var directly: 'hostRequirementPerc'
+        // LEFT OFF HERE ... this function should be called from 'createGame' (with a few updates)
     }
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
