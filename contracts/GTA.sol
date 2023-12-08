@@ -178,10 +178,12 @@ contract GamerTokeAward is IERC20, Ownable {
     uint256 public minEventEntryFeeUSD = 0;
 
     // code required for 'burnGTA'
-    //  uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    uint16 private BURN_CODE; 
+    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    uint16 private BURN_CODE_EASY;
+    uint32 private BURN_CODE_HARD; 
     uint64 public BURN_CODE_GUESS_CNT = 0;
+    bool public USE_BURN_CODE_HARD = false;
 
     // percent of 'serviceFeeUSD' to buy and burn w/ each event
     uint8 public buyAndBurnPerc = 50; // 50%
@@ -212,6 +214,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // notify client side that someoen cracked the burn code and burned all gta in this contract
     event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
     
+    // notify clients a new burn code is set with type (easy, hard)
+    event BurnCodeReset(bool setToHard);
+
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -254,18 +259,30 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     /* -------------------------------------------------------- */
-    /* SIDE QUEST... CRACK THE CODE                             */
+    /* SIDE QUEST... CRACK THE BURN CODE                        */
     /* -------------------------------------------------------- */
-    // public can try to guess the burn code (earn half the balance, burn the rest)
-    function burnGTA(uint16 burnCode) public {
+    // public can try to guess the burn code (burn buyAndBurnPerc of the balance, earn the rest)
+    // code required for 'burnGTA'
+    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    function burnGTA_HARD(uint32 burnCode) public returns (bool) {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
-        uint256 bal = IERC20(address(this)).balanceOf(address(this));
-
-        // verify burn code & balance to burn
-        require(burnCode == BURN_CODE, 'err: invalid burn_code, guess again :p');        
+        require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
+        require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
+        return _burnGTA();
+    }
+    function burnGTA_EASY(uint16 burnCode) public returns (bool) {
+        BURN_CODE_GUESS_CNT++; // keep track of guess count
+        require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
+        require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
+        return _burnGTA();
+    }
+    function _burnGTA() private returns (bool) {
+        uint256 bal = _balances[address(this)];
         require(bal > 0, 'err: no GTA to burn :p');
 
-        // burn it.. burn it real good (half burn, half to cracker)
+        // burn it.. burn it real good...
+        //  burn 'buyAndBurnPerc' of 'bal', send rest to cracker
         uint256 bal_burn = bal * (buyAndBurnPerc/100);
         uint256 bal_earn = bal - bal_burn;
         IERC20(address(this)).transfer(address(0), bal_burn);
@@ -276,26 +293,31 @@ contract GamerTokeAward is IERC20, Ownable {
 
         // reset guess count
         BURN_CODE_GUESS_CNT = 0;
+
+        return true;
     }
 
     // code required for 'burnGTA'
-    function setBurnCode(uint16 bc) public onlyKeeper {
-        require(bc != BURN_CODE, 'err: same burn code ={}');
-        BURN_CODE = bc;
+    function setBurnCodeEasy(uint16 bc) public onlyKeeper {
+        require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
+        BURN_CODE_EASY = bc;
+        USE_BURN_CODE_HARD = false;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-
-    // code required for 'burnGTA'
-    function getBurnCode() public onlyKeeper returns (uint16) {
-        return BURN_CODE;
+    function setBurnCodeHard(uint32 bc) public onlyKeeper {
+        require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
+        BURN_CODE_HARD = bc;
+        USE_BURN_CODE_HARD = true;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
+    }
+    function getBurnCodes() public onlyKeeper returns ((uint16, uint32)) {
+        return (BURN_CODE_EASY, BURN_CODE_HARD);
     }
 
     // percent of 'serviceFeeUSD' to buy and burn w/ each event
     function setBuyAndBurnPerc(uint8 _perc) public onlyKeeper {
+        require(_perc <= 100, 'err: invalid percent :(');
         buyAndBurnPerc = _perc;
-    }
-
-    function myCredits() public view returns (uint32) {
-        return creditsUSD[msg.sender];
     }
 
     /* -------------------------------------------------------- */
@@ -414,7 +436,13 @@ contract GamerTokeAward is IERC20, Ownable {
         return [stable_bal, owedCredits, net_bal];
     }
     
-    // GETTERS / SETTERS
+    /* -------------------------------------------------------- */
+    /* PUBLIC ACCESSORS                                         */
+    /* -------------------------------------------------------- */
+    function myCredits() public view returns (uint32) {
+        return creditsUSD[msg.sender];
+    }
+
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
@@ -458,7 +486,7 @@ contract GamerTokeAward is IERC20, Ownable {
     }
 
     /* -------------------------------------------------------- */
-    /* PUBLIC - HOST SUPPORT                                    */
+    /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
     function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
@@ -930,7 +958,6 @@ contract GamerTokeAward is IERC20, Ownable {
         address generatedAddress = address(uint160(uint256(hash)));
         return generatedAddress;
     }
-
 
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
