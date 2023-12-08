@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;        
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
@@ -29,7 +30,7 @@ interface IUniswapV2 {
     ) external payable returns (uint[] memory amounts);
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
 }
-contract GamerTokeAward is IERC20, Ownable {
+contract GamerTokeAward is ERC20, Ownable {
 
     /* terminology...
             join -> game, event, activity
@@ -37,7 +38,6 @@ contract GamerTokeAward is IERC20, Ownable {
             payout -> winnings, earnings, rewards, recipients 
     */
     /* _ ADMIN SUPPORT _ */
-    address public owner;
     address private keeper; // 37, curator, manager, caretaker, keeper
     
     /* _ TOKEN SUPPORT _ */
@@ -188,10 +188,9 @@ contract GamerTokeAward is IERC20, Ownable {
     // percent of 'serviceFeeUSD' to buy and burn w/ each event
     uint8 public buyAndBurnPerc = 50; // 50%
 
-    /** EVENT SUPPORT */
-    // changing owners
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-    
+    /* -------------------------------------------------------- */
+    /* EVENTS                                                   */
+    /* -------------------------------------------------------- */
     // emit to client side when mnimium deposit refund is not met
     event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
 
@@ -220,11 +219,10 @@ contract GamerTokeAward is IERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
-    constructor(uint256 initialSupply) {
-        // Set creator to owner & keeper
-        owner = msg.sender;
+    constructor(uint256 _initialSupply) Ownable (msg.sender) {
+        // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
-        totalSupply = initialSupply * 10**uint8(decimals);
+        totalSupply = _initialSupply * 10**uint8(decimals);
         _balances[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
     }
@@ -236,7 +234,7 @@ contract GamerTokeAward is IERC20, Ownable {
         require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         bool isHost = msg.sender == activeGames[gameCode].host;
         bool isKeeper = msg.sender == keeper;
-        bool isOwner = msg.sender == owner;
+        bool isOwner = msg.sender == owner(); // from 'Ownable'
         require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
     }
@@ -245,10 +243,6 @@ contract GamerTokeAward is IERC20, Ownable {
         require(msg.sender == activeGames[gameCode].host, "Only the host :0");
         _;
     }    
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only the owner :0");
-        _;
-    }
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
@@ -335,9 +329,6 @@ contract GamerTokeAward is IERC20, Ownable {
     }
     function setKeeper(address _newKeepr) public onlyKeeper {
         keeper = _newKeepr;
-    }
-    function setOwner(address _newOwner) public onlyKeeper {
-        owner = _newOwner;
     }
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
@@ -910,7 +901,7 @@ contract GamerTokeAward is IERC20, Ownable {
         //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
         _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.keeperFeePerc/100);
         _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.serviceFeePerc/100);
-        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.supportFeePerc/100); // optional
+        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.supportFeePerc/100);
 
         // calc total fees for each individual 'entryFeeUSD' paid
         _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
@@ -921,7 +912,7 @@ contract GamerTokeAward is IERC20, Ownable {
         // calc total fees for all 'entryFeeUSD' paid
         _evt.keeperFeeUSD = _evt.keeperFeeUSD_ind * _evt.playerCnt;
         _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt; // GROSS
-        _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt; // optional
+        _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt;
         _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
 
         // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
@@ -1163,105 +1154,6 @@ contract GamerTokeAward is IERC20, Ownable {
         }
         emit logRFL(address(this), msg.sender, "logRFL 6d");
         return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
-    }
-    
-    /* -------------------------------------------------------- */
-    /* LEGACY IERC20 SUPPORT (chatGPT)                          */
-    /* -------------------------------------------------------- */
-    // STANDARD IERC20
-    function balanceOf(address account) public view override returns (uint256) {
-        return _balances[account];
-    }
-    
-    // LEFT OFF HERE... legacy code that was trying to use this contract code's
-    //   to handle all ERC20 token transfers to it
-    //  but i think this 'transfer' function is needed as part of IERC20
-    function transfer(address _recipient, uint256 _amount) public override returns (bool) {
-        // want to try to keep track of each ERC20 transfer to this contract from each recipient
-        // each ERC20 transfer to this contract is an 'entry_fee' being paid by a player
-        //  need to map those payments to gameCodes
-        if (recipient == address(this)) {
-            // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
-            PaidEntry[] memory entries = playerEntries[msg.sender];
-            entries.gameCode = 0x0;
-            entries.amount = _amount;
-        }
-        _transfer(msg.sender, _recipient, _amount);
-        return true;
-    }
-    
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
-    }
-
-    function approve(address spender, uint256 amount) public override returns (bool) {
-        _approve(msg.sender, spender, amount);
-        return true;
-    }
-
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
-        require(sender != address(0), "TransferFrom: sender cannot be the zero address");
-        require(recipient != address(0), "TransferFrom: recipient cannot be the zero address");
-        require(_balances[sender] >= amount, "TransferFrom: sender does not have enough balance");
-        require(_allowances[sender][msg.sender] >= amount, "TransferFrom: allowance exceeded");
-
-        _transfer(sender, recipient, amount);
-
-        // Update the allowance
-        _approve(sender, msg.sender, _allowances[sender][msg.sender] - amount);
-
-        return true;
-    }
-
-    function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
-        _approve(msg.sender, spender, _allowances[msg.sender][spender] + addedValue);
-        return true;
-    }
-
-    function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
-        uint256 currentAllowance = _allowances[msg.sender][spender];
-        require(currentAllowance >= subtractedValue, "DecreaseAllowance: allowance cannot be decreased below zero");
-        _approve(msg.sender, spender, currentAllowance - subtractedValue);
-        return true;
-    }
-
-    function mint(address to, uint256 amount) public onlyOwner returns (bool) {
-        require(to != address(0), "Mint: cannot mint to the zero address");
-        require(amount > 0, 'err: cannot mint 0 GTA :[]');
-        return _mint(to, amount);
-    }
-
-    function _mint(address to, uint256 amount) private returns (bool) {
-        require(to != address(0), "err: cannot mint no body :[+]");
-        require(amount > 0, 'err: cannot mint 0 GTA :[+]');
-
-        _totalSupply = _totalSupply + amount;
-        _balances[to] = _balances[to] + amount;
-
-        emit Transfer(address(0), to, amount);
-        return true;
-    }
-
-    function _transfer(address sender, address recipient, uint256 amount) private {
-        require(sender != address(0), "ERC20: transfer from the zero address");
-        require(recipient != address(0), "ERC20: transfer to the zero address");
-        require(_balances[sender] >= amount, "ERC20: transfer amount exceeds balance");
-        _balances[sender] -= amount;
-        _balances[recipient] += amount;
-        emit Transfer(sender, recipient, amount);
-    }
-
-    function _approve(address owner, address spender, uint256 amount) private {
-        require(owner != address(0), "ERC20: approve from the zero address");
-        require(spender != address(0), "ERC20: approve to the zero address");
-        _allowances[owner][spender] = amount;
-        emit Approval(owner, spender, amount);
-    }
-    
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "Invalid new owner address");
-        emit OwnershipTransferred(owner, newOwner);
-        owner = newOwner;
     }
 }
 
