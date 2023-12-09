@@ -435,8 +435,6 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-
-
     // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
     function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
@@ -461,12 +459,9 @@ contract GamerTokeAward is ERC20, Ownable {
         }
     }
 
-
-
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
-
     // get this user credits ('creditsUSD' are not available for withdrawel)
     function myCredits() public view returns (uint32) {
         return creditsUSD[msg.sender];
@@ -642,6 +637,9 @@ contract GamerTokeAward is ERC20, Ownable {
             // notify listeners of processed refund
             emit ProcessedRefund(evt.players[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
         }
+        
+        // set event params to end state
+        evt = _endEvent(evt, _eventCode);
 
         // notify listeners of canceled event
         emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
