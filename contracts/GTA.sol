@@ -79,8 +79,8 @@ contract GamerTokeAward is ERC20, Ownable {
     // usd credits used to process player deposits, registers, refunds
     mapping(address => uint256) private creditsUSD;
 
-    // LEFT OFF HERE ... is this needed??
-    address[] private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
+    // set by '_updateCredit'; get by 'getGrossNetBalances' & 'getCreditAddress|getCredits'
+    address[] private creditsAddrArray; 
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -108,8 +108,8 @@ contract GamerTokeAward is ERC20, Ownable {
     // enable/disable refunds for less than min deposit (keeper controlled)
     bool public enableMinDepositRefunds = true;
 
-    // track gas fee wei losses due to min deposit refunds
-    uint256 private accruedGasFeeRefundLoss = 0; // LEFT OFF HERE ... keeper control reset?
+    // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
+    uint256 private accruedGasFeeRefundLoss = 0; 
 
     // min entryFeeUSD host can create event with (keeper control)
     uint256 public minEventEntryFeeUSD = 0;
@@ -346,8 +346,12 @@ contract GamerTokeAward is ERC20, Ownable {
         maxHostFeePerc = _perc;
         return true;
     }
-    function getCredits() public onlyKeeper returns (mapping(address => uint256)) {
-        return creditsUSD;
+    function getCreditAddresses() public onlyKeeper returns (address[] memory) {
+        require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
+        return creditsAddrArray;
+    }
+    function getCredits(address _player) public onlyKeeper returns (uint256) {
+        return creditsUSD[_player];
     }
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
         require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
@@ -356,6 +360,12 @@ contract GamerTokeAward is ERC20, Ownable {
     function getAccruedGFRL() public view onlyKeeper returns (uint256) {
         return accruedGasFeeRefundLoss;
     }
+    function resetAccruedGFRL() public onlyKeeper returns (bool) {
+        require(accruedGasFeeRefundLoss > 0. 'err: AccruedGFRL already 0');
+        accruedGasFeeRefundLoss = 0
+        return true;
+    }
+    
     function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
