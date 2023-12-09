@@ -71,14 +71,9 @@ contract GamerTokeAward is ERC20, Ownable {
     // track last block # used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
-    // mapping of accepted usd stable & alts for player deposits
-    // mapping(address => bool) public whitelistAlts;
-    // mapping(address => bool) public whitelistStables;
+    // arrays of accepted usd stable & alts for player deposits
     address[] public whitelistAlts;
     address[] public whitelistStables;
-
-    // LEFT OFF HERE ... need a way to '_getNextStableTokDeposit()'
-    //  'whitelistStables' is not an array
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
     // track this contract's stable token balances & debits (required for keeper 'SANITY CHECK')
@@ -380,6 +375,9 @@ contract GamerTokeAward is ERC20, Ownable {
             require(_tokens[i] != address(0) 'err: found zero address to add :L');
             // whitelistStables[_tokens[i]] = true;
             whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables);
+
+            // LEFT OFF HERE ... with this 'safe add', keeper can't control how oftern a stabel is used
+            //      ... also, do we need a 'contractStables' for some reason?
         }
     }
     function remWhitelistStables(address[] _tokens) public onlyKeeper {
@@ -973,7 +971,6 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
-    // LEFT OFF HERE ... 'whitelistStables' is not an array
     // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
     function _getNextStableTokDeposit() private {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
@@ -1080,7 +1077,6 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
-    // LEFT OFF HERE ... 'whitelistStables' is not an array
     // *WARNING* whitelistStables could have duplicates (set by keeper)
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
