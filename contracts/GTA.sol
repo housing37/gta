@@ -40,15 +40,9 @@ contract GamerTokeAward is ERC20, Ownable {
     /* _ ADMIN SUPPORT _ */
     address private keeper; // 37, curator, manager, caretaker, keeper
     
-    /* _ TOKEN SUPPORT _ */
-    string public override name = "Gamer Token Award";
-    string public override symbol = "GTA";
-    uint8 public override decimals = 18;
-    uint256 public override totalSupply;
-
-    /* _ TOKEN SUPPORT MAPPINGS _ */
-    mapping(address => uint256) private _balances;
-    mapping(address => mapping(address => uint256)) private _allowances;
+    /* _ TOKEN INIT SUPPORT _ */
+    string private constant name = "Gamer Token Award";
+    string private constant symbol = "GTA";
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
@@ -218,12 +212,11 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
-    constructor(uint256 _initialSupply) Ownable (msg.sender) {
+    // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
+    constructor(uint256 _initSupply) ERC20(name, symbol) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
-        totalSupply = _initialSupply * 10**uint8(decimals);
-        _balances[msg.sender] = totalSupply;
-        emit Transfer(address(0), msg.sender, totalSupply);
+        _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
     /* -------------------------------------------------------- */
