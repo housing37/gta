@@ -61,8 +61,8 @@ contract GamerTokeAward is ERC20, Ownable {
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 public activeGameCount = 0; 
 
-    // track gameCodes array for keeper 'getGameCodes'
-    address[] private gameCodes;
+    // track activeGameCodes array for keeper 'getGameCodes'
+    address[] private activeGameCodes;
     
     // game experation time (keeper control)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
@@ -322,7 +322,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return keeper;
     }
     function getGameCodes() public view onlyKeeper returns (address[] memory) {
-        return gameCodes;
+        return activeGameCodes;
     }
     function getGameExpSec() public view onlyKeeper returns (uint64) {
         return gameExpSec;
@@ -434,9 +434,20 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
-    function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
-        return activeGames[gameCode].players;
+    function getPlayersForGame(address _host, string memory _gameName) public view onlyAdmins(gameCode) returns (address[] memory) {
+        require(_host != address(0), 'err: invalid host address :\');
+        require(bytes(_gameName).length > 0, "err: no game name :\");
+        address _gameCode = getGameCode(_host, _gameName);
+        return getPlayers(_gameCode);
+    }
+    function getPlayers(address _gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
+        require(_gameCode != address(0), 'err: invalid game code :O');
+        for (uint i=0; i < activeGameCodes.length; i++) {
+            if (_gameCode == activeGameCodes[i]) {
+                return activeGames[_gameCode].players;
+            }
+        }
+        return [];
     }
 
     /* -------------------------------------------------------- */
@@ -449,22 +460,21 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // gameCode = hash(_host, _gameName)
     function getGameCode(address _host, string memory _gameName) public view returns (address) {
+        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
-        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
 
         // generate gameCode from host address and game name
-        address gameCode = _generateAddressHash(_host, gameName);
+        address gameCode = _generateAddressHash(_host, _gameName);
         require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
         return gameCode;
     }
 
     function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
-        // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
-        uint256 gta_bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
-        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
-        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
+        require(_entryFeeUSD > 0, 'err: no entry fee :/');
+        require(_hostCanCreateEvent(_entryFeeUSD), 'err: not enough GTA to host :/');
+        return true;
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
@@ -474,7 +484,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length > 0, 'err: no winners? :O');
         require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
-        require(verifyHostRequirementsForEntryFee(_entryFeeUSD), "err: not enough GTA to host :/");
+        require(_hostCanCreateEvent(_entryFeeUSD), "err: not enough GTA to host :/");
 
         // verify active game name/code doesn't exist yet
         address gameCode = _generateAddressHash(msg.sender, gameName);
@@ -495,13 +505,11 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.startTime = _startTime;
         newGame.expTime = _startTime + gameExpSec;
 
-        // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
+        // Assign the newly modified 'Game' struct back to 'activeGames' mapping
         activeGames[gameCode] = newGame;
-        
-        // log new code in gameCodes array for keeper 'getGameCodes'
-        gameCodes.push(gameCode);
-        
-        // increment 'activeGameCount', for 'activeGames' support in 'cleanExpiredGames'
+
+        // increment support
+        _addActiveGameCodesArraySafe(gameCode) // 'activeGameCodes'
         activeGameCount++;
         
         // return gameCode to caller
@@ -805,6 +813,13 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
+    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private returns (bool) {
+        // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
+        uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
+        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
+        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
+    }
+
     function _getTotalsOfArray(uint8 _arr) private returns (uint8) {
         uint8 t = 0;
         for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
@@ -847,6 +862,9 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // delete game mapping
         delete activeGames[_evtCode];
+
+        // decrement support
+        _remActiveGameCodesArray(_evtCode);
         activeGameCount--;
         return _evt;
     }
@@ -1006,11 +1024,34 @@ contract GamerTokeAward is ERC20, Ownable {
     function _remCreditsAddrArray(address _player) private returns (bool) {
         require(_player != address(0), "err: invalid _player");
         arr = creditsAddrArray;
-        for (i = 0; i < rtrs.length; i++) {
+        for (i = 0; i < arr.length; i++) {
             if (_player == arr[i]) {
-                arr[i] = arr[rtrs.length - 1];
+                arr[i] = arr[arr.length - 1];
                 arr.pop();
                 creditsAddrArray = arr;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ensures _gameCode address is logged only once in 'activeGameCodes' (ie. safely)
+    function _addActiveGameCodesArraySafe(address _gameCode) private returns (bool) {
+        require(_gameCode != address(0), "err: invalid _gameCode");
+        bool success = _remActiveGameCodesArray(_player);
+        activeGameCodes.push(_gameCode);
+        return true;
+    }
+
+    // remove algorithm does NOT maintain order
+    function _remActiveGameCodesArray(address _gameCode) private returns (bool) {
+        require(_gameCode != address(0), "err: invalid _gameCode");
+        arr = activeGameCodes;
+        for (i = 0; i < arr.length; i++) {
+            if (_gameCode == arr[i]) {
+                arr[i] = arr[arr.length - 1];
+                arr.pop();
+                activeGameCodes = arr;
                 return true;
             }
         }
