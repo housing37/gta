@@ -72,8 +72,10 @@ contract GamerTokeAward is ERC20, Ownable {
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
     // mapping of accepted usd stable & alts for player deposits
-    mapping(address => bool) public whitelistAlts;
-    mapping(address => bool) public whitelistStables;
+    // mapping(address => bool) public whitelistAlts;
+    // mapping(address => bool) public whitelistStables;
+    address[] public whitelistAlts;
+    address[] public whitelistStables;
 
     // LEFT OFF HERE ... need a way to '_getNextStableTokDeposit()'
     //  'whitelistStables' is not an array
@@ -376,25 +378,29 @@ contract GamerTokeAward is ERC20, Ownable {
     function addWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0) 'err: found zero address to add :L');
-            whitelistStables[_tokens[i]] = true;
+            // whitelistStables[_tokens[i]] = true;
+            whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables);
         }
     }
     function remWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0) 'err: found zero address to rem :L');
-            delete whitelistStables[_tokens[i]];
+            // delete whitelistStables[_tokens[i]];
+            whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
         }
     }
     function addWhitelistAlts(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0) 'err: found zero address to add :L');
-            whitelistAlts[_tokens[i]] = true;
+            // whitelistAlts[_tokens[i]] = true;
+            whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts);
         }
     }
     function remWhitelistAlts(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0) 'err: found zero address to rem :L');
-            delete whitelistAlts[_tokens[i]];
+            // delete whitelistAlts[_tokens[i]];
+            whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);
         }
     }
     function addDexRouter(address router) public onlyKeeper {
@@ -407,20 +413,12 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     function remDexRouter(address router) public onlyKeeper returns (bool) {
         require(router != address(0x0), "err: invalid address");
-        
+
         // NOTE: remove algorithm does NOT maintain order
-        rtrs = routersUniswapV2;
-        for (i = 0; i < rtrs.length; i++) {
-            if (router == rtrs[i]) {
-                rtrs[i] = rtrs[rtrs.length - 1];
-                rtrs.pop();
-                routersUniswapV2 = rtrs;
-                return true;
-            }
-        }
-        return false;
+        routersUniswapV2 = _remAddressFromArray(router, routersUniswapV2);
+        return true;
     }
-    
+
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
@@ -714,7 +712,8 @@ contract GamerTokeAward is ERC20, Ownable {
         //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
         //      2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            if (!whitelistStables[dataArray[i].token] && !whitelistAlts[dataArray[i].token]) { continue; } // skip non-whitelist tokens
+            // if (!whitelistStables[dataArray[i].token] && !whitelistAlts[dataArray[i].token]) { continue; } // skip non-whitelist tokens
+            if (!_isTokenInArray(dataArray[i].token, whitelistStables) && !_isTokenInArray(dataArray[i].token, whitelistAlts)) { continue; } // skip non-whitelist tokens
             
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
@@ -732,7 +731,8 @@ contract GamerTokeAward is ERC20, Ownable {
             uint256 stable_swap_fee = 0; // gas fee loss for swap: alt -> stable
 
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
-            if (!whitelistStables[tok_addr]) {
+            // if (!whitelistStables[tok_addr]) {
+            if (!_isTokenInArray(dataArray[i].token, whitelistStables)) {
 
                 // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTokDeposit();
@@ -803,6 +803,34 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
+    function _addAddressToArraySafe(address _addr, address[] _arr) private returns (address[] memory) {
+        if (_addr == address(0)) { return _arr; }
+
+        // NOTE: remove first (no duplicates)
+        _arr = _remAddressFromArray(_addr, _arr); 
+        _arr.push(_addr;)
+        return _arr;
+    }
+    function _remAddressFromArray(address _addr, address[] _arr) private returns (address[] memory) {
+        if (_addr == address(0) || _arr.length == 0) { return _arr; }
+        
+        // NOTE: remove algorithm does NOT maintain order
+        for (i = 0; i < _arr.length; i++) {
+            if (router == _arr[i]) {
+                _arr[i] = _arr[_arr.length - 1];
+                _arr.pop();
+                return _arr;
+            }
+        }
+        return _arr;
+    }
+    function _isTokenInArray(address _addr, address[] memory _arr) private returns (bool) {
+        if (_addr == address(0) || _arr.length == 0) { return false; }
+        for (uint i=0; i < _arr.length; i++) {
+            if (_addr = _arr[i]) { return true; }
+        }
+        return false;
+    }
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private returns (bool) {
         // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
         uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
@@ -945,8 +973,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
-    // LEFT OFF HERE ... need a way to '_getNextStableTokDeposit()'
-    //  'whitelistStables' is not an array
+    // LEFT OFF HERE ... 'whitelistStables' is not an array
     // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
     function _getNextStableTokDeposit() private {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
@@ -1053,6 +1080,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
+    // LEFT OFF HERE ... 'whitelistStables' is not an array
     // *WARNING* whitelistStables could have duplicates (set by keeper)
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
