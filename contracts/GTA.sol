@@ -328,19 +328,22 @@ contract GamerTokeAward is ERC20, Ownable {
         return gameExpSec;
     }
     function setKeeper(address _newKeepr) public onlyKeeper {
+        require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeepr;
     }
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
     }
-    function setDepositFeePerc(uint8 perc) public onlyKeeper {
+    function setDepositFeePerc(uint8 _perc) public onlyKeeper {
+        require(_perc <= 100, 'err: max 100%');
         depositFeePerc = perc;
     }
     function getLastBlockNumUpdate() public view onlyKeeper {
         return lastBlockNumUpdate;
     }
-    function setMaxHostFeePerc(uint8 perc) public onlyKeeper returns (bool) {
-        maxHostFeePerc = perc;
+    function setMaxHostFeePerc(uint8 _perc) public onlyKeeper returns (bool) {
+        require(_perc <= 100, 'err: max 100%');
+        maxHostFeePerc = _perc;
         return true;
     }
     function getCredits() public onlyKeeper returns (mapping(address => uint256)) {
@@ -359,21 +362,25 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     function addWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
+            require(_tokens[i] != address(0) 'err: found zero address to add :L');
             whitelistStables[_tokens[i]] = true;
         }
     }
     function remWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
+            require(_tokens[i] != address(0) 'err: found zero address to rem :L');
             delete whitelistStables[_tokens[i]];
         }
     }
     function addWhitelistAlts(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
+            require(_tokens[i] != address(0) 'err: found zero address to add :L');
             whitelistAlts[_tokens[i]] = true;
         }
     }
     function remWhitelistAlts(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
+            require(_tokens[i] != address(0) 'err: found zero address to rem :L');
             delete whitelistAlts[_tokens[i]];
         }
     }
@@ -381,9 +388,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(router != address(0x0), "err: invalid address");
         rtrs = routersUniswapV2;
         for (i = 0; i < rtrs.length; i++) {
-            if (router == rtrs[i]) {
-                revert("err: duplicate router");
-            }
+            require(router != rtrs[i], 'err: duplicate router');
         }
         routersUniswapV2.push(router);
     }
@@ -430,21 +435,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    function myCredits() public view returns (uint32) {
-        return creditsUSD[msg.sender];
-    }
 
-    function getGameCode(address _host, string memory _gameName) public view returns (address) {
-        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
-        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
-        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
-
-        // generate gameCode from host address and game name
-        address gameCode = _generateAddressHash(_host, gameName);
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
-        
-        return gameCode;
-    }
 
     // LEFT OFF HERE... needs to be refactored to handle returning a mapping instead of array
     function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
@@ -470,30 +461,45 @@ contract GamerTokeAward is ERC20, Ownable {
         }
     }
 
-    function getHostRequirementForEntryFee(uint256 _entryFeeUSD) public pure returns (uint256) {
-        return _entryFeeUSD * (hostRequirementPerc/100);
-        // can also just get the public class var directly: 'hostRequirementPerc'
-        // LEFT OFF HERE ... this function should be called from 'createGame' (with a few updates)
-    }
+
 
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
-    // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
-    function createGame(string memory _gameName, uint64 _startTime, uint256 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
-        require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= minEventEntryFeeUSD, "required: entry fee too low :/");
-        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high :O, check maxHostFeePerc');
-        require(_winPercs.length > 0, 'no winners? :O');
-        require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
 
-        // verify msg.sender has enough GTA to host, by comparing against 'hostRequirementPerc' of '_entryFreeUSD'
+    // get this user credits ('creditsUSD' are not available for withdrawel)
+    function myCredits() public view returns (uint32) {
+        return creditsUSD[msg.sender];
+    }
+
+    // gameCode = hash(_host, _gameName)
+    function getGameCode(address _host, string memory _gameName) public view returns (address) {
+        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
+        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
+        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
+
+        // generate gameCode from host address and game name
+        address gameCode = _generateAddressHash(_host, gameName);
+        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
+        
+        return gameCode;
+    }
+
+    function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
+        // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
         uint256 gta_bal = IERC20(address(this)).balanceOf(msg.sender); // returns x10**18
-
-        // LEFT OFF HERE ... should integrate 'getHostRequirementForEntryFee' for this algorithm below (checking host gta bal)
-        // get stable quote for host's gta_bal (traverses 'routersUniswapV2')
         (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
-        require(stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100)), "err: not enough GTA to host :/");
+        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
+    }
+
+    // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
+    function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
+        require(_startTime > block.timestamp, "err: start too soon :/");
+        require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
+        require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
+        require(_winPercs.length > 0, 'err: no winners? :O');
+        require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
+        require(verifyHostRequirementsForEntryFee(_entryFeeUSD), "err: not enough GTA to host :/");
 
         // verify active game name/code doesn't exist yet
         address gameCode = _generateAddressHash(msg.sender, gameName);
