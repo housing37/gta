@@ -115,13 +115,12 @@ contract GamerTokeAward is ERC20, Ownable {
     mapping(address => Game) public activeGames;
     
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    uint8 public hostRequirementPerc = 100; // max = 65,535 (uint16 max)
+    uint8 public hostRequirementPerc = 100; // uint8 max = 255
     
-    // LEFT OFF HERE ... both 'activeGameCount' & 'gameCodes' appear to only support 'cleanExpiredGames'
-    //      ... not sure if these 2 globals are needed (if cleanExpiredGames is not needed)
-    // track activeGameCount to loop through 'gameCodes', for cleaning expired 'activeGames'
-    uint64 public activeGameCount = 0;
-    // track gameCodes, for cleaning expired 'activeGames'
+    // track activeGameCount using 'createGame' & '_endEvent'
+    uint64 public activeGameCount = 0; 
+
+    // track gameCodes array for keeper 'getGameCodes'
     address[] private gameCodes;
     
     // game experation time (keeper control)
@@ -439,25 +438,6 @@ contract GamerTokeAward is ERC20, Ownable {
     function getPlayers(address gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
         return activeGames[gameCode].players;
     }
-    
-    // LEFT OFF HERE... need to refactor to handle games.players mapping instead of array
-    // Delete activeGames w/ an empty players array and expTime has past
-    function cleanExpiredGames() public {
-        // loop w/ 'activeGameCount' to find game addies w/ empty players array & passed 'expTime'
-        for (uint256 i = 0; i < activeGameCount; i++) {
-        
-            // has the expTime passed?
-            if (block.timestamp > activeGames[gameCodes[i]].expTime) {
-            
-                // is game's players array empty?
-                if (activeGames[gameCodes[i]].players.length == 0) {
-                    delete activeGames[gameCodes[i]]; // remove gameCode mapping entry
-                    delete gameCodes[i]; // remove gameCodes array entry
-                    activeGameCount--; // decrement total game count
-                }
-            }
-        }
-    }
 
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
@@ -518,7 +498,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // Assign the newly modified 'Game' struct back to 'activeGames' 'mapping
         activeGames[gameCode] = newGame;
         
-        // log new code in gameCodes array, for 'activeGames' support in 'cleanExpiredGames'
+        // log new code in gameCodes array for keeper 'getGameCodes'
         gameCodes.push(gameCode);
         
         // increment 'activeGameCount', for 'activeGames' support in 'cleanExpiredGames'
@@ -637,7 +617,7 @@ contract GamerTokeAward is ERC20, Ownable {
             // notify listeners of processed refund
             emit ProcessedRefund(evt.players[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
         }
-        
+
         // set event params to end state
         evt = _endEvent(evt, _eventCode);
 
