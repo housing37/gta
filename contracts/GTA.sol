@@ -30,13 +30,16 @@ interface IUniswapV2 {
     ) external payable returns (uint[] memory amounts);
     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
 }
-contract GamerTokeAward is ERC20, Ownable {
 
-    /* terminology...
-            join -> game, event, activity
-        register -> player, delegates, users, participants, entrants
-            payout -> winnings, earnings, rewards, recipients 
-    */
+/* terminology...
+        join -> game, event, activity
+    register -> player, delegates, users, participants, entrants
+        payout -> winnings, earnings, rewards, recipients 
+*/
+contract GamerTokeAward is ERC20, Ownable {
+    /* -------------------------------------------------------- */
+    /* GLOBALS                                                  */
+    /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
     address private keeper; // 37, curator, manager, caretaker, keeper
     
@@ -48,6 +51,80 @@ contract GamerTokeAward is ERC20, Ownable {
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
     address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
         
+    /* _ GAME SUPPORT _ */
+    // map generated gameCode address to Game struct
+    mapping(address => Game) public activeGames;
+    
+    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
+    uint8 public hostRequirementPerc = 100; // uint8 max = 255
+    
+    // track activeGameCount using 'createGame' & '_endEvent'
+    uint64 public activeGameCount = 0; 
+
+    // track gameCodes array for keeper 'getGameCodes'
+    address[] private gameCodes;
+    
+    // game experation time (keeper control)
+    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
+    
+    /** _ DEFI SUPPORT _ */
+    // track last block # used to update 'creditsUSD' in 'settleBalances'
+    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
+
+    // mapping of accepted usd stable & alts for player deposits
+    mapping(address => bool) public whitelistAlts;
+    mapping(address => bool) public whitelistStables;
+    uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
+
+    // usd credits used to process player deposits, registers, refunds
+    mapping(address => uint256) private creditsUSD;
+
+    // LEFT OFF HERE ... is this needed??
+    address[] private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
+
+    // max % of prizePoolUSD the host may charge (keeper controlled)
+    uint8 public maxHostFeePerc = 100;
+
+    // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
+    uint256 private depositFeePerc = 0;
+
+    // % of events total 'entryFeeUSD' collected (keeper controlled)
+    uint8 public keeperFeePerc = 0;
+    uint8 public serviceFeePerc = 0;
+    uint8 public supportFeePerc = 0;
+
+    // % of event 'serviceFeeUSD' to buy & burn (keeper controlled)
+    uint8 public buyAndBurnPerc = 50; 
+
+    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
+    mapping(address => uint256) private whitelistBalances;
+    mapping(address => uint256) private whitelistPendingDebits;
+
+    // minimum deposits allowed (in usd value)
+    uint8 public constant minDepositUSD_floor = 1; // 1 USD 
+    uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
+    uint8 public minDepositUSD = 0; // dynamic (keeper controlled)
+
+    // enable/disable refunds for less than min deposit (keeper controlled)
+    bool public enableMinDepositRefunds = true;
+
+    // track gas fee wei losses due to min deposit refunds
+    uint256 private accruedGasFeeRefundLoss = 0; // LEFT OFF HERE ... keeper control reset?
+
+    // min entryFeeUSD host can create event with (keeper control)
+    uint256 public minEventEntryFeeUSD = 0;
+
+    // code required for 'burnGTA'
+    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    uint16 private BURN_CODE_EASY;
+    uint32 private BURN_CODE_HARD; 
+    uint64 public BURN_CODE_GUESS_CNT = 0;
+    bool public USE_BURN_CODE_HARD = false;
+
+    /* -------------------------------------------------------- */
+    /* STRUCTURES                                               */
+    /* -------------------------------------------------------- */
     /* _ GAME SUPPORT _ */
     struct Game {
         /** cons */
@@ -104,22 +181,6 @@ contract GamerTokeAward is ERC20, Ownable {
 
         uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
     }
-    
-    // map generated gameCode address to Game struct
-    mapping(address => Game) public activeGames;
-    
-    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    uint8 public hostRequirementPerc = 100; // uint8 max = 255
-    
-    // track activeGameCount using 'createGame' & '_endEvent'
-    uint64 public activeGameCount = 0; 
-
-    // track gameCodes array for keeper 'getGameCodes'
-    address[] private gameCodes;
-    
-    // game experation time (keeper control)
-    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
-    
     /** _ DEFI SUPPORT _ */
     // used for deposits in keeper call to 'settleBalances'
     struct TxDeposit {
@@ -127,60 +188,7 @@ contract GamerTokeAward is ERC20, Ownable {
         address sender;
         uint256 amount;
     }
-
-    // track last block # used to update 'creditsUSD' in 'settleBalances'
-    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-
-    // mapping of accepted usd stable & alts for player deposits
-    mapping(address => bool) public whitelistAlts;
-    mapping(address => bool) public whitelistStables;
-    uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
-
-    // usd credits used to process player deposits, registers, refunds
-    mapping(address => uint256) private creditsUSD;
-
-    // LEFT OFF HERE ... is this needed??
-    address[] private creditsAddrArray; // 120623: only used by 'getGrossNetBalances'
-
-    // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper control)
-    uint256 private depositFeePerc = 0;
-
-    // max % of prizePoolUSD the host may charge (keeper control)
-    uint8 public maxHostFeePerc = 100;
-
-    // service held by contract for defi services (% of total entryFeeUSD collected)
-    uint8 public serviceFeePerc = 0;
-
-    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
-    mapping(address => uint256) private whitelistBalances;
-    mapping(address => uint256) private whitelistPendingDebits;
-
-    // minimum deposits allowed (in usd value)
-    uint8 public constant minPlayerDepositUSD_floor = 1; // 1 USD 
-    uint8 public constant minPlayerDepositUSD_ceiling = 100; // 100 USD
-    uint8 public minPlayerDepositUSD = 0; // dynamic, set by keeper
-    // uint256 private lastSwapTxGasFee = 0; // last gas paid for alt swap in 'settleBalances'
-
-    // enbale/disable refunds for less than min deposit
-    bool public enableMinDepositRefunds = true;
-
-    // track gas fee wei losses due to min deposit refunds
-    uint256 private accruedGasFeeRefundLoss = 0; // LEFT OFF HERE ... keeper control reset?
-
-    // min entryFeeUSD host can create event with (keeper control)
-    uint256 public minEventEntryFeeUSD = 0;
-
-    // code required for 'burnGTA'
-    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    uint16 private BURN_CODE_EASY;
-    uint32 private BURN_CODE_HARD; 
-    uint64 public BURN_CODE_GUESS_CNT = 0;
-    bool public USE_BURN_CODE_HARD = false;
-
-    // percent of 'serviceFeeUSD' to buy and burn w/ each event
-    uint8 public buyAndBurnPerc = 50; // 50%
-
+    
     /* -------------------------------------------------------- */
     /* EVENTS                                                   */
     /* -------------------------------------------------------- */
@@ -342,15 +350,15 @@ contract GamerTokeAward is ERC20, Ownable {
         return creditsUSD;
     }
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
-        require(_amount > minPlayerDepositUSD, 'err: amount must be greater than minPlayerDepositUSD =)');
+        require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
         minEventEntryFeeUSD = _amount;
     }
     function getAccruedGFRL() public view onlyKeeper returns (uint256) {
         return accruedGasFeeRefundLoss;
     }
     function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
-        require(minPlayerDepositUSD_floor <= _amount && _amount <= minPlayerDepositUSD_ceiling, 'err: invalid amount =)');
-        minPlayerDepositUSD = _amount;
+        require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
+        minDepositUSD = _amount;
     }
     function addWhitelistStables(address[] _tokens) public onlyKeeper {
         for (uint i=0; i < _tokens.length; i++) {
@@ -388,7 +396,6 @@ contract GamerTokeAward is ERC20, Ownable {
         require(router != address(0x0), "err: invalid address");
         
         // NOTE: remove algorithm does NOT maintain order
-        
         rtrs = routersUniswapV2;
         for (i = 0; i < rtrs.length; i++) {
             if (router == rtrs[i]) {
@@ -737,7 +744,7 @@ contract GamerTokeAward is ERC20, Ownable {
                 (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(path, tok_amnt);
 
                 // if stable amount quote is below min deposit required
-                if (stableAmnt < minPlayerDepositUSD) {  
+                if (stableAmnt < minDepositUSD) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
                     if (enableMinDepositRefunds) {
@@ -756,7 +763,7 @@ contract GamerTokeAward is ERC20, Ownable {
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, minPlayerDepositUSD, enableMinDepositRefunds);
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, minDepositUSD, enableMinDepositRefunds);
 
                     // skip to next transfer in 'dataArray'
                     continue;
