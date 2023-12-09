@@ -76,29 +76,15 @@ contract GamerTokeAward is ERC20, Ownable {
     mapping(address => bool) public whitelistStables;
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
-    // usd credits used to process player deposits, registers, refunds
-    mapping(address => uint256) private creditsUSD;
-
-    // set by '_updateCredit'; get by 'getGrossNetBalances' & 'getCreditAddress|getCredits'
-    address[] private creditsAddrArray; 
-
-    // max % of prizePoolUSD the host may charge (keeper controlled)
-    uint8 public maxHostFeePerc = 100;
-
-    // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
-    uint256 private depositFeePerc = 0;
-
-    // % of events total 'entryFeeUSD' collected (keeper controlled)
-    uint8 public keeperFeePerc = 0;
-    uint8 public serviceFeePerc = 0;
-    uint8 public supportFeePerc = 0;
-
-    // % of event 'serviceFeeUSD' to buy & burn (keeper controlled)
-    uint8 public buyAndBurnPerc = 50; 
-
     // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
     mapping(address => uint256) private whitelistBalances;
     mapping(address => uint256) private whitelistPendingDebits;
+
+    // usd credits used to process player deposits, registers, refunds
+    mapping(address => uint256) private creditsUSD;
+
+    // set by '_updateCredit'; get by 'getContractBalances' & 'getCreditAddress|getCredits'
+    address[] private creditsAddrArray; 
 
     // minimum deposits allowed (in usd value)
     uint8 public constant minDepositUSD_floor = 1; // 1 USD 
@@ -113,6 +99,20 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // min entryFeeUSD host can create event with (keeper control)
     uint256 public minEventEntryFeeUSD = 0;
+
+    // max % of prizePoolUSD the host may charge (keeper controlled)
+    uint8 public maxHostFeePerc = 100;
+
+    // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
+    uint256 private depositFeePerc = 0;
+
+    // % of events total 'entryFeeUSD' collected (keeper controlled)
+    uint8 public keeperFeePerc = 0;
+    uint8 public serviceFeePerc = 0;
+    uint8 public supportFeePerc = 0;
+
+    // % of event 'serviceFeeUSD' to buy & burn (keeper controlled)
+    uint8 public buyAndBurnPerc = 50; 
 
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
@@ -418,9 +418,11 @@ contract GamerTokeAward is ERC20, Ownable {
         return false;
     }
 
+    address[] storage contractStables;
+    
     // returns GTA total stable balances - total player credits ('whitelistStables' - 'creditsUSD')
     //  can be done simply from client side as well (ie. w/ 'getCredits()', client side can calc balances)
-    function getGrossNetBalances() public onlyKeeper {
+    function getContractBalances() public onlyKeeper {
         uint256 stable_bal = 0;
         for (uint i=0; i < whitelistStables.length; i++) {
             stable_bal += IERC20(whitelistStables[i]).balanceOf(address(this));
@@ -965,7 +967,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
-    // traverse 'whiltelistStables' using 'whitelistStablesUseIdx'
+    // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
     function _getNextStableTokDeposit() private {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
         whitelistStablesUseIdx++;
@@ -1014,11 +1016,11 @@ contract GamerTokeAward is ERC20, Ownable {
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
                 delete creditsUSD[_player];
-                _remCreditsAddrArray(_player); // 'getGrossNetBalances' support
+                _remCreditsAddrArray(_player); // 'getContractBalances' support
             }
         } else { 
             creditsUSD[_player] += _amountUSD; 
-            _addCreditsAddrArraySafe[_player]; // 'getGrossNetBalances' support
+            _addCreditsAddrArraySafe[_player]; // 'getContractBalances' support
         }
     }
 
