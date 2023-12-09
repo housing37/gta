@@ -74,10 +74,13 @@ contract GamerTokeAward is ERC20, Ownable {
     // mapping of accepted usd stable & alts for player deposits
     mapping(address => bool) public whitelistAlts;
     mapping(address => bool) public whitelistStables;
+
+    // LEFT OFF HERE ... need a way to '_getNextStableTokDeposit()'
+    //  'whitelistStables' is not an array
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
-    // track this contract's whitelist token balances & debits (required for keeper 'SANITY CHECK')
-    mapping(address => uint256) private whitelistBalances;
+    // track this contract's stable token balances & debits (required for keeper 'SANITY CHECK')
+    mapping(address => uint256) private contractBalances;
     mapping(address => uint256) private whitelistPendingDebits;
 
     // usd credits used to process player deposits, registers, refunds
@@ -417,31 +420,6 @@ contract GamerTokeAward is ERC20, Ownable {
         }
         return false;
     }
-
-    address[] storage contractStables;
-    
-    // returns GTA total stable balances - total player credits ('whitelistStables' - 'creditsUSD')
-    //  can be done simply from client side as well (ie. w/ 'getCredits()', client side can calc balances)
-    function getContractBalances() public onlyKeeper {
-        uint256 stable_bal = 0;
-        for (uint i=0; i < whitelistStables.length; i++) {
-            stable_bal += IERC20(whitelistStables[i]).balanceOf(address(this));
-        }
-
-        // LEFT OFF HERE... does it make any sense to integrate this?
-        // uint256 stable_bal = 0;
-        // for (uint i=0; i < whitelistPendingDebits.length; i++) {
-        //     stable_bal += IERC20(whitelistPendingDebits[i]).balanceOf(address(this));
-        // }
-
-        uint256 owedCredits = 0;
-        for (uint i=0; i < creditsAddrArray.length; i++) {
-            owedCredits += creditsUSD[creditsAddrArray[i]];
-        }
-
-        uint256 net_bal = stable_bal - owedCredits;
-        return [stable_bal, owedCredits, net_bal];
-    }
     
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
@@ -726,7 +704,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
     //  1) update credits logged from 'Transfer' emits
     //  2) convert alt deposits to stables (if needed)
-    //  3) settle 'creditsUSD', 'whitelistBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
+    //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
         uint256 gasStart = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
@@ -967,6 +945,8 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
+    // LEFT OFF HERE ... need a way to '_getNextStableTokDeposit()'
+    //  'whitelistStables' is not an array
     // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
     function _getNextStableTokDeposit() private {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
@@ -981,24 +961,24 @@ contract GamerTokeAward is ERC20, Ownable {
         //  settles whitelist debits accrued during 'hostEndEventWithWinners'
         //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
         //  require: keeper calculated (delegated) balance == on-chain balance
-        _settlePendingDebit(token); // sync 'whitelistBalances' w/ 'whitelistPendingDebits'
-        _increaseWhitelistBalance(token, amount); // sync 'whitelistBalances' w/ this 'Transfer' emit
+        _settlePendingDebit(token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
+        _increaseContractBalance(token, amount); // sync 'contractBalances' w/ this 'Transfer' emit
         uint256 chainBal = IERC20(token).balanceOf(address(this));
-        return whitelistBalances[token] == chainBal;
+        return contractBalances[token] == chainBal;
     }
 
     // deduct debits accrued from 'hostEndEventWithWinners'
     function _settlePendingDebit(address token) private {
-        require(whitelistBalances[tok_addr] >= whitelistPendingDebits[tok_addr], 'err: insefficient balance to settle debit :O');
-        whitelistBalances[tok_addr] -= whitelistPendingDebits[tok_addr];
+        require(contractBalances[tok_addr] >= whitelistPendingDebits[tok_addr], 'err: insefficient balance to settle debit :O');
+        contractBalances[tok_addr] -= whitelistPendingDebits[tok_addr];
         delete whitelistPendingDebits[tok_addr];
     }
 
     // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
-    function _increaseWhitelistBalance(address token, uint256 amount) private {
+    function _increaseContractBalance(address token, uint256 amount) private {
         require(token != address(0), 'err: no address :{');
         require(amount != 0, 'err: no amount :{');
-        whitelistBalances[tok_addr] += tok_amnt;
+        contractBalances[tok_addr] += tok_amnt;
     }
 
     // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
