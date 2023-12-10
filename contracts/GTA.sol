@@ -221,6 +221,9 @@ contract GamerTokeAward is ERC20, Ownable {
     // notify clients a new burn code is set with type (easy, hard)
     event BurnCodeReset(bool setToHard);
 
+    // notify client side that a player was registerd for event
+    event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
+
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -520,8 +523,11 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if game launched
         require(!game.launched, 'err: event launched :(');
 
+        // check msg.sender already registered
+        require(!game.players[msg.sender], 'err: already registered for this gameCode :p');
+
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
         // debit entry fee from msg.sender credits (player)
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
@@ -530,12 +536,10 @@ contract GamerTokeAward is ERC20, Ownable {
         game.players[msg.sender] = true;
         game.playerCnt += 1;
         
+        // notify client side that a player was registerd for event
+        emit RegisteredForEvent(gameCode, entryFeeUSD, msg.sender, game.playerCnt);
+        
         return true;
-
-        // address[] playerList = activeGames[gameCode].players;
-        // for (uint i = 0; i < playerList.length; i++) {
-        //     require(playerList[i] != _playerAddress, "err: player already joined game :[");
-        // }
     }
 
     // hosts can pay to add players to their own games (debits from host credits)
@@ -553,6 +557,9 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if game launched
         require(!game.launched, 'err: event launched :(');
 
+        // check _player already registered
+        require(!game.players[_player], 'err: player already registered for this gameCode :p');
+
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
@@ -563,6 +570,9 @@ contract GamerTokeAward is ERC20, Ownable {
         // game.players.push(player);
         game.players[_player] = true;
         game.playerCnt += 1;
+
+        // notify client side that a player was registerd for event
+        emit RegisteredForEvent(gameCode, entryFeeUSD, _player, game.playerCnt);
 
         return true;
     }
