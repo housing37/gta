@@ -76,6 +76,10 @@ contract GamerTokeAward is ERC20, Ownable {
     address[] public whitelistStables;
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
+    // track all stables & alts that this contract has whitelisted
+    address[] private contractStables;
+    address[] private contractAlts;
+
     // track this contract's stable token balances & debits (required for keeper 'SANITY CHECK')
     mapping(address => uint256) private contractBalances;
     mapping(address => uint256) private whitelistPendingDebits;
@@ -365,40 +369,36 @@ contract GamerTokeAward is ERC20, Ownable {
         accruedGasFeeRefundLoss = 0
         return true;
     }
+    function getContractStablesAndAlts() public onlyKeeper returns (address[] memory, address[] memory) {
+        return (contractStables, contractAlts); // tokens that have ever been whitelisted
+    }
     
     function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
     }
-    function addWhitelistStables(address[] _tokens) public onlyKeeper {
+    function updateWhitelistStables(address[] _tokens, bool _add) public onlyKeeper { // allows duplicates
+        // NOTE: integration allows for duplicate addresses in 'whitelistStables'
+        //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address to add :L');
-            // whitelistStables[_tokens[i]] = true;
-            whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables);
-
-            // LEFT OFF HERE ... with this 'safe add', keeper can't control how oftern a stabel is used
-            //      ... also, do we need a 'contractStables' for some reason?
+            require(_tokens[i] != address(0) 'err: found zero address to update :L');
+            if (_add) {
+                whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
+                contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
+            } else {
+                whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
+            }
         }
     }
-    function remWhitelistStables(address[] _tokens) public onlyKeeper {
+    function updateWhitelistAlts(address[] _tokens, bool _add) public onlyKeeper { // no dups allowed
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address to rem :L');
-            // delete whitelistStables[_tokens[i]];
-            whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
-        }
-    }
-    function addWhitelistAlts(address[] _tokens) public onlyKeeper {
-        for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address to add :L');
-            // whitelistAlts[_tokens[i]] = true;
-            whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts);
-        }
-    }
-    function remWhitelistAlts(address[] _tokens) public onlyKeeper {
-        for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address to rem :L');
-            // delete whitelistAlts[_tokens[i]];
-            whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);
+            require(_tokens[i] != address(0) 'err: found zero address for update :L');
+            if (_add) {
+                whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
+                contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
+            } else {
+                whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);   
+            }
         }
     }
     function addDexRouter(address router) public onlyKeeper {
@@ -710,8 +710,9 @@ contract GamerTokeAward is ERC20, Ownable {
         //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
         //      2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            // if (!whitelistStables[dataArray[i].token] && !whitelistAlts[dataArray[i].token]) { continue; } // skip non-whitelist tokens
-            if (!_isTokenInArray(dataArray[i].token, whitelistStables) && !_isTokenInArray(dataArray[i].token, whitelistAlts)) { continue; } // skip non-whitelist tokens
+            bool is_wl_stab = _isTokenInArray(dataArray[i].token, whitelistStables);
+            bool is_wl_alt = _isTokenInArray(dataArray[i].token, whitelistAlts);
+            if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
             
             address tok_addr = dataArray[i].token;
             address src_addr = dataArray[i].sender;
@@ -729,8 +730,7 @@ contract GamerTokeAward is ERC20, Ownable {
             uint256 stable_swap_fee = 0; // gas fee loss for swap: alt -> stable
 
             // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
-            // if (!whitelistStables[tok_addr]) {
-            if (!_isTokenInArray(dataArray[i].token, whitelistStables)) {
+            if (!is_wl_stab) {
 
                 // get stable coin to use & create swap path to it
                 stable_addr = _getNextStableTokDeposit();
@@ -801,18 +801,18 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] _arr) private returns (address[] memory) {
+    function _addAddressToArraySafe(address _addr, address[] _arr, bool _safe) private returns (address[] memory) {
         if (_addr == address(0)) { return _arr; }
 
-        // NOTE: remove first (no duplicates)
-        _arr = _remAddressFromArray(_addr, _arr); 
+        // safe = remove first (no duplicates)
+        if (_safe) { _arr = _remAddressFromArray(_addr, _arr); }
         _arr.push(_addr;)
         return _arr;
     }
     function _remAddressFromArray(address _addr, address[] _arr) private returns (address[] memory) {
         if (_addr == address(0) || _arr.length == 0) { return _arr; }
         
-        // NOTE: remove algorithm does NOT maintain order
+        // NOTE: remove algorithm does NOT maintain order & only removes first occurance
         for (i = 0; i < _arr.length; i++) {
             if (router == _arr[i]) {
                 _arr[i] = _arr[_arr.length - 1];
