@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
+// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
 
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
@@ -209,7 +209,7 @@ contract GamerTokeAward is ERC20, Ownable {
     event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
 
     // notify client side that an end event has occurred successfully
-    event EndEventActivity(address evtCode, address host, address[] memory winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint64 block_timestamp, uint256 block_number);
+    event EndEventActivity(address evtCode, address host, address[] winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint64 block_timestamp, uint256 block_number);
 
     // notify client side that an event has been canceled
     event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
@@ -311,8 +311,8 @@ contract GamerTokeAward is ERC20, Ownable {
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function getBurnCodes() public onlyKeeper returns ((uint16, uint32)) {
-        return (BURN_CODE_EASY, BURN_CODE_HARD);
+    function getBurnCodes() public onlyKeeper returns (uint32[]) {
+        return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
 
     // percent of 'serviceFeeUSD' to buy and burn w/ each event
@@ -368,8 +368,8 @@ contract GamerTokeAward is ERC20, Ownable {
         return accruedGasFeeRefundLoss;
     }
     function resetAccruedGFRL() public onlyKeeper returns (bool) {
-        require(accruedGasFeeRefundLoss > 0. 'err: AccruedGFRL already 0');
-        accruedGasFeeRefundLoss = 0
+        require(accruedGasFeeRefundLoss > 0, 'err: AccruedGFRL already 0');
+        accruedGasFeeRefundLoss = 0;
         return true;
     }
     function getContractStablesAndAlts() public onlyKeeper returns (address[] memory, address[] memory) {
@@ -384,7 +384,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
         //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address to update :L');
+            require(_tokens[i] != address(0), 'err: found zero address to update :L');
             if (_add) {
                 whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
                 contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
@@ -395,7 +395,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     function updateWhitelistAlts(address[] _tokens, bool _add) public onlyKeeper { // no dups allowed
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0) 'err: found zero address for update :L');
+            require(_tokens[i] != address(0), 'err: found zero address for update :L');
             if (_add) {
                 whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
                 contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
@@ -424,12 +424,12 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
     function getPlayersForGame(address _host, string memory _gameName) public view onlyAdmins(gameCode) returns (address[] memory) {
-        require(_host != address(0), 'err: invalid host address :\');
-        require(bytes(_gameName).length > 0, "err: no game name :\");
+        require(_host != address(0), "err: invalid host address :/" );
+        require(bytes(_gameName).length > 0, "err: no game name :/");
         address _gameCode = getGameCode(_host, _gameName);
         return getPlayers(_gameCode);
     }
-    function getPlayers(address _gameCode) public view onlyAdmins(gameCode) returns (address[] memory) {
+    function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
         require(_gameCode != address(0), 'err: invalid game code :O');
         for (uint i=0; i < activeGameCodes.length; i++) {
             if (_gameCode == activeGameCodes[i]) {
@@ -498,7 +498,7 @@ contract GamerTokeAward is ERC20, Ownable {
         activeGames[gameCode] = newGame;
 
         // increment support
-        _addActiveGameCodesArraySafe(gameCode) // 'activeGameCodes'
+        _addActiveGameCodesArraySafe(gameCode); // 'activeGameCodes'
         activeGameCount++;
         
         // return gameCode to caller
@@ -518,10 +518,10 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // get/validate active game
         Game storage game = activeGames[gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
+        require(game.host != address(0), 'err: invalid game code :I');
 
         // check if game launched
-        require(!game.launched, 'err: event launched :(');
+        require(!game.launched, "err: event launched :(");
 
         // check msg.sender already registered
         require(!game.players[msg.sender], 'err: already registered for this gameCode :p');
@@ -585,7 +585,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // get/validate active event
         Game storage evt = activeGames[_eventCode];
-        require(evt.host != address(0), 'err: invalid event code :<>')
+        require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered players, host, or keeper)
         bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
@@ -635,7 +635,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // get/validate active game
         Game storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
+        require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
@@ -654,14 +654,14 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_winner.length > 0, 'err: no winner :p');
 
         // get/validate active game
-        struct memory game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I')
+        Game memory game = activeGames[_gameCode];
+        require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
         // check if # of _winners == .winPercs array length (set during eventCreate)
-        require(game.winPercs.length == _winners.length, 'err: number of winners =(')
+        require(game.winPercs.length == _winners.length, 'err: number of winners =(');
 
         // buy GTA from open market (using 'buyAndBurnUSD')
         uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(), game.buyAndBurnUSD);
@@ -781,7 +781,8 @@ contract GamerTokeAward is ERC20, Ownable {
                 uint256 gasfeeloss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
-                (uint8 rtrIdx, stable_swap_fee) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], gasfeeloss);
+                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], gasfeeloss);
+                stable_swap_fee = amountOut;
 
                 // debit swap fee from 'stable_credit_amnt'
                 stable_credit_amnt -= stable_swap_fee;                
@@ -816,7 +817,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // safe = remove first (no duplicates)
         if (_safe) { _arr = _remAddressFromArray(_addr, _arr); }
-        _arr.push(_addr;)
+        _arr.push(_addr);
         return _arr;
     }
     function _remAddressFromArray(address _addr, address[] _arr) private returns (address[] memory) {
@@ -948,7 +949,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
         //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
         _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
-        _evt.serviceFeeUSD -= _evt.buyAndBurnUSD // NET
+        _evt.serviceFeeUSD -= _evt.buyAndBurnUSD; // NET
 
         // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
         _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
@@ -1091,7 +1092,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
         address[] memory stablesAvail = []; // stables available to cover debit
-        for (uint 1 = 0; i < whitelistStables.length; i++) {
+        for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
             uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
@@ -1107,13 +1108,13 @@ contract GamerTokeAward is ERC20, Ownable {
         // traverse stables available for debit, select stable w/ the lowest market value
         uint256 curr_high_tok_val = 0;
         address curr_low_val_stable = 0x0;
-        for (uint i=0; i < stables.length, i++) {
+        for (uint i=0; i < stables.length; i++) {
             
             // get quote for this available stable (traverses 'routersUniswapV2')
             //  looking for the stable that returns the most when swapped 'from' WPLS
             //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
             address stable_addr = stables[i];
-            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr]], 1 * 10**18);
+            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], 1 * 10**18);
             if (tok_val >= curr_high_tok_val) {
                 curr_high_tok_val = tok_val;
                 curr_low_val_stable = stable_addr;
@@ -1140,7 +1141,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_token1 != address(0), 'err: no token1 :O');
         require(_token2 != address(0), 'err: no token2 :O');
 
-        IUniswapV2Factory public uniswapFactory = IUniswapV2Factory(_factoryAddress);
+        IUniswapV2Factory uniswapFactory = IUniswapV2Factory(_factoryAddress);
         address pair = uniswapFactory.getPair(_token1, _token2);
         require(pair != address(0), 'err: pair does not exist');
 
@@ -1153,7 +1154,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _best_swap_v2_router_idx_quote(addressp[] memory path, uint256 amount) private returns (uint8) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
-        for (uint i = 0; i < routersUniswapV2.length, i++) {
+        for (uint i = 0; i < routersUniswapV2.length; i++) {
             uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
             if (amountsOut[amountsOut.length-1] > currHigh) {
                 currHigh = amountsOut[amountsOut.length-1];
