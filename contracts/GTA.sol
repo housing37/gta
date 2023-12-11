@@ -423,10 +423,10 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    function getPlayersForGame(address _host, string memory _gameName) public view onlyAdmins(gameCode) returns (address[] memory) {
+    function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
         require(_host != address(0), "err: invalid host address :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
-        address _gameCode = getGameCode(_host, _gameName);
+        address _gameCode = getGameCode(_host, _gameName); // generate hash
         return getPlayers(_gameCode);
     }
     function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
