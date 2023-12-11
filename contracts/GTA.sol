@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
 
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
@@ -1150,7 +1150,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function _best_swap_v2_router_idx_quote(addressp[] memory path, uint256 amount) private returns (uint8) {
+    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private returns (uint8) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint i = 0; i < routersUniswapV2.length; i++) {
