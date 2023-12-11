@@ -823,7 +823,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) private returns (address[] memory) {
+    function _addAddressToArraySafe(address _addr, address[] storage _arr, bool _safe) private returns (address[] memory) {
         if (_addr == address(0)) { return _arr; }
 
         // safe = remove first (no duplicates)
@@ -831,7 +831,7 @@ contract GamerTokeAward is ERC20, Ownable {
         _arr.push(_addr);
         return _arr;
     }
-    function _remAddressFromArray(address _addr, address[] memory _arr) private returns (address[] memory) {
+    function _remAddressFromArray(address _addr, address[] storage _arr) private returns (address[] storage) {
         if (_addr == address(0) || _arr.length == 0) { return _arr; }
         
         // NOTE: remove algorithm does NOT maintain order & only removes first occurance
@@ -894,7 +894,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game storage) {
         _evt.players[_player] = true;
         _evt.playerAddresses.push(_player);
-        _evt.playerCnt = _evt.playerAddresses.length;
+        _evt.playerCnt = uint32(_evt.playerAddresses.length);
         return _evt;
     }
 
@@ -1063,7 +1063,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
-        address[] memory stables_avail = []; // stables available to cover debit
+        address[] storage stables_avail; // stables available to cover debit
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
@@ -1079,7 +1079,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
         // traverse stables available for debit, select stable w/ the lowest market value
         uint256 curr_high_tok_val = 0;
-        address curr_low_val_stable = 0x0;
+        address curr_low_val_stable = address(0x0);
         for (uint i=0; i < stables.length; i++) {
             
             // get quote for this available stable (traverses 'routersUniswapV2')
@@ -1103,7 +1103,7 @@ contract GamerTokeAward is ERC20, Ownable {
         IUniswapV2Pair pair = IUniswapV2Pair(_pair);
         require(_token == pair.token0() || _token == pair.token1(), 'err: invalid token->pair address :P');
 
-        (uint reserve0, uint reserve1) = pair.getReserves();
+        (uint reserve0, uint reserve1, uint32 blockTimestampLast) = pair.getReserves();
         if (_token == pair.token0()) { return reserve0; }
         else { return reserve1; }
     }
