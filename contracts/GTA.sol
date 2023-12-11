@@ -505,9 +505,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return gameCode;
     }
 
-    // msg.sender can add themself to any game (debits from msg.sender credits)
-    //  *WARNING* preferred way for user registration, after manual transfer to this contract
-    //     (instead of providing address to host and waiting for host to claim)
+    // msg.sender can add themself to any game; debits from 'creditsUSD[msg.sender]'
     // UPDATE_120223: make deposit then tweet to register
     //              1) send stable|alt deposit to gta contract
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
@@ -1088,10 +1086,10 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
-    // *WARNING* whitelistStables could have duplicates (set by keeper)
+    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
-        address[] memory stablesAvail = []; // stables available to cover debit
+        address[] memory stables_avail = []; // stables available to cover debit
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
@@ -1100,10 +1098,10 @@ contract GamerTokeAward is ERC20, Ownable {
                 stablesAvail.push(whitelistStables[i]);
             }
         }
-        return stablesAvail;
+        return stables_avail;
     }
 
-    // *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
+    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
     function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
         // traverse stables available for debit, select stable w/ the lowest market value
         uint256 curr_high_tok_val = 0;
@@ -1212,9 +1210,9 @@ contract GamerTokeAward is ERC20, Ownable {
 /*****************/
 /*** DEAD CODE ***/
 /*****************/
-
+// NOTE: this integratoin won't work because anyone can monitor 'Transfer' emits and get player addresses on deposits
 // host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
-//  *WARNING* players should not share their addresses with anyone 'except' the host
+//  *ALERT* players should not share their addresses with anyone 'except' the host
 //      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
 // function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
 //     require(player != address(0), 'err: no player ;l');
