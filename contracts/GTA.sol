@@ -158,6 +158,7 @@ contract GamerTokeAward is ERC20, Ownable {
         bool expired;   // 'cancelEventProcessRefunds'
 
         mapping(address => bool) players; // true = registerd 
+        address[] playerAddresses; // traversal access
         uint32 playerCnt;       // length or players; max 4,294,967,295
 
         /** host set */
@@ -442,9 +443,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gameCode != address(0), 'err: invalid game code :O');
         for (uint i=0; i < activeGameCodes.length; i++) {
             if (_gameCode == activeGameCodes[i]) {
-                return activeGames[_gameCode].players;
-
-                // LEFT OFF HERE ... .players is a mapping (not an array)
+                return activeGames[_gameCode].playerAddresses; // '.players' is mapping
             }
         }
         return [];
@@ -889,7 +888,8 @@ contract GamerTokeAward is ERC20, Ownable {
 
     function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game calldata) {
         _evt.players[_player] = true;
-        _evt.playerCnt += 1;
+        _evt.playerAddresses.push(_player);
+        _evt.playerCnt = _evt.playerAddresses.length;
         return _evt;
     }
 
