@@ -19,7 +19,13 @@
     address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
 
 ## GTA.sol finalized design & integration ##
-    DONE - remaining integrations (algorithms ready to be coded)
+    - remaining integrations (algorithms ready to be coded)
+        finalize python keeper ...
+            - keeper.py: should get/filter ‘whitelistAlts’ & ‘whitelistStables’ before passing to solidity
+            - keeper.py: refactor 'get_latest_bals' token check to choose arg params (src,dst,wad -OR- from,to,value)
+                should default to use from,to,value and add alt list that need others
+            - keeper.py: update current integration w/ run loop (10sec wait)
+
         DONE - GTA token distribution (minting & burning)
                 - ref: 'registerEvent', 'hostRegisterEvent', 'cancelEventProcessRefunds', 'settleBalances' (maybe)
              DONE - 1) buy & burn|hold integration (host chooses service-fee discount if paid in GTA)

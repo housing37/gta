@@ -710,7 +710,7 @@ contract GamerTokeAward is ERC20, Ownable {
     //  2) convert alt deposits to stables (if needed)
     //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
-        uint256 gasStart = gasleft(); // record start gas amount
+        uint256 start_refund = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
@@ -759,11 +759,11 @@ contract GamerTokeAward is ERC20, Ownable {
                         IERC20(tok_addr).transfer(src_addr, tok_amnt); 
 
                         // log gas used for refund
-                        uint256 gasfeeloss = (start_trans - gasleft()) * tx.gasprice;
-                        accruedGasFeeRefundLoss += gasfeeloss;
+                        uint256 gas_trans_loss = (start_trans - gasleft()) * tx.gasprice;
+                        accruedGasFeeRefundLoss += gas_trans_loss;
 
                         // notify client listeners that refund was processed
-                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gasfeeloss, accruedGasFeeRefundLoss);
+                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, accruedGasFeeRefundLoss);
                     }
 
                     // notify client side, deposit failed
@@ -776,10 +776,10 @@ contract GamerTokeAward is ERC20, Ownable {
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
                 stable_credit_amnt = _swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt);
-                uint256 gasfeeloss = (start_swap - gasleft()) * tx.gasprice;
+                uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
-                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], gasfeeloss);
+                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], gas_swap_loss);
                 stable_swap_fee = amountOut;
 
                 // debit swap fee from 'stable_credit_amnt'
@@ -804,7 +804,8 @@ contract GamerTokeAward is ERC20, Ownable {
         lastBlockNumUpdate = _lastBlockNum;
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
-        payable(msg.sender).transfer((gasStart - gasleft()) * tx.gasprice); // tx.gasprice in wei
+        uint256 gas_refund = (start_refund - gasleft()) * tx.gasprice;
+        payable(msg.sender).transfer(gas_refund); // tx.gasprice in wei
     }
 
     /* -------------------------------------------------------- */

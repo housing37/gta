@@ -184,18 +184,6 @@ if __name__ == "__main__":
             print("GTA alt bals _ last block# ", last_block_num)
             get_latest_bals(_w3, last_block_num)
 
-        # NEXT_111823:
-        # 	- GTA.sol: integrate stable coin selection
-        # 		for sending winner payouts (algorithm is complete)
-        # 	- cleanup and organization on python and solidity side
-        # 	- GTA.sol: finish ‘generate path’ aspect w/ ‘stable_addr’ in ‘updateCredits’
-        # 	- keeper.py: should get ‘whitelistAltTokens’ & ‘whitelistUsdStables’
-        # 		and filter for them before passing to solidity
-        # 	- keper.py -> get_latest_bals: refactor token check to choose which
-        # 		arg params to use… src,dst,wad -OR- from,to,value
-        # 		should default to use from,to,value and add alt list that need others
-        # 	- keeper.py: update current integration w/ run loop (10sec wait)
-
     except Exception as e:
         print_except(e, debugLvl=0)
     
