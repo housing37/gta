@@ -91,7 +91,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // usd credits used to process player deposits, registers, refunds
     mapping(address => uint256) private creditsUSD;
 
-    // set by '_updateCredit'; get by 'getContractBalances' & 'getCreditAddress|getCredits'
+    // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
     address[] private creditsAddrArray; 
 
     // minimum deposits allowed (in usd value)
@@ -511,7 +511,7 @@ contract GamerTokeAward is ERC20, Ownable {
         activeGames[gameCode] = newGame;
 
         // increment support
-        _addActiveGameCodesArraySafe(gameCode); // 'activeGameCodes'
+        activeGameCodes = _addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
         // return gameCode to caller
@@ -754,7 +754,7 @@ contract GamerTokeAward is ERC20, Ownable {
             if (!is_wl_stab) {
 
                 // get stable coin to use & create swap path to it
-                stable_addr = _getNextStableTokDeposit();
+                address stable_addr = _getNextStableTokDeposit();
                 address[] memory path = [tok_addr, stable_addr];
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
@@ -810,7 +810,7 @@ contract GamerTokeAward is ERC20, Ownable {
             _updateCredit(src_addr, usd_net_amnt, false); // false = credit
 
             // notify client side, deposit successful
-            emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, net_amnt);
+            emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
         }
 
         // update last block number
@@ -836,8 +836,8 @@ contract GamerTokeAward is ERC20, Ownable {
         if (_addr == address(0) || _arr.length == 0) { return _arr; }
         
         // NOTE: remove algorithm does NOT maintain order & only removes first occurance
-        for (i = 0; i < _arr.length; i++) {
-            if (router == _arr[i]) {
+        for (uint i = 0; i < _arr.length; i++) {
+            if (_addr == _arr[i]) {
                 _arr[i] = _arr[_arr.length - 1];
                 _arr.pop();
                 return _arr;
@@ -903,7 +903,7 @@ contract GamerTokeAward is ERC20, Ownable {
         delete activeGames[_evtCode];
 
         // decrement support
-        _remActiveGameCodesArray(_evtCode);
+        activeGameCodes = _remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
         return _evt;
     }
@@ -1015,17 +1015,17 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // deduct debits accrued from 'hostEndEventWithWinners'
-    function _settlePendingDebit(address token) private {
-        require(contractBalances[tok_addr] >= whitelistPendingDebits[tok_addr], 'err: insefficient balance to settle debit :O');
-        contractBalances[tok_addr] -= whitelistPendingDebits[tok_addr];
-        delete whitelistPendingDebits[tok_addr];
+    function _settlePendingDebit(address _token) private {
+        require(contractBalances[_token] >= whitelistPendingDebits[_token], 'err: insefficient balance to settle debit :O');
+        contractBalances[_token] -= whitelistPendingDebits[_token];
+        delete whitelistPendingDebits[_token];
     }
 
     // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
-    function _increaseContractBalance(address token, uint256 amount) private {
-        require(token != address(0), 'err: no address :{');
-        require(amount != 0, 'err: no amount :{');
-        contractBalances[tok_addr] += tok_amnt;
+    function _increaseContractBalance(address _token, uint256 _amount) private {
+        require(_token != address(0), 'err: no address :{');
+        require(_amount != 0, 'err: no amount :{');
+        contractBalances[_token] += _amount;
     }
 
     // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
@@ -1043,58 +1043,12 @@ contract GamerTokeAward is ERC20, Ownable {
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
                 delete creditsUSD[_player];
-                _remCreditsAddrArray(_player); // 'getContractBalances' support
+                creditsAddrArray = _remAddressFromArray(_player, creditsAddrArray);
             }
         } else { 
             creditsUSD[_player] += _amountUSD; 
-            _addCreditsAddrArraySafe[_player]; // 'getContractBalances' support
+            creditsAddrArray = _addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
         }
-    }
-
-    // ensures _player address is logged only once in creditsAddrArray (ie. safely)
-    function _addCreditsAddrArraySafe(address _player) private returns (bool) {
-        require(_player != address(0), "err: invalid _player");
-        bool success = _remCreditsAddrArray(_player);
-        creditsAddrArray.push(_player);
-        return true;
-    }
-
-    // remove algorithm does NOT maintain order
-    function _remCreditsAddrArray(address _player) private returns (bool) {
-        require(_player != address(0), "err: invalid _player");
-        arr = creditsAddrArray;
-        for (i = 0; i < arr.length; i++) {
-            if (_player == arr[i]) {
-                arr[i] = arr[arr.length - 1];
-                arr.pop();
-                creditsAddrArray = arr;
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // ensures _gameCode address is logged only once in 'activeGameCodes' (ie. safely)
-    function _addActiveGameCodesArraySafe(address _gameCode) private returns (bool) {
-        require(_gameCode != address(0), "err: invalid _gameCode");
-        bool success = _remActiveGameCodesArray(_player);
-        activeGameCodes.push(_gameCode);
-        return true;
-    }
-
-    // remove algorithm does NOT maintain order
-    function _remActiveGameCodesArray(address _gameCode) private returns (bool) {
-        require(_gameCode != address(0), "err: invalid _gameCode");
-        arr = activeGameCodes;
-        for (i = 0; i < arr.length; i++) {
-            if (_gameCode == arr[i]) {
-                arr[i] = arr[arr.length - 1];
-                arr.pop();
-                activeGameCodes = arr;
-                return true;
-            }
-        }
-        return false;
     }
 
     /* -------------------------------------------------------- */
