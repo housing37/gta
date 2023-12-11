@@ -1,0 +1,149 @@
+__fname = '_deploy_contract' # ported from 'defi-arb' (121023)
+__filename = __fname + '.py'
+cStrDivider = '#================================================================#'
+print('', cStrDivider, f'GO _ {__filename} -> starting IMPORTs & declaring globals', cStrDivider, sep='\n')
+cStrDivider_1 = '#----------------------------------------------------------------#'
+
+from web3 import Web3, HTTPProvider
+from web3.middleware import construct_sign_and_send_raw_middleware
+from web3.gas_strategies.time_based import fast_gas_price_strategy
+import env
+import pprint
+from attributedict.collections import AttributeDict # tx_receipt requirement
+from _constants import *
+#------------------------------------------------------------#
+sel_chain = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
+assert 0 <= int(sel_chain) <= 1, 'Invalid entry, abort'
+(RPC_URL, CHAIN_ID) = (env.eth_main, env.eth_main_cid) if int(sel_chain) == 0 else (env.pc_main, env.pc_main_cid)
+
+sel_send = input(f'\nSelect sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
+assert 0 <= int(sel_send) <= 1, 'Invalid entry, abort'
+(SENDER_ADDRESS, SENDER_SECRET) = (env.sender_address_3, env.sender_secret_3) if int(sel_send) == 0 else (env.sender_address_1, env.sender_secret_1)
+#------------------------------------------------------------#
+print(f'''\nINITIALIZING web3 ...
+    RPC: {RPC_URL}
+    ChainID: {CHAIN_ID}
+    SENDER: {SENDER_ADDRESS}''')
+W3 = Web3(HTTPProvider(RPC_URL))
+#------------------------------------------------------------#
+if int(sel_chain) == 0:
+    # ethereum main net (update_102923)
+    GAS_LIMIT = 3_000_000# max gas units to use for tx (required)
+    GAS_PRICE = W3.to_wei('10', 'gwei') # price to pay for each unit of gas (optional?)
+    MAX_FEE = W3.to_wei('14', 'gwei') # max fee per gas unit to pay (optional?)
+    MAX_PRIOR_FEE_RATIO = 1.0 # W3.eth.max_priority_fee * mpf_ratio # max fee per gas unit to pay for priority (faster) (optional)
+    MAX_PRIOR_FEE = int(W3.eth.max_priority_fee * MAX_PRIOR_FEE_RATIO) # max fee per gas unit to pay for priority (faster) (optional)
+else:
+    # pulsechain main net (update_103123)
+    GAS_LIMIT = 20_000_000 # max gas units to use for tx (required)
+    GAS_PRICE = W3.to_wei('0.0005', 'ether') # price to pay for each unit of gas (optional?)
+    MAX_FEE = W3.to_wei('0.001', 'ether') # max fee per gas unit to pay (optional?); note: 0.0005 causes delay for _deploy_contract
+    MAX_PRIOR_FEE_RATIO = 1.0
+    MAX_PRIOR_FEE = int(W3.eth.max_priority_fee * MAX_PRIOR_FEE_RATIO) # max fee per gas unit to pay for priority (faster) (optional)
+
+print(f'''\nSetting gas params ...
+    GAS_LIMIT: {GAS_LIMIT}
+    GAS_PRICE: {GAS_PRICE} *'gasPrice' param fails on PC
+    MAX_FEE: {MAX_FEE} ({MAX_FEE / 10**18} wei)
+    MAX_PRIOR_FEE: {MAX_PRIOR_FEE}''')
+#------------------------------------------------------------#
+print(f'\nreading contract abi & bytecode files ...')
+with open(abi_file, "r") as file: CONTR_ABI = file.read()
+with open(bin_file, "r") as file: CONTR_BYTES = '0x'+file.read()
+#------------------------------------------------------------#
+
+print(f'\nDEPLOYING bytecode: {bin_file}')
+print(f'DEPLOYING abi: {abi_file}')
+
+assert input('\n procced? [y/n]\n > ') == 'y', "aborted...\n"
+
+def estimate_gas():
+    # Replace with your contract's ABI and bytecode
+    contract_abi = CONTR_ABI
+    contract_bytecode = CONTR_BYTES
+    
+    # Replace with your wallet's private key
+    private_key = SENDER_SECRET
+
+    # Create a web3.py contract object
+    contract = W3.eth.contract(abi=contract_abi, bytecode=contract_bytecode)
+
+    # Set the sender's address from the private key
+    sender_address = W3.eth.account.from_key(private_key).address
+
+    # Estimate gas for contract deployment
+    gas_estimate = contract.constructor().estimateGas({'from': sender_address})
+
+    print(f"\nEstimated gas cost _ 0: {gas_estimate}")
+
+    import statistics
+    block = W3.eth.get_block("latest", full_transactions=True)
+    gas_estimate = int(statistics.median(t.gas for t in block.transactions))
+    gas_price = W3.eth.gas_price
+    gas_price_eth = W3.fromWei(gas_price, 'ether')
+    print(f"Estimated gas cost _ 1: {gas_estimate}")
+    print(f" Current gas price: {gas_price_eth} ether (PLS) == {gas_price} wei")
+    # Optionally, you can also estimate the gas price (in Gwei) using a gas price strategy
+    # Replace 'fast' with other strategies like 'medium' or 'slow' as needed
+    #gas_price = W3.eth.generateGasPrice(fast_gas_price_strategy)
+    #print(f"Estimated gas price (Gwei): {W3.fromWei(gas_price, 'gwei')}")
+    
+    return input('\n procced? [y/n]\n > ') == 'y'
+
+# note: params checked/set in priority order; 'def|max_params' uses 'mpf_ratio'
+#   if all params == False, falls back to 'min_params=True' (ie. just use 'gas_limit')
+def get_gas_params_lst(rpc_url, min_params=False, max_params=False, def_params=True):
+    # Estimate the gas cost for the transaction
+    #gas_estimate = buy_tx.estimate_gas()
+    gas_limit = GAS_LIMIT # max gas units to use for tx (required)
+    gas_price = GAS_PRICE # price to pay for each unit of gas (optional?)
+    max_fee = MAX_FEE # max fee per gas unit to pay (optional?)
+    max_prior_fee = MAX_PRIOR_FEE # max fee per gas unit to pay for priority (faster) (optional)
+    #max_priority_fee = W3.to_wei('0.000000003', 'ether')
+
+    if min_params:
+        return [{'gas':gas_limit}]
+    elif max_params:
+        #return [{'gas':gas_limit}, {'gasPrice': gas_price}, {'maxFeePerGas': max_fee}, {'maxPriorityFeePerGas': max_prior_fee}]
+        return [{'gas':gas_limit}, {'maxFeePerGas': max_fee}, {'maxPriorityFeePerGas': max_prior_fee}]
+    elif def_params:
+        return [{'gas':gas_limit}, {'maxPriorityFeePerGas': max_prior_fee}]
+    else:
+        return [{'gas':gas_limit}]
+        
+proceed = estimate_gas()
+assert proceed, "\ndeployment canceled after gas estimate\n"
+
+print('\nintializing contract to deploy ...')
+balancer_flr = W3.eth.contract(
+    abi=CONTR_ABI,
+    bytecode=CONTR_BYTES
+)
+
+print('calculating gas ...')
+tx_nonce = W3.eth.getTransactionCount(SENDER_ADDRESS)
+tx_params = {
+    'chainId': CHAIN_ID,
+    'nonce': tx_nonce,
+}
+lst_gas_params = get_gas_params_lst(RPC_URL, min_params=False, max_params=True, def_params=True)
+for d in lst_gas_params: tx_params.update(d) # append gas params
+
+print(f'building tx w/ NONCE: {tx_nonce} ...')
+constructor_tx = balancer_flr.constructor().buildTransaction(tx_params)
+
+print('signing and sending tx ...')
+# Sign and send the transaction # Deploy the contract
+tx_signed = W3.eth.account.signTransaction(constructor_tx, private_key=SENDER_SECRET)
+tx_hash = W3.eth.sendRawTransaction(tx_signed.rawTransaction)
+
+print(cStrDivider_1, 'waiting for receipt ...', sep='\n')
+print(f'    tx_hash: {tx_hash.hex()}')
+# Wait for the transaction to be mined
+tx_receipt = W3.eth.waitForTransactionReceipt(tx_hash)
+
+# print incoming tx receipt (requires pprint & AttributeDict)
+tx_receipt = AttributeDict(tx_receipt) # import required
+tx_rc_print = pprint.PrettyPrinter().pformat(tx_receipt)
+print(cStrDivider_1, f'RECEIPT:\n {tx_rc_print}', sep='\n')
+print(cStrDivider_1, f"\n\n Contract deployed at address: {tx_receipt['contractAddress']}\n\n", sep='\n')
