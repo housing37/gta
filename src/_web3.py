@@ -36,6 +36,12 @@ class WEB3:
         w3, account                     = self.init_web3()
         gas_tup                         = self.get_gas_settings(w3)
         return self
+    
+    def add_contract_deploy(self, _abi_file, _bin_file):
+        assert self.W3 != None, 'err: web3 not initialzed'
+        contr_abi, contr_bytes  = self.read_abi_bytecode(_abi_file, _bin_file)
+        contract                = self.init_contract_bin(contr_abi, contr_bytes, self.W3)
+        return contract
 
     def add_contract_GTA(self, dict_contr):
         assert self.W3 != None, 'err: web3 not initialzed'
@@ -121,6 +127,11 @@ class WEB3:
         contr_addr = w3.to_checksum_address(contr_addr)
         contract = w3.eth.contract(address=contr_addr, abi=contr_abi)
         return contract, contr_addr
+    
+    def init_contract_bin(self, contr_abi, contr_bin, w3):
+        print(f'\ninitializing contract bytecode for deploy ...')
+        contract = w3.eth.contract(abi=contr_abi, bytecode=contr_bin)
+        return contract
     
 # #------------------------------------------------------------#
 # def inp_CHAIN_SEL():

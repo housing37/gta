@@ -47,8 +47,8 @@ ADDR_9INCH = '0x3ca80d83277e721171284667829c686527B8b3c5'
 #------------------------------------------------------------#
 print('getting keys and setting globals ...')
 ## SETTINGS ##
-# abi_file = "../contracts/BalancerFLR_pc.json"
-# bin_file = "../contracts/BalancerFLR_pc.bin"
+abi_file = "../contracts/BalancerFLR_pc.json"
+bin_file = "../contracts/BalancerFLR_pc.bin"
 abi_file_atro = "../contracts/atropa.json"
 bin_file_atro = "../contracts/atropa.bin"
 abi_file_wpls = "../contracts/wpls.json"

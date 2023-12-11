@@ -4,83 +4,54 @@ cStrDivider = '#================================================================
 print('', cStrDivider, f'GO _ {__filename} -> starting IMPORTs & declaring globals', cStrDivider, sep='\n')
 cStrDivider_1 = '#----------------------------------------------------------------#'
 
+#------------------------------------------------------------#
+#   IMPORTS                                                  #
+#------------------------------------------------------------#
+import sys, os, traceback, time, pprint, json
+from datetime import datetime
+
 from web3 import Web3, HTTPProvider
 from web3.middleware import construct_sign_and_send_raw_middleware
 from web3.gas_strategies.time_based import fast_gas_price_strategy
 import env
 import pprint
 from attributedict.collections import AttributeDict # tx_receipt requirement
-from _constants import *
-#------------------------------------------------------------#
-sel_chain = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
-assert 0 <= int(sel_chain) <= 1, 'Invalid entry, abort'
-(RPC_URL, CHAIN_ID) = (env.eth_main, env.eth_main_cid) if int(sel_chain) == 0 else (env.pc_main, env.pc_main_cid)
+import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 
-sel_send = input(f'\nSelect sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
-assert 0 <= int(sel_send) <= 1, 'Invalid entry, abort'
-(SENDER_ADDRESS, SENDER_SECRET) = (env.sender_address_3, env.sender_secret_3) if int(sel_send) == 0 else (env.sender_address_1, env.sender_secret_1)
-#------------------------------------------------------------#
-print(f'''\nINITIALIZING web3 ...
-    RPC: {RPC_URL}
-    ChainID: {CHAIN_ID}
-    SENDER: {SENDER_ADDRESS}''')
-W3 = Web3(HTTPProvider(RPC_URL))
-#------------------------------------------------------------#
-if int(sel_chain) == 0:
-    # ethereum main net (update_102923)
-    GAS_LIMIT = 3_000_000# max gas units to use for tx (required)
-    GAS_PRICE = W3.to_wei('10', 'gwei') # price to pay for each unit of gas (optional?)
-    MAX_FEE = W3.to_wei('14', 'gwei') # max fee per gas unit to pay (optional?)
-    MAX_PRIOR_FEE_RATIO = 1.0 # W3.eth.max_priority_fee * mpf_ratio # max fee per gas unit to pay for priority (faster) (optional)
-    MAX_PRIOR_FEE = int(W3.eth.max_priority_fee * MAX_PRIOR_FEE_RATIO) # max fee per gas unit to pay for priority (faster) (optional)
-else:
-    # pulsechain main net (update_103123)
-    GAS_LIMIT = 20_000_000 # max gas units to use for tx (required)
-    GAS_PRICE = W3.to_wei('0.0005', 'ether') # price to pay for each unit of gas (optional?)
-    MAX_FEE = W3.to_wei('0.001', 'ether') # max fee per gas unit to pay (optional?); note: 0.0005 causes delay for _deploy_contract
-    MAX_PRIOR_FEE_RATIO = 1.0
-    MAX_PRIOR_FEE = int(W3.eth.max_priority_fee * MAX_PRIOR_FEE_RATIO) # max fee per gas unit to pay for priority (faster) (optional)
+_w3 = _web3.WEB3().init_inp()
+balancer_flr = _w3.add_contract_deploy(_constants.abi_file, _constants.bin_file)
 
-print(f'''\nSetting gas params ...
-    GAS_LIMIT: {GAS_LIMIT}
-    GAS_PRICE: {GAS_PRICE} *'gasPrice' param fails on PC
-    MAX_FEE: {MAX_FEE} ({MAX_FEE / 10**18} wei)
-    MAX_PRIOR_FEE: {MAX_PRIOR_FEE}''')
-#------------------------------------------------------------#
-print(f'\nreading contract abi & bytecode files ...')
-with open(abi_file, "r") as file: CONTR_ABI = file.read()
-with open(bin_file, "r") as file: CONTR_BYTES = '0x'+file.read()
-#------------------------------------------------------------#
 
-print(f'\nDEPLOYING bytecode: {bin_file}')
-print(f'DEPLOYING abi: {abi_file}')
+print(f'\nDEPLOYING bytecode: {_constants.bin_file}')
+print(f'DEPLOYING abi: {_constants.abi_file}')
 
-assert input('\n procced? [y/n]\n > ') == 'y', "aborted...\n"
+assert input('\n (1) procced? [y/n]\n > ') == 'y', "aborted...\n"
 
-def estimate_gas():
+def estimate_gas(contract):
     # Replace with your contract's ABI and bytecode
-    contract_abi = CONTR_ABI
-    contract_bytecode = CONTR_BYTES
+    # contract_abi = CONTR_ABI
+    # contract_bytecode = CONTR_BYTES
     
     # Replace with your wallet's private key
-    private_key = SENDER_SECRET
+    private_key = _w3.SENDER_SECRET
 
     # Create a web3.py contract object
-    contract = W3.eth.contract(abi=contract_abi, bytecode=contract_bytecode)
+    # contract = _w3.W3.eth.contract(abi=contract_abi, bytecode=contract_bytecode)
 
     # Set the sender's address from the private key
-    sender_address = W3.eth.account.from_key(private_key).address
+    sender_address = _w3.W3.eth.account.from_key(private_key).address
 
     # Estimate gas for contract deployment
-    gas_estimate = contract.constructor().estimateGas({'from': sender_address})
+    # gas_estimate = contract.constructor().estimateGas({'from': sender_address})
+    gas_estimate = contract.constructor().estimate_gas({'from': sender_address})
 
     print(f"\nEstimated gas cost _ 0: {gas_estimate}")
 
     import statistics
-    block = W3.eth.get_block("latest", full_transactions=True)
+    block = _w3.W3.eth.get_block("latest", full_transactions=True)
     gas_estimate = int(statistics.median(t.gas for t in block.transactions))
-    gas_price = W3.eth.gas_price
-    gas_price_eth = W3.fromWei(gas_price, 'ether')
+    gas_price = _w3.W3.eth.gas_price
+    gas_price_eth = _w3.W3.from_wei(gas_price, 'ether')
     print(f"Estimated gas cost _ 1: {gas_estimate}")
     print(f" Current gas price: {gas_price_eth} ether (PLS) == {gas_price} wei")
     # Optionally, you can also estimate the gas price (in Gwei) using a gas price strategy
@@ -88,17 +59,17 @@ def estimate_gas():
     #gas_price = W3.eth.generateGasPrice(fast_gas_price_strategy)
     #print(f"Estimated gas price (Gwei): {W3.fromWei(gas_price, 'gwei')}")
     
-    return input('\n procced? [y/n]\n > ') == 'y'
+    return input('\n (2) procced? [y/n]\n > ') == 'y'
 
 # note: params checked/set in priority order; 'def|max_params' uses 'mpf_ratio'
 #   if all params == False, falls back to 'min_params=True' (ie. just use 'gas_limit')
 def get_gas_params_lst(rpc_url, min_params=False, max_params=False, def_params=True):
     # Estimate the gas cost for the transaction
     #gas_estimate = buy_tx.estimate_gas()
-    gas_limit = GAS_LIMIT # max gas units to use for tx (required)
-    gas_price = GAS_PRICE # price to pay for each unit of gas (optional?)
-    max_fee = MAX_FEE # max fee per gas unit to pay (optional?)
-    max_prior_fee = MAX_PRIOR_FEE # max fee per gas unit to pay for priority (faster) (optional)
+    gas_limit = _w3.GAS_LIMIT # max gas units to use for tx (required)
+    gas_price = _w3.GAS_PRICE # price to pay for each unit of gas (optional?)
+    max_fee = _w3.MAX_FEE # max fee per gas unit to pay (optional?)
+    max_prior_fee = _w3.MAX_PRIOR_FEE # max fee per gas unit to pay for priority (faster) (optional)
     #max_priority_fee = W3.to_wei('0.000000003', 'ether')
 
     if min_params:
@@ -111,39 +82,88 @@ def get_gas_params_lst(rpc_url, min_params=False, max_params=False, def_params=T
     else:
         return [{'gas':gas_limit}]
         
-proceed = estimate_gas()
+proceed = estimate_gas(balancer_flr)
 assert proceed, "\ndeployment canceled after gas estimate\n"
 
-print('\nintializing contract to deploy ...')
-balancer_flr = W3.eth.contract(
-    abi=CONTR_ABI,
-    bytecode=CONTR_BYTES
-)
-
 print('calculating gas ...')
-tx_nonce = W3.eth.getTransactionCount(SENDER_ADDRESS)
+tx_nonce = _w3.W3.eth.get_transaction_count(_w3.SENDER_ADDRESS)
 tx_params = {
-    'chainId': CHAIN_ID,
+    'chainId': _w3.CHAIN_ID,
     'nonce': tx_nonce,
 }
-lst_gas_params = get_gas_params_lst(RPC_URL, min_params=False, max_params=True, def_params=True)
+lst_gas_params = get_gas_params_lst(_w3.RPC_URL, min_params=False, max_params=True, def_params=True)
 for d in lst_gas_params: tx_params.update(d) # append gas params
 
 print(f'building tx w/ NONCE: {tx_nonce} ...')
-constructor_tx = balancer_flr.constructor().buildTransaction(tx_params)
+constructor_tx = balancer_flr.constructor().build_transaction(tx_params)
 
 print('signing and sending tx ...')
 # Sign and send the transaction # Deploy the contract
-tx_signed = W3.eth.account.signTransaction(constructor_tx, private_key=SENDER_SECRET)
-tx_hash = W3.eth.sendRawTransaction(tx_signed.rawTransaction)
+tx_signed = _w3.W3.eth.account.sign_transaction(constructor_tx, private_key=_w3.SENDER_SECRET)
+tx_hash = _w3.W3.eth.send_raw_transaction(tx_signed.rawTransaction)
 
 print(cStrDivider_1, 'waiting for receipt ...', sep='\n')
 print(f'    tx_hash: {tx_hash.hex()}')
 # Wait for the transaction to be mined
-tx_receipt = W3.eth.waitForTransactionReceipt(tx_hash)
+tx_receipt = _w3.W3.eth.wait_for_transaction_receipt(tx_hash)
 
 # print incoming tx receipt (requires pprint & AttributeDict)
 tx_receipt = AttributeDict(tx_receipt) # import required
 tx_rc_print = pprint.PrettyPrinter().pformat(tx_receipt)
 print(cStrDivider_1, f'RECEIPT:\n {tx_rc_print}', sep='\n')
 print(cStrDivider_1, f"\n\n Contract deployed at address: {tx_receipt['contractAddress']}\n\n", sep='\n')
+
+# #------------------------------------------------------------#
+# #   DEFAULT SUPPORT                                          #
+# #------------------------------------------------------------#
+# READ_ME = f'''
+#     *DESCRIPTION*
+#         execute keeper runloop
+
+#     *NOTE* INPUT PARAMS...
+#         nil
+        
+#     *EXAMPLE EXECUTION*
+#         $ python3 {__filename} -<nil> <nil>
+#         $ python3 {__filename}
+# '''
+# #ref: https://stackoverflow.com/a/1278740/2298002
+# def print_except(e, debugLvl=0):
+#     #print(type(e), e.args, e)
+#     print('', cStrDivider, f' Exception Caught _ e: {e}', cStrDivider, sep='\n')
+#     if debugLvl > 0:
+#         print('', cStrDivider, f' Exception Caught _ type(e): {type(e)}', cStrDivider, sep='\n')
+#     if debugLvl > 1:
+#         print('', cStrDivider, f' Exception Caught _ e.args: {e.args}', cStrDivider, sep='\n')
+
+#     exc_type, exc_obj, exc_tb = sys.exc_info()
+#     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+#     strTrace = traceback.format_exc()
+#     print('', cStrDivider, f' type: {exc_type}', f' file: {fname}', f' line_no: {exc_tb.tb_lineno}', f' traceback: {strTrace}', cStrDivider, sep='\n')
+
+# def get_time_now(dt=True):
+#     if dt: return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[0:-4]
+#     return datetime.now().strftime("%H:%M:%S.%f")[0:-4]
+
+# def read_cli_args():
+#     print(f'\nread_cli_args...\n # of args: {len(sys.argv)}\n argv lst: {str(sys.argv)}')
+#     for idx, val in enumerate(sys.argv): print(f' argv[{idx}]: {val}')
+#     print('read_cli_args _ DONE\n')
+#     return sys.argv, len(sys.argv)
+
+# if __name__ == "__main__":
+#     ## start ##
+#     RUN_TIME_START = get_time_now()
+#     print(f'\n\nRUN_TIME_START: {RUN_TIME_START}\n'+READ_ME)
+#     lst_argv_OG, argv_cnt = read_cli_args()
+    
+#     ## exe ##
+#     try:
+#         pass
+#     except Exception as e:
+#         print_except(e, debugLvl=0)
+    
+#     ## end ##
+#     print(f'\n\nRUN_TIME_START: {RUN_TIME_START}\nRUN_TIME_END:   {get_time_now()}\n')
+
+# print('', cStrDivider, f'# END _ {__filename}', cStrDivider, sep='\n')
