@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 // import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV1Factory.sol";
 
-interface IUniswapV2Factory {
+interface IUniswapV1Factory {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/V1/IUniswapV1Factory.sol
     function getExchange(address) external view returns (address);
 }
@@ -1103,7 +1103,8 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_token1 != address(0), 'err: no token1 :O');
         require(_token2 != address(0), 'err: no token2 :O');
 
-        IUniswapV2Factory uniswapFactory = IUniswapV2Factory(_factoryAddress);
+        // IUniswapV2Factory uniswapFactory = IUniswapV2Factory(_factoryAddress);
+        IUniswapV1Factory uniswapFactory = IUniswapV1Factory(_factoryAddress);
         address pair = uniswapFactory.getPair(_token1, _token2);
         require(pair != address(0), 'err: pair does not exist');
 
