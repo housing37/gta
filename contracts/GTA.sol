@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;        
-// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Factory.sol";
+// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV1Factory.sol";
 
+interface IUniswapV2Factory {
+    // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/V1/IUniswapV1Factory.sol
+    function getExchange(address) external view returns (address);
+}
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
     function swapExactTokensForTokens(
@@ -44,8 +48,8 @@ contract GamerTokeAward is ERC20, Ownable {
     address private keeper; // 37, curator, manager, caretaker, keeper
     
     /* _ TOKEN INIT SUPPORT _ */
-    string private constant name = "_TEST GTA IERC20";
-    string private constant symbol = "_TEST_GTA";
+    string private constant tok_name = "_TEST GTA IERC20";
+    string private constant tok_symb = "_TEST_GTA";
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
@@ -115,8 +119,11 @@ contract GamerTokeAward is ERC20, Ownable {
     uint8 public serviceFeePerc = 0;
     uint8 public supportFeePerc = 0;
 
-    // % of event 'serviceFeeUSD' to buy & burn (keeper controlled)
-    uint8 public buyAndBurnPerc = 50; 
+    // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
+    //  and % of buy & burn GTA to mint for winners
+    // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
+    uint8 public buyAndBurnPerc = 50;
+    uint8 public buyAndBurnMintPerc;
 
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
@@ -228,7 +235,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
     // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
-    constructor(uint256 _initSupply) ERC20(name, symbol) Ownable(msg.sender) {
+    constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
@@ -279,7 +286,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return _burnGTA();
     }
     function _burnGTA() private returns (bool) {
-        uint256 bal = _balances[address(this)];
+        uint256 bal = super._balances[address(this)];
         require(bal > 0, 'err: no GTA to burn :p');
 
         // burn it.. burn it real good...
@@ -315,10 +322,16 @@ contract GamerTokeAward is ERC20, Ownable {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
 
-    // percent of 'serviceFeeUSD' to buy and burn w/ each event
+    // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
+    //  and % of buy & burn GTA to mint for winners
+    // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
     function setBuyAndBurnPerc(uint8 _perc) public onlyKeeper {
         require(_perc <= 100, 'err: invalid percent :(');
         buyAndBurnPerc = _perc;
+    }
+    function setBuyAndBurnMintPerc(uint8 _perc) public onlyKeeper {
+        require(_perc <= 100, 'err: invalid percent :O');
+        buyAndBurnMintPerc = _perc;
     }
 
     /* -------------------------------------------------------- */
@@ -334,16 +347,16 @@ contract GamerTokeAward is ERC20, Ownable {
     function getGameExpSec() public view onlyKeeper returns (uint64) {
         return gameExpSec;
     }
-    function setKeeper(address _newKeepr) public onlyKeeper {
+    function setKeeper(address _newKeeper) public onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
-        keeper = _newKeepr;
+        keeper = _newKeeper;
     }
     function setGameExpSec(uint64 sec) public onlyKeeper {
         gameExpSec = sec;
     }
     function setDepositFeePerc(uint8 _perc) public onlyKeeper {
         require(_perc <= 100, 'err: max 100%');
-        depositFeePerc = perc;
+        depositFeePerc = _perc;
     }
     function getLastBlockNumUpdate() public view onlyKeeper {
         return lastBlockNumUpdate;
@@ -406,8 +419,8 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     function addDexRouter(address router) public onlyKeeper {
         require(router != address(0x0), "err: invalid address");
-        rtrs = routersUniswapV2;
-        for (i = 0; i < rtrs.length; i++) {
+        address[] rtrs = routersUniswapV2;
+        for (uint i = 0; i < rtrs.length; i++) {
             require(router != rtrs[i], 'err: duplicate router');
         }
         routersUniswapV2.push(router);
@@ -476,7 +489,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_hostCanCreateEvent(_entryFeeUSD), "err: not enough GTA to host :/");
 
         // verify active game name/code doesn't exist yet
-        address gameCode = _generateAddressHash(msg.sender, gameName);
+        address gameCode = _generateAddressHash(msg.sender, _gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
         // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
@@ -535,7 +548,7 @@ contract GamerTokeAward is ERC20, Ownable {
         game.playerCnt += 1;
         
         // notify client side that a player was registerd for event
-        emit RegisteredForEvent(gameCode, entryFeeUSD, msg.sender, game.playerCnt);
+        emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.playerCnt);
         
         return true;
     }
@@ -570,7 +583,7 @@ contract GamerTokeAward is ERC20, Ownable {
         game.playerCnt += 1;
 
         // notify client side that a player was registerd for event
-        emit RegisteredForEvent(gameCode, entryFeeUSD, _player, game.playerCnt);
+        emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.playerCnt);
 
         return true;
     }
@@ -649,7 +662,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // _winners: [0x1st_place, 0x2nd_place, ...]
     function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
         require(_gameCode != address(0), 'err: no game code :p');
-        require(_winner.length > 0, 'err: no winner :p');
+        require(_winners.length > 0, 'err: no winners :p');
 
         // get/validate active game
         Game memory game = activeGames[_gameCode];
@@ -664,8 +677,8 @@ contract GamerTokeAward is ERC20, Ownable {
         // buy GTA from open market (using 'buyAndBurnUSD')
         uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(), game.buyAndBurnUSD);
 
-        // calc 'gta_amnt_mint' using 'playerMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
-        uint256 gta_amnt_mint = (gta_amnt_burn * (playerMintPerc/100)) / _winners.length;
+        // calc 'gta_amnt_mint' using 'buyAndBurnMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
+        uint256 gta_amnt_mint = (gta_amnt_burn * (buyAndBurnMintPerc/100)) / _winners.length;
 
         // loop through _winners: distribute 'game.winPercs'
         for (uint i=0; i < _winners.length; i++) {
