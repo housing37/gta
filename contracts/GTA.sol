@@ -44,8 +44,8 @@ contract GamerTokeAward is ERC20, Ownable {
     address private keeper; // 37, curator, manager, caretaker, keeper
     
     /* _ TOKEN INIT SUPPORT _ */
-    string private constant name = "Gamer Token Award";
-    string private constant symbol = "GTA";
+    string private constant name = "_TEST GTA IERC20";
+    string private constant symbol = "_TEST_GTA";
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
@@ -603,7 +603,7 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i=0; i < evt.players.length; i++) {
             // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
             // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
-            // address stable = _transferBestStableUSD(evt.players[i], evt.refundUSD_ind);
+            // address stable = _transferBestDebitStableUSD(evt.players[i], evt.refundUSD_ind);
 
             // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
@@ -679,7 +679,7 @@ contract GamerTokeAward is ERC20, Ownable {
             uint256 win_usd = game.payoutsUSD[i];
 
             // pay winner
-            address stable = _transferBestStableUSD(winner, win_usd);
+            address stable = _transferBestDebitStableUSD(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
             _increaseWhitelistPendingDebit(stable, win_usd);
@@ -692,8 +692,8 @@ contract GamerTokeAward is ERC20, Ownable {
         }
 
         // pay host & keeper
-        address stable_host = _transferBestStableUSD(game.host, game.hostFeeUSD);
-        address stable_keep = _transferBestStableUSD(keeper, game.keeperFeeUSD);
+        address stable_host = _transferBestDebitStableUSD(game.host, game.hostFeeUSD);
+        address stable_keep = _transferBestDebitStableUSD(keeper, game.keeperFeeUSD);
 
         // set event params to end state
         game = _endEvent(game, _gameCode);
@@ -870,7 +870,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return stable;
     }
 
-    function _transferBestStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
+    function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
         address stable = _getBestDebitStableUSD(_amountUSD);
 
