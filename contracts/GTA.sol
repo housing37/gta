@@ -318,7 +318,7 @@ contract GamerTokeAward is ERC20, Ownable {
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function getBurnCodes() public onlyKeeper returns (uint32[]) {
+    function getBurnCodes() public onlyKeeper returns (uint32[] calldata) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
 
@@ -393,7 +393,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
     }
-    function updateWhitelistStables(address[] _tokens, bool _add) public onlyKeeper { // allows duplicates
+    function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
         //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
         for (uint i=0; i < _tokens.length; i++) {
@@ -406,7 +406,7 @@ contract GamerTokeAward is ERC20, Ownable {
             }
         }
     }
-    function updateWhitelistAlts(address[] _tokens, bool _add) public onlyKeeper { // no dups allowed
+    function updateWhitelistAlts(address[] calldata _tokens, bool _add) public onlyKeeper { // no dups allowed
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'err: found zero address for update :L');
             if (_add) {
@@ -417,13 +417,9 @@ contract GamerTokeAward is ERC20, Ownable {
             }
         }
     }
-    function addDexRouter(address router) public onlyKeeper {
-        require(router != address(0x0), "err: invalid address");
-        address[] rtrs = routersUniswapV2;
-        for (uint i = 0; i < rtrs.length; i++) {
-            require(router != rtrs[i], 'err: duplicate router');
-        }
-        routersUniswapV2.push(router);
+    function addDexRouter(address _router) public onlyKeeper {
+        require(_router != address(0x0), "err: invalid address");
+        routersUniswapV2 = _addAddressToArraySafe(_router, routersUniswapV2, true); // true = no dups
     }
     function remDexRouter(address router) public onlyKeeper returns (bool) {
         require(router != address(0x0), "err: invalid address");
@@ -480,7 +476,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
-    function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] _winPercs) public returns (address) {
+    function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
@@ -824,7 +820,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] _arr, bool _safe) private returns (address[] memory) {
+    function _addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) private returns (address[] memory) {
         if (_addr == address(0)) { return _arr; }
 
         // safe = remove first (no duplicates)
@@ -832,7 +828,7 @@ contract GamerTokeAward is ERC20, Ownable {
         _arr.push(_addr);
         return _arr;
     }
-    function _remAddressFromArray(address _addr, address[] _arr) private returns (address[] memory) {
+    function _remAddressFromArray(address _addr, address[] memory _arr) private returns (address[] memory) {
         if (_addr == address(0) || _arr.length == 0) { return _arr; }
         
         // NOTE: remove algorithm does NOT maintain order & only removes first occurance
@@ -1063,7 +1059,7 @@ contract GamerTokeAward is ERC20, Ownable {
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
             uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
             if (stableBal > _debitAmntUSD * 10**18) { 
-                stablesAvail.push(whitelistStables[i]);
+                stables_avail.push(whitelistStables[i]);
             }
         }
         return stables_avail;
@@ -1111,8 +1107,8 @@ contract GamerTokeAward is ERC20, Ownable {
         address pair = uniswapFactory.getPair(_token1, _token2);
         require(pair != address(0), 'err: pair does not exist');
 
-        tok_liq_1 = _getLiquidityInPair(_token1, pair);
-        tok_liq_2 = _getLiquidityInPair(_token2, pair);
+        uint256 tok_liq_1 = _getLiquidityInPair(_token1, pair);
+        uint256 tok_liq_2 = _getLiquidityInPair(_token2, pair);
         return (tok_liq_1, tok_liq_2);
     }
 
@@ -1146,23 +1142,23 @@ contract GamerTokeAward is ERC20, Ownable {
     
     // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
     function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, bool fromETH) private returns (uint256) {
-        emit logRFL(address(this), msg.sender, "logRFL 6a");
+        // emit logRFL(address(this), msg.sender, "logRFL 6a");
         IUniswapV2 swapRouter = IUniswapV2(router);
         
-        emit logRFL(address(this), msg.sender, "logRFL 6b");
+        // emit logRFL(address(this), msg.sender, "logRFL 6b");
         IERC20(address(path[0])).approve(address(swapRouter), amntIn);
         uint deadline = block.timestamp + 300;
-        
-        emit logRFL(address(this), msg.sender, "logRFL 6c");
+        uint[] memory amntOut;
+        // emit logRFL(address(this), msg.sender, "logRFL 6c");
         if (fromETH) {
-            uint[] memory amntOut = swapRouter.swapExactETHForTokens{value: amountUSD}(
+            amntOut = swapRouter.swapExactETHForTokens{value: amntIn}(
                             amntOutMin,
                             path, //address[] calldata path,
                             address(this), // to
                             deadline
                         );
         } else {
-            uint[] memory amntOut = swapRouter.swapExactTokensForTokens(
+            amntOut = swapRouter.swapExactTokensForTokens(
                             amntIn,
                             amntOutMin,
                             path, //address[] calldata path,
@@ -1170,7 +1166,7 @@ contract GamerTokeAward is ERC20, Ownable {
                             deadline
                         );
         }
-        emit logRFL(address(this), msg.sender, "logRFL 6d");
+        // emit logRFL(address(this), msg.sender, "logRFL 6d");
         return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
     }
 }
