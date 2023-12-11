@@ -847,7 +847,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _isTokenInArray(address _addr, address[] memory _arr) private returns (bool) {
         if (_addr == address(0) || _arr.length == 0) { return false; }
         for (uint i=0; i < _arr.length; i++) {
-            if (_addr = _arr[i]) { return true; }
+            if (_addr == _arr[i]) { return true; }
         }
         return false;
     }
@@ -1127,7 +1127,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private returns (uint8, uint256) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
-        for (uint i = 0; i < routersUniswapV2.length; i++) {
+        for (uint8 i = 0; i < routersUniswapV2.length; i++) {
             uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
             if (amountsOut[amountsOut.length-1] > currHigh) {
                 currHigh = amountsOut[amountsOut.length-1];
