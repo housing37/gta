@@ -443,6 +443,8 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i=0; i < activeGameCodes.length; i++) {
             if (_gameCode == activeGameCodes[i]) {
                 return activeGames[_gameCode].players;
+
+                // LEFT OFF HERE ... .players is a mapping (not an array)
             }
         }
         return [];
@@ -540,8 +542,7 @@ contract GamerTokeAward is ERC20, Ownable {
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
-        game.players[msg.sender] = true;
-        game.playerCnt += 1;
+        game = _addPlayerToEvent(msg.sender, game);
         
         // notify client side that a player was registerd for event
         emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.playerCnt);
@@ -574,9 +575,7 @@ contract GamerTokeAward is ERC20, Ownable {
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
-        // game.players.push(player);
-        game.players[_player] = true;
-        game.playerCnt += 1;
+        game = _addPlayerToEvent(_player, game);
 
         // notify client side that a player was registerd for event
         emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.playerCnt);
@@ -888,8 +887,14 @@ contract GamerTokeAward is ERC20, Ownable {
         return stable;
     }
 
+    function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game calldata) {
+        _evt.players[_player] = true;
+        _evt.playerCnt += 1;
+        return _evt;
+    }
+
     // set event param to end state
-    function _endEvent(Game storage _evt, address _evtCode) private returns (Game storage) {
+    function _endEvent(Game storage _evt, address _evtCode) private returns (Game calldata) {
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
         _evt.endBlockNum = block.number;
@@ -1202,8 +1207,9 @@ contract GamerTokeAward is ERC20, Ownable {
 
 //     // -1) add player to game event
 //     // game.players.push(player);
-//     game.players[player] = true;
-//     game.playerCnt += 1;
+//     // game.players[player] = true;
+//     // game.playerCnt += 1;
+//     game = _addPlayerToEvent(player, game);
 
 //     return true;
 // }
