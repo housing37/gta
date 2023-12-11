@@ -286,7 +286,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return _burnGTA();
     }
     function _burnGTA() private returns (bool) {
-        uint256 bal = super._balances[address(this)];
+        uint256 bal = balanceOf(address(this));
         require(bal > 0, 'err: no GTA to burn :p');
 
         // burn it.. burn it real good...
@@ -318,7 +318,7 @@ contract GamerTokeAward is ERC20, Ownable {
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function getBurnCodes() public onlyKeeper returns (uint32[] calldata) {
+    function getBurnCodes() public onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
 
@@ -351,14 +351,14 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
     }
-    function setGameExpSec(uint64 sec) public onlyKeeper {
-        gameExpSec = sec;
+    function setGameExpSec(uint32 _sec) public onlyKeeper {
+        gameExpSec = _sec;
     }
     function setDepositFeePerc(uint8 _perc) public onlyKeeper {
         require(_perc <= 100, 'err: max 100%');
         depositFeePerc = _perc;
     }
-    function getLastBlockNumUpdate() public view onlyKeeper {
+    function getLastBlockNumUpdate() public view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
     }
     function setMaxHostFeePerc(uint8 _perc) public onlyKeeper returns (bool) {
