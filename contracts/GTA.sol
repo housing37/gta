@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;        
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+// import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+// import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 interface IUniswapV2 {
@@ -35,7 +35,8 @@ interface IUniswapV2 {
     register -> player, delegates, users, participants, entrants
         payout -> winnings, earnings, rewards, recipients 
 */
-contract GamerTokeAward is ERC20, Ownable {
+// contract GamerTokeAward is ERC20, Ownable {
+contract GamerTokeAward {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
@@ -231,10 +232,11 @@ contract GamerTokeAward is ERC20, Ownable {
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
     // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
-    constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+    // constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+    constructor(uint256 _initSupply){
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
-        _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
+        // _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
     /* -------------------------------------------------------- */
@@ -244,8 +246,8 @@ contract GamerTokeAward is ERC20, Ownable {
         require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         bool isHost = msg.sender == activeGames[gameCode].host;
         bool isKeeper = msg.sender == keeper;
-        bool isOwner = msg.sender == owner(); // from 'Ownable'
-        require(isKeeper || isOwner || isHost, 'err: only admins :/*');
+        // bool isOwner = msg.sender == owner(); // from 'Ownable'
+        // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
     }
     modifier onlyHost(address gameCode) {
@@ -269,37 +271,37 @@ contract GamerTokeAward is ERC20, Ownable {
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
     //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    function burnGTA_HARD(uint32 burnCode) public returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
-        require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
-        return _burnGTA();
-    }
-    function burnGTA_EASY(uint16 burnCode) public returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
-        require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
-        return _burnGTA();
-    }
-    function _burnGTA() private returns (bool) {
-        uint256 bal = balanceOf(address(this));
-        require(bal > 0, 'err: no GTA to burn :p');
+    // function burnGTA_HARD(uint32 burnCode) public returns (bool) {
+    //     BURN_CODE_GUESS_CNT++; // keep track of guess count
+    //     require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
+    //     require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
+    //     return _burnGTA();
+    // }
+    // function burnGTA_EASY(uint16 burnCode) public returns (bool) {
+    //     BURN_CODE_GUESS_CNT++; // keep track of guess count
+    //     require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
+    //     require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
+    //     return _burnGTA();
+    // }
+    // function _burnGTA() private returns (bool) {
+    //     // uint256 bal = balanceOf(address(this));
+    //     require(bal > 0, 'err: no GTA to burn :p');
 
-        // burn it.. burn it real good...
-        //  burn 'buyAndBurnPerc' of 'bal', send rest to cracker
-        uint256 bal_burn = bal * (buyAndBurnPerc/100);
-        uint256 bal_earn = bal - bal_burn;
-        IERC20(address(this)).transfer(address(0), bal_burn);
-        IERC20(address(this)).transfer(msg.sender, bal_earn);
+    //     // burn it.. burn it real good...
+    //     //  burn 'buyAndBurnPerc' of 'bal', send rest to cracker
+    //     uint256 bal_burn = bal * (buyAndBurnPerc/100);
+    //     uint256 bal_earn = bal - bal_burn;
+    //     IERC20(address(this)).transfer(address(0), bal_burn);
+    //     IERC20(address(this)).transfer(msg.sender, bal_earn);
 
-        // notify the world that shit was burned
-        emit BurnedGTA(bal, msg.sender, BURN_CODE_GUESS_CNT);
+    //     // notify the world that shit was burned
+    //     emit BurnedGTA(bal, msg.sender, BURN_CODE_GUESS_CNT);
 
-        // reset guess count
-        BURN_CODE_GUESS_CNT = 0;
+    //     // reset guess count
+    //     BURN_CODE_GUESS_CNT = 0;
 
-        return true;
-    }
+    //     return true;
+    // }
 
     // code required for 'burnGTA'
     function setBurnCodeEasy(uint16 bc) public onlyKeeper {
@@ -683,7 +685,7 @@ contract GamerTokeAward is ERC20, Ownable {
             _increaseWhitelistPendingDebit(stable, win_usd);
 
             // mint GTA to this winner (amount is same for all winners)
-            _mint(winner, gta_amnt_mint);
+            // _mint(winner, gta_amnt_mint);
 
             // notify client side that an end event distribution occurred successfully
             emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
@@ -758,7 +760,7 @@ contract GamerTokeAward is ERC20, Ownable {
                         uint256 start_trans = gasleft();
 
                         // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                        IERC20(tok_addr).transfer(src_addr, tok_amnt); 
+                        // IERC20(tok_addr).transfer(src_addr, tok_amnt); 
 
                         // log gas used for refund
                         uint256 gas_trans_loss = (start_trans - gasleft()) * tx.gasprice;
@@ -847,11 +849,12 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private returns (bool) {
         // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
-        uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
+        // uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
         address[] memory gta_stab_path = new address[](2);
         gta_stab_path[0] = address(this);
         gta_stab_path[1] = _getNextStableTokDeposit();
-        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
+        // (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
+        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, 0);
         return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
     }
 
@@ -886,7 +889,7 @@ contract GamerTokeAward is ERC20, Ownable {
         address stable = _getBestDebitStableUSD(_amountUSD);
 
         // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-        IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
+        // IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
         return stable;
     }
 
@@ -1015,8 +1018,9 @@ contract GamerTokeAward is ERC20, Ownable {
         //  require: keeper calculated (delegated) balance == on-chain balance
         _settlePendingDebit(token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
         _increaseContractBalance(token, amount); // sync 'contractBalances' w/ this 'Transfer' emit
-        uint256 chainBal = IERC20(token).balanceOf(address(this));
-        return contractBalances[token] == chainBal;
+        // uint256 chainBal = IERC20(token).balanceOf(address(this));
+        // return contractBalances[token] == chainBal;
+        return contractBalances[token] == 0;
     }
 
     // deduct debits accrued from 'hostEndEventWithWinners'
@@ -1067,8 +1071,9 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
-            uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
-            if (stableBal > _debitAmntUSD * 10**18) { 
+            // uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
+            // if (stableBal > _debitAmntUSD * 10**18) { 
+            if (0 > _debitAmntUSD * 10**18) { 
                 stables_avail[i] = whitelistStables[i];
 
             }
@@ -1135,8 +1140,9 @@ contract GamerTokeAward is ERC20, Ownable {
         uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
                 
         // verifiy new balance of token received
-        uint256 new_bal = IERC20(path[path.length -1]).balanceOf(address(this));
-        require(new_bal >= amntOut, "err: balance low :{");
+        // uint256 new_bal = IERC20(path[path.length -1]).balanceOf(address(this));
+        // require(new_bal >= amntOut, "err: balance low :{");
+        require(0 >= amntOut, "err: balance low :{");        
         
         return amntOut;
     }
@@ -1147,7 +1153,7 @@ contract GamerTokeAward is ERC20, Ownable {
         IUniswapV2 swapRouter = IUniswapV2(router);
         
         // emit logRFL(address(this), msg.sender, "logRFL 6b");
-        IERC20(address(path[0])).approve(address(swapRouter), amntIn);
+        // IERC20(address(path[0])).approve(address(swapRouter), amntIn);
         uint deadline = block.timestamp + 300;
         uint[] memory amntOut;
         // emit logRFL(address(this), msg.sender, "logRFL 6c");
