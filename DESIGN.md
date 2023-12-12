@@ -325,3 +325,40 @@
         NOTE_2: if the host lies about who are the winners, then those winners will never play that host's games again
                     (capitalism at its finest)
 
+
+/*****************/
+/*** DEAD CODE ***/
+/*****************/
+// NOTE: this integratoin won't work because anyone can monitor 'Transfer' emits and get player addresses on deposits
+// host can add players to their own games, by claiming address credits waiting in creditsUSD (debits from player credits)
+//  *ALERT* players should not share their addresses with anyone 'except' the host
+//      (player credits can be freely claimed by any hosted game, if enough credits are available; brute-force required)
+// function hostRegisterEventClaim(address player, address gameCode) public returns (bool) {
+//     require(player != address(0), 'err: no player ;l');
+
+//     // get/validate active game
+//     struct storage game = activeGames[gameCode];
+//     require(game.host != address(0), 'err: invalid game code :I');
+
+//     // check if msg.sender is game host
+//     require(game.host == msg.sender, 'err: only host :/');
+
+//     // check if game launched
+//     require(!game.launched, 'err: event launched :(');
+
+//     // check player for enough credits
+//     require(game.entryFeeUSD < creditsUSD[player], 'err: not enough claimable credits :(');
+
+//     // debit entry fee from player credits
+//     // creditsUSD[player] -= game.entryFeeUSD;
+//     // handles tracking addresses w/ creditsAddrArray
+//     _updateCredit(player, game.entryFeeUSD, true); // true = debit
+
+//     // -1) add player to game event
+//     // game.players.push(player);
+//     // game.players[player] = true;
+//     // game.playerCnt += 1;
+//     game = _addPlayerToEvent(player, game);
+
+//     return true;
+// }
