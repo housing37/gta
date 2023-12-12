@@ -747,13 +747,12 @@ contract GamerTokeAward is ERC20, Ownable {
 
                 // get stable coin to use & create swap path to it
                 address stable_addr = _getNextStableTokDeposit();
-                address[] memory path = new address[](2);
-                path[0] = tok_addr;
-                path[1] = stable_addr;
-
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
-                (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(path, tok_amnt);
+                address[] memory alt_stab_path = new address[](2);
+                alt_stab_path[0] = tok_addr;
+                alt_stab_path[1] = stable_addr;
+                (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
 
                 // if stable amount quote is below min deposit required
                 if (stableAmnt < minDepositUSD) {  
@@ -783,12 +782,14 @@ contract GamerTokeAward is ERC20, Ownable {
 
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = _swap_v2_wrap(path, routersUniswapV2[rtrIdx], tok_amnt);
+                stable_credit_amnt = _swap_v2_wrap(alt_stab_path, routersUniswapV2[rtrIdx], tok_amnt);
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
-                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], gas_swap_loss);
-                     // LEFT OFF HERE .... DON'T UNDERSTAAND THIS SYNATX ERROR ^
+                address[] memory wpls_stab_path = new address[](2);
+                wpls_stab_path[0] = TOK_WPLS;
+                wpls_stab_path[1] = stable_addr;
+                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
                 stable_swap_fee = amountOut;
 
@@ -852,7 +853,10 @@ contract GamerTokeAward is ERC20, Ownable {
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private returns (bool) {
         // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
         uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
-        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote([address(this), _getNextStableTokDeposit()], gta_bal);
+        address[] memory gta_stab_path = new address[](2);
+        gta_stab_path[0] = address(this);
+        gta_stab_path[1] = _getNextStableTokDeposit();
+        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
         return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
     }
 
@@ -864,9 +868,11 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'routersUniswapV2')
     function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) private returns (uint256) {
-        address[] memory path = [stable, address(this)];
-        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(path, _buyAndBurnUSD * 10**18);
-        uint256 gta_amnt_out = _swap_v2_wrap(path, routersUniswapV2[rtrIdx], _buyAndBurnUSD * 10**18);
+        address[] memory stab_gta_path = new address[](2);
+        stab_gta_path[0] = stable;
+        stab_gta_path[1] = address(this);
+        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
+        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, routersUniswapV2[rtrIdx], _buyAndBurnUSD * 10**18);
         return gta_amnt_out;
     }
 
@@ -1059,15 +1065,17 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
     // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
+    // NOTE: *WARNING* stables_avail could have random idx's w/ address(0) (default in static length memory array)
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
-        address[] storage stables_avail; // stables available to cover debit
+        address[] memory stables_avail = new address[](whitelistStables.length);
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
             uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
             if (stableBal > _debitAmntUSD * 10**18) { 
-                stables_avail.push(whitelistStables[i]);
+                stables_avail[i] = whitelistStables[i];
+
             }
         }
         return stables_avail;
@@ -1079,12 +1087,16 @@ contract GamerTokeAward is ERC20, Ownable {
         uint256 curr_high_tok_val = 0;
         address curr_low_val_stable = address(0x0);
         for (uint i=0; i < stables.length; i++) {
-            
+            address stable_addr = stables[i];
+            if (stable_addr == address(0)) { continue; }
+
             // get quote for this available stable (traverses 'routersUniswapV2')
             //  looking for the stable that returns the most when swapped 'from' WPLS
             //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
-            address stable_addr = stables[i];
-            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote([TOK_WPLS, stable_addr], 1 * 10**18);
+            address[] memory wpls_stab_path = new address[](2);
+            wpls_stab_path[0] = TOK_WPLS;
+            wpls_stab_path[1] = stable_addr;
+            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote(wpls_stab_path, 1 * 10**18);
             if (tok_val >= curr_high_tok_val) {
                 curr_high_tok_val = tok_val;
                 curr_low_val_stable = stable_addr;
@@ -1122,7 +1134,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private returns (uint8, uint256) {
+    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint8 i = 0; i < routersUniswapV2.length; i++) {
