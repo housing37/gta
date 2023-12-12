@@ -4,12 +4,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV1Factory.sol";
 
-// interface IUniswapV1Factory {
-//     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/V1/IUniswapV1Factory.sol
-//     function getExchange(address) external view returns (address);
-// }
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
     function swapExactTokensForTokens(
@@ -1117,21 +1112,6 @@ contract GamerTokeAward is ERC20, Ownable {
         if (_token == pair.token0()) { return reserve0; }
         else { return reserve1; }
     }
-
-    // support hostEndEventWithWinners (120223: not in use)
-    // function _getPairLiquidity(address _token1, address _token2, address _factoryAddress) private view returns (uint256, uint256) {
-    //     require(_token1 != address(0), 'err: no token1 :O');
-    //     require(_token2 != address(0), 'err: no token2 :O');
-
-    //     // IUniswapV2Factory uniswapFactory = IUniswapV2Factory(_factoryAddress);
-    //     IUniswapV1Factory uniswapFactory = IUniswapV1Factory(_factoryAddress);
-    //     address pair = uniswapFactory.getPair(_token1, _token2);
-    //     require(pair != address(0), 'err: pair does not exist');
-
-    //     uint256 tok_liq_1 = _getLiquidityInPair(_token1, pair);
-    //     uint256 tok_liq_2 = _getLiquidityInPair(_token2, pair);
-    //     return (tok_liq_1, tok_liq_2);
-    // }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
     function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
