@@ -489,9 +489,10 @@ contract GamerTokeAward is ERC20, Ownable {
         address gameCode = _generateAddressHash(msg.sender, _gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
-        // Creates a default empty 'Game' struct (if doesn't yet exist in 'activeGames' mapping)
+        // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
+        //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
+        //    Modifying the newGame will indeed directly affect the state stored in activeGames[gameCode].
         Game storage newGame = activeGames[gameCode];
-        // Game storage newGame; // create new default empty struct
         
         // set properties for default empty 'Game' struct
         newGame.host = msg.sender;
@@ -503,9 +504,6 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.createBlockNum = block.number;
         newGame.startTime = _startTime;
         newGame.expTime = _startTime + gameExpSec;
-
-        // Assign the newly modified 'Game' struct back to 'activeGames' mapping
-        activeGames[gameCode] = newGame;
 
         // increment support
         activeGameCodes = _addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
