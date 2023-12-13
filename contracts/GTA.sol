@@ -54,6 +54,7 @@ contract GamerTokeAward {
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
     mapping(address => Game) public activeGames;
+    // LEFT OFF HERE ... this mapping causes compiler err: stack too deep
     
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
     uint8 public hostRequirementPerc = 100; // uint8 max = 255
@@ -213,11 +214,11 @@ contract GamerTokeAward {
     event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
 
     // notify client side that an end event has occurred successfully
-    event EndEventActivity(address evtCode, address host, address[] winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
+    // event EndEventActivity(address evtCode, address host, address[] winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
 
     // notify client side that an event has been canceled
     event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
-    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prizePoolUSD, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
+    // event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prizePoolUSD, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
     // notify client side that someoen cracked the burn code and burned all gta in this contract
     event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
@@ -242,27 +243,27 @@ contract GamerTokeAward {
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
-    modifier onlyAdmins(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        bool isHost = msg.sender == activeGames[gameCode].host;
-        bool isKeeper = msg.sender == keeper;
-        // bool isOwner = msg.sender == owner(); // from 'Ownable'
-        // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
-        _;
-    }
-    modifier onlyHost(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        require(msg.sender == activeGames[gameCode].host, "Only the host :0");
-        _;
-    }    
+    // modifier onlyAdmins(address gameCode) {
+    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
+    //     bool isHost = msg.sender == activeGames[gameCode].host;
+    //     bool isKeeper = msg.sender == keeper;
+    //     // bool isOwner = msg.sender == owner(); // from 'Ownable'
+    //     // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
+    //     _;
+    // }
+    // modifier onlyHost(address gameCode) {
+    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
+    //     require(msg.sender == activeGames[gameCode].host, "Only the host :0");
+    //     _;
+    // }    
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
     }
-    modifier validGameCode(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        _;
-    }
+    // modifier validGameCode(address gameCode) {
+    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
+    //     _;
+    // }
 
     /* -------------------------------------------------------- */
     /* SIDE QUEST... CRACK THE BURN CODE                        */
@@ -391,30 +392,30 @@ contract GamerTokeAward {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
     }
-    function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
-        // NOTE: integration allows for duplicate addresses in 'whitelistStables'
-        //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
-        for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0), 'err: found zero address to update :L');
-            if (_add) {
-                whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
-                contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
-            } else {
-                whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
-            }
-        }
-    }
-    function updateWhitelistAlts(address[] calldata _tokens, bool _add) public onlyKeeper { // no dups allowed
-        for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0), 'err: found zero address for update :L');
-            if (_add) {
-                whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
-                contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
-            } else {
-                whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);   
-            }
-        }
-    }
+    // function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
+    //     // NOTE: integration allows for duplicate addresses in 'whitelistStables'
+    //     //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
+    //     for (uint i=0; i < _tokens.length; i++) {
+    //         require(_tokens[i] != address(0), 'err: found zero address to update :L');
+    //         if (_add) {
+    //             whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
+    //             contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
+    //         } else {
+    //             whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
+    //         }
+    //     }
+    // }
+    // function updateWhitelistAlts(address[] calldata _tokens, bool _add) public onlyKeeper { // no dups allowed
+    //     for (uint i=0; i < _tokens.length; i++) {
+    //         require(_tokens[i] != address(0), 'err: found zero address for update :L');
+    //         if (_add) {
+    //             whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
+    //             contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
+    //         } else {
+    //             whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);   
+    //         }
+    //     }
+    // }
     function addDexRouter(address _router) public onlyKeeper {
         require(_router != address(0x0), "err: invalid address");
         routersUniswapV2 = _addAddressToArraySafe(_router, routersUniswapV2, true); // true = no dups
@@ -430,21 +431,21 @@ contract GamerTokeAward {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
-        require(_host != address(0), "err: invalid host address :/" );
-        require(bytes(_gameName).length > 0, "err: no game name :/");
-        address _gameCode = getGameCode(_host, _gameName); // generate hash
-        return getPlayers(_gameCode);
-    }
-    function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
-        require(_gameCode != address(0), 'err: invalid game code :O');
-        for (uint i=0; i < activeGameCodes.length; i++) {
-            if (_gameCode == activeGameCodes[i]) {
-                return activeGames[_gameCode].playerAddresses; // '.players' is mapping
-            }
-        }
-        return new address[](0);
-    }
+    // function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
+    //     require(_host != address(0), "err: invalid host address :/" );
+    //     require(bytes(_gameName).length > 0, "err: no game name :/");
+    //     address _gameCode = getGameCode(_host, _gameName); // generate hash
+    //     return getPlayers(_gameCode);
+    // }
+    // function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
+    //     require(_gameCode != address(0), 'err: invalid game code :O');
+    //     for (uint i=0; i < activeGameCodes.length; i++) {
+    //         if (_gameCode == activeGameCodes[i]) {
+    //             return activeGames[_gameCode].playerAddresses; // '.players' is mapping
+    //         }
+    //     }
+    //     return new address[](0);
+    // }
 
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
@@ -455,17 +456,17 @@ contract GamerTokeAward {
     }
 
     // gameCode = hash(_host, _gameName)
-    function getGameCode(address _host, string memory _gameName) public view returns (address) {
-        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
-        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
-        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
+    // function getGameCode(address _host, string memory _gameName) public view returns (address) {
+    //     require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
+    //     require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
+    //     require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
-        // generate gameCode from host address and game name
-        address gameCode = _generateAddressHash(_host, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
+    //     // generate gameCode from host address and game name
+    //     address gameCode = _generateAddressHash(_host, _gameName);
+    //     require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
-        return gameCode;
-    }
+    //     return gameCode;
+    // }
 
     function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
@@ -474,41 +475,41 @@ contract GamerTokeAward {
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
-    function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
-        require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
-        require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
-        require(_winPercs.length > 0, 'err: no winners? :O');
-        require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
-        require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
+    // function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
+    //     require(_startTime > block.timestamp, "err: start too soon :/");
+    //     require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
+    //     require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
+    //     require(_winPercs.length > 0, 'err: no winners? :O');
+    //     require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
+    //     require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
 
-        // verify active game name/code doesn't exist yet
-        address gameCode = _generateAddressHash(msg.sender, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
+    //     // verify active game name/code doesn't exist yet
+    //     address gameCode = _generateAddressHash(msg.sender, _gameName);
+    //     require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
-        // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
-        //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
-        //    Modifying the newGame will indeed directly affect the state stored in activeGames[gameCode].
-        Game storage newGame = activeGames[gameCode];
+    //     // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
+    //     //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
+    //     //    Modifying the newGame will indeed directly affect the state stored in activeGames[gameCode].
+    //     Game storage newGame = activeGames[gameCode];
         
-        // set properties for default empty 'Game' struct
-        newGame.host = msg.sender;
-        newGame.gameName = _gameName;
-        newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
-        newGame.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
-        newGame.createTime = block.timestamp;
-        newGame.createBlockNum = block.number;
-        newGame.startTime = _startTime;
-        newGame.expTime = _startTime + gameExpSec;
+    //     // set properties for default empty 'Game' struct
+    //     newGame.host = msg.sender;
+    //     newGame.gameName = _gameName;
+    //     newGame.entryFeeUSD = _entryFeeUSD;
+    //     newGame.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
+    //     newGame.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
+    //     newGame.createTime = block.timestamp;
+    //     newGame.createBlockNum = block.number;
+    //     newGame.startTime = _startTime;
+    //     newGame.expTime = _startTime + gameExpSec;
 
-        // increment support
-        activeGameCodes = _addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
-        activeGameCount++;
+    //     // increment support
+    //     activeGameCodes = _addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
+    //     activeGameCount++;
         
-        // return gameCode to caller
-        return gameCode;
-    }
+    //     // return gameCode to caller
+    //     return gameCode;
+    // }
 
     // msg.sender can add themself to any game; debits from 'creditsUSD[msg.sender]'
     // UPDATE_120223: make deposit then tweet to register
@@ -516,193 +517,193 @@ contract GamerTokeAward {
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
     //                  OR ... for free play w/ host register
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
-    function registerEvent(address gameCode) public returns (bool) {
-        require(gameCode != address(0), 'err: no game code ;o');
+    // function registerEvent(address gameCode) public returns (bool) {
+    //     require(gameCode != address(0), 'err: no game code ;o');
 
-        // get/validate active game
-        Game storage game = activeGames[gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+    //     // get/validate active game
+    //     Game storage game = activeGames[gameCode];
+    //     require(game.host != address(0), 'err: invalid game code :I');
 
-        // check if game launched
-        require(!game.launched, "err: event launched :(");
+    //     // check if game launched
+    //     require(!game.launched, "err: event launched :(");
 
-        // check msg.sender already registered
-        require(!game.players[msg.sender], 'err: already registered for this gameCode :p');
+    //     // check msg.sender already registered
+    //     require(!game.players[msg.sender], 'err: already registered for this gameCode :p');
 
-        // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
+    //     // check msg.sender for enough credits
+    //     require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
-        // debit entry fee from msg.sender credits (player)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+    //     // debit entry fee from msg.sender credits (player)
+    //     _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
-        // -1) add msg.sender to game event
-        game = _addPlayerToEvent(msg.sender, game);
+    //     // -1) add msg.sender to game event
+    //     game = _addPlayerToEvent(msg.sender, game);
         
-        // notify client side that a player was registerd for event
-        emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.playerCnt);
+    //     // notify client side that a player was registerd for event
+    //     emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.playerCnt);
         
-        return true;
-    }
+    //     return true;
+    // }
 
-    // hosts can pay to add players to their own games (debits from host credits)
-    function hostRegisterEvent(address _player, address _gameCode) public returns (bool) {
-        require(_player != address(0), 'err: no player ;l');
-        require(_gameCode != address(0), 'err: no game code ;l');
+    // // hosts can pay to add players to their own games (debits from host credits)
+    // function hostRegisterEvent(address _player, address _gameCode) public returns (bool) {
+    //     require(_player != address(0), 'err: no player ;l');
+    //     require(_gameCode != address(0), 'err: no game code ;l');
 
-        // get/validate active game
-        Game storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+    //     // get/validate active game
+    //     Game storage game = activeGames[_gameCode];
+    //     require(game.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+    //     // check if msg.sender is game host
+    //     require(game.host == msg.sender, 'err: only host :/');
 
-        // check if game launched
-        require(!game.launched, 'err: event launched :(');
+    //     // check if game launched
+    //     require(!game.launched, 'err: event launched :(');
 
-        // check _player already registered
-        require(!game.players[_player], 'err: player already registered for this gameCode :p');
+    //     // check _player already registered
+    //     require(!game.players[_player], 'err: player already registered for this gameCode :p');
 
-        // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
+    //     // check msg.sender for enough credits
+    //     require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
-        // debit entry fee from msg.sender credits (host)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+    //     // debit entry fee from msg.sender credits (host)
+    //     _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
-        // -1) add player to game event
-        game = _addPlayerToEvent(_player, game);
+    //     // -1) add player to game event
+    //     game = _addPlayerToEvent(_player, game);
 
-        // notify client side that a player was registerd for event
-        emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.playerCnt);
+    //     // notify client side that a player was registerd for event
+    //     emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.playerCnt);
 
-        return true;
-    }
+    //     return true;
+    // }
 
-    // cancel event and process refunds (host, players, keeper)
-    //  host|keeper can cancel if event not 'launched' yet
-    //  players can cancel if event not 'launched' & 'expTime' has passed
-    function cancelEventProcessRefunds(address _eventCode) public {
-        require(_eventCode != address(0), 'err: no event code :<>');
+    // // cancel event and process refunds (host, players, keeper)
+    // //  host|keeper can cancel if event not 'launched' yet
+    // //  players can cancel if event not 'launched' & 'expTime' has passed
+    // function cancelEventProcessRefunds(address _eventCode) public {
+    //     require(_eventCode != address(0), 'err: no event code :<>');
 
-        // get/validate active event
-        Game storage evt = activeGames[_eventCode];
-        require(evt.host != address(0), 'err: invalid event code :<>');
+    //     // get/validate active event
+    //     Game storage evt = activeGames[_eventCode];
+    //     require(evt.host != address(0), 'err: invalid event code :<>');
         
-        // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
-        require(isValidSender, 'err: only players or host :<>');
+    //     // check for valid sender to cancel (only registered players, host, or keeper)
+    //     bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
+    //     require(isValidSender, 'err: only players or host :<>');
 
-        // for host|player|keeper cancel, verify event not launched
-        require(!evt.launched, 'err: event started :<>'); 
+    //     // for host|player|keeper cancel, verify event not launched
+    //     require(!evt.launched, 'err: event started :<>'); 
 
-        // for player cancel, also verify event expTime must be passed 
-        if (evt.players[msg.sender]) {
-            require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
-        } 
+    //     // for player cancel, also verify event expTime must be passed 
+    //     if (evt.players[msg.sender]) {
+    //         require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
+    //     } 
 
-        //  loop through players, choose stable for refund, transfer from IERC20
-        for (uint i=0; i < evt.playerAddresses.length; i++) {
-            // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
-            // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
-            // address stable = _transferBestDebitStableUSD(evt.players[i], evt.refundUSD_ind);
+    //     //  loop through players, choose stable for refund, transfer from IERC20
+    //     for (uint i=0; i < evt.playerAddresses.length; i++) {
+    //         // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
+    //         // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
+    //         // address stable = _transferBestDebitStableUSD(evt.players[i], evt.refundUSD_ind);
 
-            // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
-            //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
-            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
-            //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
-            //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
-            //      - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
-            //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payoutsUSD'
-            //      - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
-            //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
+    //         // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+    //         //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
+    //         //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
+    //         //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+    //         //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
+    //         //      - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
+    //         //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payoutsUSD'
+    //         //      - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
+    //         //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
-            // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredit(evt.playerAddresses[i], evt.refundUSD_ind, false); // false = credit
+    //         // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+    //         _updateCredit(evt.playerAddresses[i], evt.refundUSD_ind, false); // false = credit
 
-            // notify listeners of processed refund
-            emit ProcessedRefund(evt.playerAddresses[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
-        }
+    //         // notify listeners of processed refund
+    //         emit ProcessedRefund(evt.playerAddresses[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
+    //     }
 
-        // set event params to end state
-        evt = _endEvent(evt, _eventCode);
+    //     // set event params to end state
+    //     evt = _endEvent(evt, _eventCode);
 
-        // notify listeners of canceled event
-        emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
-    }
+    //     // notify listeners of canceled event
+    //     emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
+    // }
 
     // host can start event w/ players pre-registerd for gameCode
-    function hostStartEvent(address _gameCode) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
+    // function hostStartEvent(address _gameCode) public returns (bool) {
+    //     require(_gameCode != address(0), 'err: no game code :p');
 
-        // get/validate active game
-        Game storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+    //     // get/validate active game
+    //     Game storage game = activeGames[_gameCode];
+    //     require(game.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+    //     // check if msg.sender is game host
+    //     require(game.host == msg.sender, 'err: only host :/');
 
-        // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
-        //  calc/deduct all fees & generate 'buyAndBurnUSD' from 'serviceFeeUSD'
-        game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
-        game = _launchEvent(game); // set event state to 'launched = true'
+    //     // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
+    //     //  calc/deduct all fees & generate 'buyAndBurnUSD' from 'serviceFeeUSD'
+    //     game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
+    //     game = _launchEvent(game); // set event state to 'launched = true'
 
-        return true;
-    }
+    //     return true;
+    // }
 
-    // _winners: [0x1st_place, 0x2nd_place, ...]
-    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
-        require(_winners.length > 0, 'err: no winners :p');
+    // // _winners: [0x1st_place, 0x2nd_place, ...]
+    // function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
+    //     require(_gameCode != address(0), 'err: no game code :p');
+    //     require(_winners.length > 0, 'err: no winners :p');
 
-        // get/validate active game
-        Game storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+    //     // get/validate active game
+    //     Game storage game = activeGames[_gameCode];
+    //     require(game.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+    //     // check if msg.sender is game host
+    //     require(game.host == msg.sender, 'err: only host :/');
 
-        // check if # of _winners == .winPercs array length (set during eventCreate)
-        require(game.winPercs.length == _winners.length, 'err: number of winners =(');
+    //     // check if # of _winners == .winPercs array length (set during eventCreate)
+    //     require(game.winPercs.length == _winners.length, 'err: number of winners =(');
 
-        // buy GTA from open market (using 'buyAndBurnUSD')
-        uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(game.buyAndBurnUSD), game.buyAndBurnUSD);
+    //     // buy GTA from open market (using 'buyAndBurnUSD')
+    //     uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(game.buyAndBurnUSD), game.buyAndBurnUSD);
 
-        // calc 'gta_amnt_mint' using 'buyAndBurnMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
-        uint256 gta_amnt_mint = (gta_amnt_burn * (buyAndBurnMintPerc/100)) / _winners.length;
+    //     // calc 'gta_amnt_mint' using 'buyAndBurnMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
+    //     uint256 gta_amnt_mint = (gta_amnt_burn * (buyAndBurnMintPerc/100)) / _winners.length;
 
-        // loop through _winners: distribute 'game.winPercs'
-        for (uint16 i=0; i < _winners.length; i++) {
-            // verify winner address was registered in the game
-            require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
+    //     // loop through _winners: distribute 'game.winPercs'
+    //     for (uint16 i=0; i < _winners.length; i++) {
+    //         // verify winner address was registered in the game
+    //         require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
-            // calc win_usd
-            address winner = _winners[i];
-            uint32 win_usd = game.payoutsUSD[i];
+    //         // calc win_usd
+    //         address winner = _winners[i];
+    //         uint32 win_usd = game.payoutsUSD[i];
 
-            // pay winner
-            address stable = _transferBestDebitStableUSD(winner, win_usd);
+    //         // pay winner
+    //         address stable = _transferBestDebitStableUSD(winner, win_usd);
 
-            // syncs w/ 'settleBalances' algorithm
-            _increaseWhitelistPendingDebit(stable, win_usd);
+    //         // syncs w/ 'settleBalances' algorithm
+    //         _increaseWhitelistPendingDebit(stable, win_usd);
 
-            // mint GTA to this winner (amount is same for all winners)
-            // _mint(winner, gta_amnt_mint);
+    //         // mint GTA to this winner (amount is same for all winners)
+    //         // _mint(winner, gta_amnt_mint);
 
-            // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
-        }
+    //         // notify client side that an end event distribution occurred successfully
+    //         emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
+    //     }
 
-        // pay host & keeper
-        address stable_host = _transferBestDebitStableUSD(game.host, game.hostFeeUSD);
-        address stable_keep = _transferBestDebitStableUSD(keeper, game.keeperFeeUSD);
+    //     // pay host & keeper
+    //     address stable_host = _transferBestDebitStableUSD(game.host, game.hostFeeUSD);
+    //     address stable_keep = _transferBestDebitStableUSD(keeper, game.keeperFeeUSD);
 
-        // set event params to end state
-        game = _endEvent(game, _gameCode);
+    //     // set event params to end state
+    //     game = _endEvent(game, _gameCode);
 
-        // notify client side that an end event occurred successfully
-        emit EndEventActivity(_gameCode, game.host, _winners, game.prizePoolUSD, game.hostFeeUSD, game.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
+    //     // notify client side that an end event occurred successfully
+    //     emit EndEventActivity(_gameCode, game.host, _winners, game.prizePoolUSD, game.hostFeeUSD, game.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
-        return true;
-    }
+    //     return true;
+    // }
 
     /* -------------------------------------------------------- */
     /* KEEPER CALL-BACK                                         */
@@ -711,110 +712,110 @@ contract GamerTokeAward {
     //  1) update credits logged from 'Transfer' emits
     //  2) convert alt deposits to stables (if needed)
     //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
-    function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
-        uint256 start_refund = gasleft(); // record start gas amount
-        require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
+    // function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
+    //     uint256 start_refund = gasleft(); // record start gas amount
+    //     require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
-        // loop through ERC-20 'Transfer' events received from client side
-        //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
-        //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
-        //      2) recipient = this contract address (else '_sanityCheck' fails)
-        for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            bool is_wl_stab = _isTokenInArray(dataArray[i].token, whitelistStables);
-            bool is_wl_alt = _isTokenInArray(dataArray[i].token, whitelistAlts);
-            if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
+    //     // loop through ERC-20 'Transfer' events received from client side
+    //     //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
+    //     //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
+    //     //      2) recipient = this contract address (else '_sanityCheck' fails)
+    //     for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
+    //         bool is_wl_stab = _isTokenInArray(dataArray[i].token, whitelistStables);
+    //         bool is_wl_alt = _isTokenInArray(dataArray[i].token, whitelistAlts);
+    //         if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
             
-            address tok_addr = dataArray[i].token;
-            address src_addr = dataArray[i].sender;
-            uint256 tok_amnt = dataArray[i].amount;
+    //         address tok_addr = dataArray[i].token;
+    //         address src_addr = dataArray[i].sender;
+    //         uint256 tok_amnt = dataArray[i].amount;
             
-            if (tok_addr == address(0) || src_addr == address(0)) { continue; } // skip 0x0 addresses
-            if (tok_amnt == 0) { continue; } // skip 0 amount
+    //         if (tok_addr == address(0) || src_addr == address(0)) { continue; } // skip 0x0 addresses
+    //         if (tok_amnt == 0) { continue; } // skip 0 amount
 
-            // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
-            //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
-            require(_sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+    //         // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
+    //         //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
+    //         require(_sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
 
-            // default: if found in 'whitelistStables'
-            uint256 stable_credit_amnt = tok_amnt; 
-            uint256 stable_swap_fee = 0; // gas fee loss for swap: alt -> stable
+    //         // default: if found in 'whitelistStables'
+    //         uint256 stable_credit_amnt = tok_amnt; 
+    //         uint256 stable_swap_fee = 0; // gas fee loss for swap: alt -> stable
 
-            // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
-            if (!is_wl_stab) {
+    //         // if not in whitelistStables, swap alt for stable: tok_addr, tok_amnt
+    //         if (!is_wl_stab) {
 
-                // get stable coin to use & create swap path to it
-                address stable_addr = _getNextStableTokDeposit();
+    //             // get stable coin to use & create swap path to it
+    //             address stable_addr = _getNextStableTokDeposit();
 
-                // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
-                address[] memory alt_stab_path = new address[](2);
-                alt_stab_path[0] = tok_addr;
-                alt_stab_path[1] = stable_addr;
-                (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
+    //             // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
+    //             address[] memory alt_stab_path = new address[](2);
+    //             alt_stab_path[0] = tok_addr;
+    //             alt_stab_path[1] = stable_addr;
+    //             (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
 
-                // if stable amount quote is below min deposit required
-                if (stableAmnt < minDepositUSD) {  
+    //             // if stable amount quote is below min deposit required
+    //             if (stableAmnt < minDepositUSD) {  
 
-                    // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (enableMinDepositRefunds) {
-                        // log gas used for refund
-                        uint256 start_trans = gasleft();
+    //                 // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+    //                 if (enableMinDepositRefunds) {
+    //                     // log gas used for refund
+    //                     uint256 start_trans = gasleft();
 
-                        // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                        // IERC20(tok_addr).transfer(src_addr, tok_amnt); 
+    //                     // send 'tok_amnt' of 'tok_addr' back to 'src_addr'
+    //                     // IERC20(tok_addr).transfer(src_addr, tok_amnt); 
 
-                        // log gas used for refund
-                        uint256 gas_trans_loss = (start_trans - gasleft()) * tx.gasprice;
-                        accruedGasFeeRefundLoss += gas_trans_loss;
+    //                     // log gas used for refund
+    //                     uint256 gas_trans_loss = (start_trans - gasleft()) * tx.gasprice;
+    //                     accruedGasFeeRefundLoss += gas_trans_loss;
 
-                        // notify client listeners that refund was processed
-                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, accruedGasFeeRefundLoss);
-                    }
+    //                     // notify client listeners that refund was processed
+    //                     emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, accruedGasFeeRefundLoss);
+    //                 }
 
-                    // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, minDepositUSD, enableMinDepositRefunds);
+    //                 // notify client side, deposit failed
+    //                 emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, minDepositUSD, enableMinDepositRefunds);
 
-                    // skip to next transfer in 'dataArray'
-                    continue;
-                }
+    //                 // skip to next transfer in 'dataArray'
+    //                 continue;
+    //             }
 
-                // swap tok_amnt alt -> stable (log swap fee / gas loss)
-                uint256 start_swap = gasleft();
-                stable_credit_amnt = _swap_v2_wrap(alt_stab_path, routersUniswapV2[rtrIdx], tok_amnt);
-                uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
+    //             // swap tok_amnt alt -> stable (log swap fee / gas loss)
+    //             uint256 start_swap = gasleft();
+    //             stable_credit_amnt = _swap_v2_wrap(alt_stab_path, routersUniswapV2[rtrIdx], tok_amnt);
+    //             uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
-                // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
-                address[] memory wpls_stab_path = new address[](2);
-                wpls_stab_path[0] = TOK_WPLS;
-                wpls_stab_path[1] = stable_addr;
-                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
+    //             // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
+    //             address[] memory wpls_stab_path = new address[](2);
+    //             wpls_stab_path[0] = TOK_WPLS;
+    //             wpls_stab_path[1] = stable_addr;
+    //             (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
-                stable_swap_fee = amountOut;
+    //             stable_swap_fee = amountOut;
 
-                // debit swap fee from 'stable_credit_amnt'
-                stable_credit_amnt -= stable_swap_fee;                
-            }
+    //             // debit swap fee from 'stable_credit_amnt'
+    //             stable_credit_amnt -= stable_swap_fee;                
+    //         }
 
-            // 1) debit deposit fees from 'stable_credit_amnt' (keeper optional)
-            uint256 depositFee = stable_credit_amnt * (depositFeePerc/100);
-            uint256 stable_net_amnt = stable_credit_amnt - depositFee; 
+    //         // 1) debit deposit fees from 'stable_credit_amnt' (keeper optional)
+    //         uint256 depositFee = stable_credit_amnt * (depositFeePerc/100);
+    //         uint256 stable_net_amnt = stable_credit_amnt - depositFee; 
 
-            // convert wei to ether (uint256 to uint32)
-            uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
+    //         // convert wei to ether (uint256 to uint32)
+    //         uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
 
-            // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
-            _updateCredit(src_addr, usd_net_amnt, false); // false = credit
+    //         // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
+    //         _updateCredit(src_addr, usd_net_amnt, false); // false = credit
 
-            // notify client side, deposit successful
-            emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
-        }
+    //         // notify client side, deposit successful
+    //         emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
+    //     }
 
-        // update last block number
-        lastBlockNumUpdate = _lastBlockNum;
+    //     // update last block number
+    //     lastBlockNumUpdate = _lastBlockNum;
 
-        // -1) calc gas used to this point & refund to 'keeper' (in wei)
-        uint256 gas_refund = (start_refund - gasleft()) * tx.gasprice;
-        payable(msg.sender).transfer(gas_refund); // tx.gasprice in wei
-    }
+    //     // -1) calc gas used to this point & refund to 'keeper' (in wei)
+    //     uint256 gas_refund = (start_refund - gasleft()) * tx.gasprice;
+    //     payable(msg.sender).transfer(gas_refund); // tx.gasprice in wei
+    // }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
@@ -893,104 +894,104 @@ contract GamerTokeAward {
         return stable;
     }
 
-    function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game storage) {
-        _evt.players[_player] = true;
-        _evt.playerAddresses.push(_player);
-        _evt.playerCnt = uint32(_evt.playerAddresses.length);
-        return _evt;
-    }
+    // function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game storage) {
+    //     _evt.players[_player] = true;
+    //     _evt.playerAddresses.push(_player);
+    //     _evt.playerCnt = uint32(_evt.playerAddresses.length);
+    //     return _evt;
+    // }
 
     // set event param to end state
-    function _endEvent(Game storage _evt, address _evtCode) private returns (Game storage) {
-        // set game end state (doesn't matter if its about to be deleted)
-        _evt.endTime = block.timestamp;
-        _evt.endBlockNum = block.number;
-        _evt.ended = true;
+    // function _endEvent(Game storage _evt, address _evtCode) private returns (Game storage) {
+    //     // set game end state (doesn't matter if its about to be deleted)
+    //     _evt.endTime = block.timestamp;
+    //     _evt.endBlockNum = block.number;
+    //     _evt.ended = true;
 
-        // delete game mapping
-        delete activeGames[_evtCode];
+    //     // delete game mapping
+    //     delete activeGames[_evtCode];
 
-        // decrement support
-        activeGameCodes = _remAddressFromArray(_evtCode, activeGameCodes);
-        activeGameCount--;
-        return _evt;
-    }
+    //     // decrement support
+    //     activeGameCodes = _remAddressFromArray(_evtCode, activeGameCodes);
+    //     activeGameCount--;
+    //     return _evt;
+    // }
 
     // set event params to launched state
-    function _launchEvent(Game storage _evt) private returns (Game storage ) {
-        // set event fee calculations & prizePoolUSD
-        // set event launched state
-        _evt.launchTime = block.timestamp;
-        _evt.launchBlockNum = block.number;
-        _evt.launched = true;
-        return _evt;
-    }
+    // function _launchEvent(Game storage _evt) private returns (Game storage ) {
+    //     // set event fee calculations & prizePoolUSD
+    //     // set event launched state
+    //     _evt.launchTime = block.timestamp;
+    //     _evt.launchBlockNum = block.number;
+    //     _evt.launched = true;
+    //     return _evt;
+    // }
 
     // calculate prize pool, payoutsUSD, fees, refunds, totals
-    function _generatePrizePool(Game storage _evt) private returns (Game storage) {
-        /* DEDUCTING FEES
-            current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
-             - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-             - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
-             - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
-             - win payouts -> taken from net 'prizePoolUSD' generated below
+    // function _generatePrizePool(Game storage _evt) private returns (Game storage) {
+        // /* DEDUCTING FEES
+        //     current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
+        //      - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
+        //      - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
+        //      - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
+        //      - win payouts -> taken from net 'prizePoolUSD' generated below
 
-            Formula ...
-                keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
-                serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
-                supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
+        //     Formula ...
+        //         keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
+        //         serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
+        //         supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
 
-                GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
-                    hostFeeUSD = prizePoolUSD * hostFeePerc
-                NET prizePoolUSD -= hostFeeUSD
-                    payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
-        */
+        //         GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
+        //             hostFeeUSD = prizePoolUSD * hostFeePerc
+        //         NET prizePoolUSD -= hostFeeUSD
+        //             payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
+        // */
 
-        // calc individual player fees (BEFORE generating 'prizePoolUSD') 
-        //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
-        _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.keeperFeePerc/100);
-        _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.serviceFeePerc/100);
-        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.supportFeePerc/100);
+        // // calc individual player fees (BEFORE generating 'prizePoolUSD') 
+        // //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
+        // _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.keeperFeePerc/100);
+        // _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.serviceFeePerc/100);
+        // _evt.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.supportFeePerc/100);
 
-        // calc total fees for each individual 'entryFeeUSD' paid
-        _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
+        // // calc total fees for each individual 'entryFeeUSD' paid
+        // _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
 
-        // calc: 'hostFeeUSD_ind' = 'hostFeePerc' of single 'entryFeeUSD' - 'totalFeesUSD_ind'
-        _evt.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.totalFeesUSD_ind) * (_evt.hostFeePerc/100);
+        // // calc: 'hostFeeUSD_ind' = 'hostFeePerc' of single 'entryFeeUSD' - 'totalFeesUSD_ind'
+        // _evt.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.totalFeesUSD_ind) * (_evt.hostFeePerc/100);
 
-        // calc total fees for all 'entryFeeUSD' paid
-        _evt.keeperFeeUSD = _evt.keeperFeeUSD_ind * _evt.playerCnt;
-        _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt; // GROSS
-        _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt;
-        _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+        // // calc total fees for all 'entryFeeUSD' paid
+        // _evt.keeperFeeUSD = _evt.keeperFeeUSD_ind * _evt.playerCnt;
+        // _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt; // GROSS
+        // _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt;
+        // _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
 
-        // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
-        //                      or do we want to let the host choose?
-        // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
-        //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
-        _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
-        _evt.serviceFeeUSD -= _evt.buyAndBurnUSD; // NET
+        // // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
+        // //                      or do we want to let the host choose?
+        // // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
+        // //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
+        // _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
+        // _evt.serviceFeeUSD -= _evt.buyAndBurnUSD; // NET
 
-        // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
-        _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
-        _evt.refundsUSD = _evt.refundUSD_ind * _evt.playerCnt;
+        // // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
+        // _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
+        // _evt.refundsUSD = _evt.refundUSD_ind * _evt.playerCnt;
 
-        // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
-        _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
+        // // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
+        // _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
 
-        // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
-        _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
+        // // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
+        // _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
 
-        // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
-        _evt.prizePoolUSD -= _evt.hostFeeUSD;
+        // // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
+        // _evt.prizePoolUSD -= _evt.hostFeeUSD;
         
-        // calc payoutsUSD (finally, AFTER all deductions )
-        for (uint i=0; i < _evt.winPercs.length; i++) {
-            _evt.payoutsUSD.push(_evt.prizePoolUSD * _evt.winPercs[i]);
-        }
+        // // calc payoutsUSD (finally, AFTER all deductions )
+        // for (uint i=0; i < _evt.winPercs.length; i++) {
+        //     _evt.payoutsUSD.push(_evt.prizePoolUSD * _evt.winPercs[i]);
+        // }
 
-        return _evt;
-    }
+    //     return _evt;
+    // }
 
     function _generateAddressHash(address host, string memory uid) private pure returns (address) {
         // Concatenate the address and the string, and then hash the result
