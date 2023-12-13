@@ -53,6 +53,8 @@ contract GamerTokeAward is ERC20, Ownable {
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
     mapping(address => Game) public activeGames;
+    // LEFT OFF HERE ... this mapping causes compiler err: stack too deep
+    //  NEXT: refactor 'struct Game' (divide params w/ <= 12 variables, not including maps & arrays)
     
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
     uint8 public hostRequirementPerc = 100; // uint8 max = 255
