@@ -4,12 +4,13 @@ pragma solidity ^0.8.0;
 // deploy
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+// import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 // local
 // import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
 // import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
+import "./GTADelegate.sol";
 
 // $ npm install @openzeppelin/contracts
 // $ npm install @uniswap/v2-core
@@ -19,30 +20,30 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 // import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
 
 
-interface IUniswapV2 {
-    // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    function swapExactETHForTokens(
-        uint amountOutMin, 
-        address[] calldata path, 
-        address to, 
-        uint deadline
-    ) external payable returns (uint[] memory amounts);
-    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-}
+// interface IUniswapV2 {
+//     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
+//     function swapExactTokensForTokens(
+//         uint amountIn,
+//         uint amountOutMin,
+//         address[] calldata path,
+//         address to,
+//         uint deadline
+//     ) external returns (uint[] memory amounts);
+//     function swapTokensForExactTokens(
+//         uint amountOut,
+//         uint amountInMax,
+//         address[] calldata path,
+//         address to,
+//         uint deadline
+//     ) external returns (uint[] memory amounts);
+//     function swapExactETHForTokens(
+//         uint amountOutMin, 
+//         address[] calldata path, 
+//         address to, 
+//         uint deadline
+//     ) external payable returns (uint[] memory amounts);
+//     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+// }
 
 /* terminology...
         join -> game, event, activity
@@ -274,11 +275,13 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
+    GTADelegate private _gtad;
     // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
     constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
+        _gtad = new GTADelegate();
     }
 
     /* -------------------------------------------------------- */
@@ -439,10 +442,10 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'err: found zero address to update :L');
             if (_add) {
-                whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
-                contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
+                whitelistStables = _gtad._addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
+                contractStables = _gtad._addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
             } else {
-                whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
+                whitelistStables = _gtad._remAddressFromArray(_tokens[i], whitelistStables);
             }
         }
     }
@@ -450,22 +453,22 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'err: found zero address for update :L');
             if (_add) {
-                whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
-                contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
+                whitelistAlts = _gtad._addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
+                contractAlts = _gtad._addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
             } else {
-                whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);   
+                whitelistAlts = _gtad._remAddressFromArray(_tokens[i], whitelistAlts);   
             }
         }
     }
     function addDexRouter(address _router) public onlyKeeper {
         require(_router != address(0x0), "err: invalid address");
-        routersUniswapV2 = _addAddressToArraySafe(_router, routersUniswapV2, true); // true = no dups
+        routersUniswapV2 = _gtad._addAddressToArraySafe(_router, routersUniswapV2, true); // true = no dups
     }
     function remDexRouter(address router) public onlyKeeper returns (bool) {
         require(router != address(0x0), "err: invalid address");
 
         // NOTE: remove algorithm does NOT maintain order
-        routersUniswapV2 = _remAddressFromArray(router, routersUniswapV2);
+        routersUniswapV2 = _gtad._remAddressFromArray(router, routersUniswapV2);
         return true;
     }
 
@@ -503,7 +506,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
         // generate gameCode from host address and game name
-        address gameCode = _generateAddressHash(_host, _gameName);
+        address gameCode = _gtad._generateAddressHash(_host, _gameName);
         require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
         return gameCode;
@@ -511,7 +514,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
     function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
-        require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
+        require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
     }
 
@@ -521,11 +524,11 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length > 0, 'err: no winners? :O');
-        require(_getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
-        require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
+        require(_gtad._getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
+        require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
 
         // verify active game name/code doesn't exist yet
-        address gameCode = _generateAddressHash(msg.sender, _gameName);
+        address gameCode = _gtad._generateAddressHash(msg.sender, _gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
         // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
@@ -545,7 +548,7 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.expTime = _startTime + gameExpSec;
 
         // increment support
-        activeGameCodes = _addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
+        activeGameCodes = _gtad._addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
         // return gameCode to caller
@@ -575,10 +578,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
         // debit entry fee from msg.sender credits (player)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        _gtad._updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
-        game = _addPlayerToEvent(msg.sender, game);
+        _addPlayerToEvent(msg.sender, gameCode);
         
         // notify client side that a player was registerd for event
         emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.event_1.playerCnt);
@@ -608,10 +611,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        _gtad._updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
-        game = _addPlayerToEvent(_player, game);
+        _addPlayerToEvent(_player, _gameCode);
 
         // notify client side that a player was registerd for event
         emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.event_1.playerCnt);
@@ -658,14 +661,14 @@ contract GamerTokeAward is ERC20, Ownable {
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+            _gtad._updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
 
         // set event params to end state
-        evt = _endEvent(evt, _eventCode);
+        _endEvent(_eventCode);
 
         // notify listeners of canceled event
         emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
@@ -706,7 +709,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(game.event_2.winPercs.length == _winners.length, 'err: number of winners =(');
 
         // buy GTA from open market (using 'buyAndBurnUSD')
-        uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(game.event_2.buyAndBurnUSD), game.event_2.buyAndBurnUSD);
+        uint256 gta_amnt_burn = _gtad._processBuyAndBurnStableSwap(_gtad._getBestDebitStableUSD(game.event_2.buyAndBurnUSD), game.event_2.buyAndBurnUSD);
 
         // calc 'gta_amnt_mint' using 'buyAndBurnMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
         uint256 gta_amnt_mint = (gta_amnt_burn * (buyAndBurnMintPerc/100)) / _winners.length;
@@ -724,7 +727,7 @@ contract GamerTokeAward is ERC20, Ownable {
             address stable = _transferBestDebitStableUSD(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
-            _increaseWhitelistPendingDebit(stable, win_usd);
+            _gtad._increaseWhitelistPendingDebit(stable, win_usd);
 
             // mint GTA to this winner (amount is same for all winners)
             _mint(winner, gta_amnt_mint);
@@ -738,7 +741,7 @@ contract GamerTokeAward is ERC20, Ownable {
         address stable_keep = _transferBestDebitStableUSD(keeper, game.event_1.keeperFeeUSD);
 
         // set event params to end state
-        game = _endEvent(game, _gameCode);
+        _endEvent(_gameCode);
 
         // notify client side that an end event occurred successfully
         emit EndEventActivity(_gameCode, game.host, _winners, game.event_2.prizePoolUSD, game.event_2.hostFeeUSD, game.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
@@ -762,8 +765,8 @@ contract GamerTokeAward is ERC20, Ownable {
         //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
         //      2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            bool is_wl_stab = _isTokenInArray(dataArray[i].token, whitelistStables);
-            bool is_wl_alt = _isTokenInArray(dataArray[i].token, whitelistAlts);
+            bool is_wl_stab = _gtad._isTokenInArray(dataArray[i].token, whitelistStables);
+            bool is_wl_alt = _gtad._isTokenInArray(dataArray[i].token, whitelistAlts);
             if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
             
             address tok_addr = dataArray[i].token;
@@ -775,7 +778,10 @@ contract GamerTokeAward is ERC20, Ownable {
 
             // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
             //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
-            require(_sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+            require(_gtad._sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+            // LEFT OFF HERE ... changing _sanityCheck from 'private' to 'public' causes contract code size error
+            //                      exceeding limit by about 1000 bytes
+            //      "Warning: Contract code size is 25699 bytes and exceeds 24576 bytes"
 
             // default: if found in 'whitelistStables'
             uint256 stable_credit_amnt = tok_amnt; 
@@ -785,13 +791,13 @@ contract GamerTokeAward is ERC20, Ownable {
             if (!is_wl_stab) {
 
                 // get stable coin to use & create swap path to it
-                address stable_addr = _getNextStableTokDeposit();
+                address stable_addr = _gtad._getNextStableTokDeposit();
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
                 address[] memory alt_stab_path = new address[](2);
                 alt_stab_path[0] = tok_addr;
                 alt_stab_path[1] = stable_addr;
-                (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
+                (uint8 rtrIdx, uint256 stableAmnt) = _gtad._best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
 
                 // if stable amount quote is below min deposit required
                 if (stableAmnt < minDepositUSD) {  
@@ -821,14 +827,14 @@ contract GamerTokeAward is ERC20, Ownable {
 
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = _swap_v2_wrap(alt_stab_path, routersUniswapV2[rtrIdx], tok_amnt);
+                stable_credit_amnt = _gtad._swap_v2_wrap(alt_stab_path, routersUniswapV2[rtrIdx], tok_amnt);
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
                 address[] memory wpls_stab_path = new address[](2);
                 wpls_stab_path[0] = TOK_WPLS;
                 wpls_stab_path[1] = stable_addr;
-                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
+                (uint8 idx, uint256 amountOut) = _gtad._best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
                 stable_swap_fee = amountOut;
 
@@ -844,7 +850,7 @@ contract GamerTokeAward is ERC20, Ownable {
             uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
 
             // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
-            _updateCredit(src_addr, usd_net_amnt, false); // false = credit
+            _gtad._updateCredit(src_addr, usd_net_amnt, false); // false = credit
 
             // notify client side, deposit successful
             emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
@@ -858,91 +864,25 @@ contract GamerTokeAward is ERC20, Ownable {
         payable(msg.sender).transfer(gas_refund); // tx.gasprice in wei
     }
 
-    /* -------------------------------------------------------- */
-    /* PRIVATE - EVENT SUPPORTING                               */
-    /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] storage _arr, bool _safe) private returns (address[] memory) {
-        if (_addr == address(0)) { return _arr; }
-
-        // safe = remove first (no duplicates)
-        if (_safe) { _arr = _remAddressFromArray(_addr, _arr); }
-        _arr.push(_addr);
-        return _arr;
-    }
-    function _remAddressFromArray(address _addr, address[] storage _arr) private returns (address[] storage) {
-        if (_addr == address(0) || _arr.length == 0) { return _arr; }
-        
-        // NOTE: remove algorithm does NOT maintain order & only removes first occurance
-        for (uint i = 0; i < _arr.length; i++) {
-            if (_addr == _arr[i]) {
-                _arr[i] = _arr[_arr.length - 1];
-                _arr.pop();
-                return _arr;
-            }
-        }
-        return _arr;
-    }
-    function _isTokenInArray(address _addr, address[] memory _arr) private returns (bool) {
-        if (_addr == address(0) || _arr.length == 0) { return false; }
-        for (uint i=0; i < _arr.length; i++) {
-            if (_addr == _arr[i]) { return true; }
-        }
-        return false;
-    }
-    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private returns (bool) {
-        // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
-        uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
-        address[] memory gta_stab_path = new address[](2);
-        gta_stab_path[0] = address(this);
-        gta_stab_path[1] = _getNextStableTokDeposit();
-        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
-        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
-    }
-
-    function _getTotalsOfArray(uint8[] calldata _arr) private returns (uint8) {
-        uint8 t = 0;
-        for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
-        return t;
-    }
-
-    // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'routersUniswapV2')
-    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) private returns (uint256) {
-        address[] memory stab_gta_path = new address[](2);
-        stab_gta_path[0] = stable;
-        stab_gta_path[1] = address(this);
-        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
-        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, routersUniswapV2[rtrIdx], _buyAndBurnUSD * 10**18);
-        return gta_amnt_out;
-    }
-
-    function _getBestDebitStableUSD(uint32 _amountUSD) private returns (address) {
-        // loop through 'whitelistStables', generate stables available (bals ok for debit)
-        address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
-
-        // traverse stables available for debit, select stable w/ the lowest market value            
-        address stable = _getStableTokenLowMarketValue(stables_avail);
-        require(stable != address(0), 'err: low market stable address is 0 _ :+0');
-        return stable;
-    }
-
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
-        address stable = _getBestDebitStableUSD(_amountUSD);
+        address stable = _gtad._getBestDebitStableUSD(_amountUSD);
 
         // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
         return stable;
     }
 
-    function _addPlayerToEvent(address _player, Event_0 storage _evt) private returns (Event_0 storage) {
-        _evt.event_1.players[_player] = true;
-        _evt.event_1.playerAddresses.push(_player);
-        _evt.event_1.playerCnt = uint32(_evt.event_1.playerAddresses.length);
-        return _evt;
+    function _addPlayerToEvent(address _player, address _evtCode) private {
+        Event_0 storage _evt = activeGames[_evtCode];
+        _evt.evet_1.players[_player] = true;
+        _evt.evet_1.playerAddresses.push(_player);
+        _evt.evet_1.playerCnt = uint32(_evt.evet_1.playerAddresses.length);
     }
 
     // set event param to end state
-    function _endEvent(Event_0 storage _evt, address _evtCode) private returns (Event_0 storage) {
+    function _endEvent(address _evtCode) private {
+        Event_0 storage _evt = activeGames[_evtCode];
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
         _evt.endBlockNum = block.number;
@@ -952,7 +892,7 @@ contract GamerTokeAward is ERC20, Ownable {
         delete activeGames[_evtCode];
 
         // decrement support
-        activeGameCodes = _remAddressFromArray(_evtCode, activeGameCodes);
+        activeGameCodes = _gtad._remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
         return _evt;
     }
@@ -1031,187 +971,5 @@ contract GamerTokeAward is ERC20, Ownable {
         }
 
         return _evt;
-    }
-
-    function _generateAddressHash(address host, string memory uid) private pure returns (address) {
-        // Concatenate the address and the string, and then hash the result
-        bytes32 hash = keccak256(abi.encodePacked(host, uid));
-        address generatedAddress = address(uint160(uint256(hash)));
-        return generatedAddress;
-    }
-
-    /* -------------------------------------------------------- */
-    /* PRIVATE - BOOK KEEPING                                   */
-    /* -------------------------------------------------------- */
-    // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
-    function _getNextStableTokDeposit() private returns (address) {
-        address stable_addr = whitelistStables[whitelistStablesUseIdx];
-        whitelistStablesUseIdx++;
-        if (whitelistStablesUseIdx >= whitelistStables.length) { whitelistStablesUseIdx=0; }
-        return stable_addr;
-    }
-
-    // keeper 'SANITY CHECK' for 'settleBalances'
-    function _sanityCheck(address token, uint256 amount) private returns (bool) {
-        // SANITY CHECK: 
-        //  settles whitelist debits accrued during 'hostEndEventWithWinners'
-        //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
-        //  require: keeper calculated (delegated) balance == on-chain balance
-        _settlePendingDebit(token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
-        _increaseContractBalance(token, amount); // sync 'contractBalances' w/ this 'Transfer' emit
-        uint256 chainBal = IERC20(token).balanceOf(address(this));
-        return contractBalances[token] == chainBal;
-    }
-
-    // deduct debits accrued from 'hostEndEventWithWinners'
-    function _settlePendingDebit(address _token) private {
-        require(contractBalances[_token] >= whitelistPendingDebits[_token], 'err: insefficient balance to settle debit :O');
-        contractBalances[_token] -= whitelistPendingDebits[_token];
-        delete whitelistPendingDebits[_token];
-    }
-
-    // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
-    function _increaseContractBalance(address _token, uint256 _amount) private {
-        require(_token != address(0), 'err: no address :{');
-        require(_amount != 0, 'err: no amount :{');
-        contractBalances[_token] += _amount;
-    }
-
-    // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
-    function _increaseWhitelistPendingDebit(address token, uint256 amount) private {
-        whitelistPendingDebits[token] += amount;
-    }
-
-    // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) private {
-        if (_debit) { 
-            // ensure there is enough credit before debit
-            require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
-            creditsUSD[_player] -= _amountUSD;
-
-            // if balance is now 0, remove _player from balance tracking
-            if (creditsUSD[_player] == 0) {
-                delete creditsUSD[_player];
-                creditsAddrArray = _remAddressFromArray(_player, creditsAddrArray);
-            }
-        } else { 
-            creditsUSD[_player] += _amountUSD; 
-            creditsAddrArray = _addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
-        }
-    }
-
-    /* -------------------------------------------------------- */
-    /* PRIVATE - DEX SUPPORT                                    */
-    /* -------------------------------------------------------- */
-    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
-    // NOTE: *WARNING* stables_avail could have random idx's w/ address(0) (default in static length memory array)
-    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
-        // loop through white list stables, generate stables available (ok for debit)
-        address[] memory stables_avail = new address[](whitelistStables.length);
-        for (uint i = 0; i < whitelistStables.length; i++) {
-
-            // get balnce for this whitelist stable (push to stablesAvail if has enough)
-            uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
-            if (stableBal > _debitAmntUSD * 10**18) { 
-                stables_avail[i] = whitelistStables[i];
-
-            }
-        }
-        return stables_avail;
-    }
-
-    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
-    function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
-        // traverse stables available for debit, select stable w/ the lowest market value
-        uint256 curr_high_tok_val = 0;
-        address curr_low_val_stable = address(0x0);
-        for (uint i=0; i < stables.length; i++) {
-            address stable_addr = stables[i];
-            if (stable_addr == address(0)) { continue; }
-
-            // get quote for this available stable (traverses 'routersUniswapV2')
-            //  looking for the stable that returns the most when swapped 'from' WPLS
-            //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
-            address[] memory wpls_stab_path = new address[](2);
-            wpls_stab_path[0] = TOK_WPLS;
-            wpls_stab_path[1] = stable_addr;
-            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote(wpls_stab_path, 1 * 10**18);
-            if (tok_val >= curr_high_tok_val) {
-                curr_high_tok_val = tok_val;
-                curr_low_val_stable = stable_addr;
-            }
-        }
-        return curr_low_val_stable;
-    }
-
-    // support hostEndEventWithWinners
-    function _getLiquidityInPair(address _token, address _pair) private view returns (uint256) {
-        require(_token != address(0), 'err: no token :O');
-        require(_pair != address(0), 'err: no pair :O');
-
-        IUniswapV2Pair pair = IUniswapV2Pair(_pair);
-        require(_token == pair.token0() || _token == pair.token1(), 'err: invalid token->pair address :P');
-
-        (uint reserve0, uint reserve1, uint32 blockTimestampLast) = pair.getReserves();
-        if (_token == pair.token0()) { return reserve0; }
-        else { return reserve1; }
-    }
-
-    // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
-        uint8 currHighIdx = 37;
-        uint256 currHigh = 0;
-        for (uint8 i = 0; i < routersUniswapV2.length; i++) {
-            uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
-            if (amountsOut[amountsOut.length-1] > currHigh) {
-                currHigh = amountsOut[amountsOut.length-1];
-                currHighIdx = i;
-            }
-        }
-
-        return (currHighIdx, currHigh);
-    }
-
-    // uniwswap v2 protocol based: get quote and execute swap
-    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) private returns (uint256) {
-        //address[] memory path = [weth, wpls];
-        uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
-        uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
-                
-        // verifiy new balance of token received
-        uint256 new_bal = IERC20(path[path.length -1]).balanceOf(address(this));
-        require(new_bal >= amntOut, "err: balance low :{");
-        
-        return amntOut;
-    }
-    
-    // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
-    function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, bool fromETH) private returns (uint256) {
-        // emit logRFL(address(this), msg.sender, "logRFL 6a");
-        IUniswapV2 swapRouter = IUniswapV2(router);
-        
-        // emit logRFL(address(this), msg.sender, "logRFL 6b");
-        IERC20(address(path[0])).approve(address(swapRouter), amntIn);
-        uint deadline = block.timestamp + 300;
-        uint[] memory amntOut;
-        // emit logRFL(address(this), msg.sender, "logRFL 6c");
-        if (fromETH) {
-            amntOut = swapRouter.swapExactETHForTokens{value: amntIn}(
-                            amntOutMin,
-                            path, //address[] calldata path,
-                            address(this), // to
-                            deadline
-                        );
-        } else {
-            amntOut = swapRouter.swapExactTokensForTokens(
-                            amntIn,
-                            amntOutMin,
-                            path, //address[] calldata path,
-                            address(this),
-                            deadline
-                        );
-        }
-        // emit logRFL(address(this), msg.sender, "logRFL 6d");
-        return uint256(amntOut[amntOut.length - 1]); // idx 0=path[0].amntOut, 1=path[1].amntOut, etc.
     }
 }
