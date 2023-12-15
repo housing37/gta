@@ -274,6 +274,10 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
+    constructor() {
+        keeper = msg.sender;
+    }
+    
     // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
     constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
