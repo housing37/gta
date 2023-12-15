@@ -1,9 +1,23 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;        
-// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+// deploy
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+
+// local
+// import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
+// import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
+// import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
+
+// $ npm install @openzeppelin/contracts
+// $ npm install @uniswap/v2-core
+// import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
+// import "./@openzeppelin/contracts/access/Ownable.sol"; 
+// import "./@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
+// import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
+
 
 interface IUniswapV2 {
     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
@@ -35,6 +49,20 @@ interface IUniswapV2 {
     register -> player, delegates, users, participants, entrants
         payout -> winnings, earnings, rewards, recipients 
 */
+
+// LEFT OFF HERE ... compilation fails
+//  remix error....
+/** 
+    Warning: Contract code size is 50685 bytes and exceeds 24576 bytes (a limit introduced in Spurious Dragon). This contract may not be deployable on Mainnet. Consider enabling the optimizer (with a low "runs" value!), turning off revert strings, or using libraries.
+    --> contracts/gta.sol:52:1:
+    |
+    52 | contract GamerTokeAward is ERC20, Ownable {
+    | ^ (Relevant source part starts here and spans across multiple lines).
+
+    StructDefinition
+    contracts/gta.sol 150:4
+
+ */
 contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
@@ -52,7 +80,7 @@ contract GamerTokeAward is ERC20, Ownable {
         
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
-    mapping(address => Game) public activeGames;
+    mapping(address => Event_0) private activeGames;
     // LEFT OFF HERE ... this mapping causes compiler err: stack too deep
     //  NEXT: refactor 'struct Game' (divide params w/ <= 12 variables, not including maps & arrays)
     
@@ -134,7 +162,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* STRUCTURES                                               */
     /* -------------------------------------------------------- */
     /* _ GAME SUPPORT _ */
-    struct Game {
+    struct Event_0 {
         /** cons */
         address host;           // input param
         string gameName;        // input param
@@ -150,10 +178,20 @@ contract GamerTokeAward is ERC20, Ownable {
         uint256 endBlockNum;    // 'hostEndGameWithWinners'
         uint256 expTime;        // expires if not launched by this time
         uint256 expBlockNum;    // 'cancelEventProcessRefunds'
+
+        // mapping(address => Event_1) event_1;
+        // mapping(address => Event_2) event_2;
+        Event_1 event_1;
+        Event_2 event_2;
+    }
+    struct Event_1 { 
+        // ------------------------------------------
         bool launched;  // 'hostStartEvent'
         bool ended;     // 'hostEndEventWithWinners'
         bool expired;   // 'cancelEventProcessRefunds'
+        // LEFT OFF HERE ... 'expired' is never used
 
+        // ------------------------------------------
         mapping(address => bool) players; // true = registerd 
         address[] playerAddresses; // traversal access
         uint32 playerCnt;       // length or players; max 4,294,967,295
@@ -173,19 +211,24 @@ contract GamerTokeAward is ERC20, Ownable {
         uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
         uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
         uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
+
+    }
+    struct Event_2 { 
         uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
         uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
         uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
 
+        // ------------------------------------------
         uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
         uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
         
+        /** _generatePrizePool */
         uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
         uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
         uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
         uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
         uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
-        uint32 refundsUSD;          // refundUSD_ind * evt.playerCnt
+        uint32 refundsUSD;          // refundUSD_ind * evt.event_1.playerCnt
         uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
 
         uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
@@ -214,11 +257,11 @@ contract GamerTokeAward is ERC20, Ownable {
     event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
 
     // notify client side that an end event has occurred successfully
-    event EndEventActivity(address evtCode, address host, address[] winners, uint32 prizePoolUSD, uint32 hostFeelUSD, uint32 keeperFeeUSD, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
+    event EndEventActivity(address evtCode, address host, address[] winners, uint32 prize_pool_usd, uint32 host_fee_usd, uint32 keeper_fee_usd, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
 
     // notify client side that an event has been canceled
     event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
-    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prizePoolUSD, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
+    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
     // notify client side that someoen cracked the burn code and burned all gta in this contract
     event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
@@ -440,7 +483,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gameCode != address(0), 'err: invalid game code :O');
         for (uint i=0; i < activeGameCodes.length; i++) {
             if (_gameCode == activeGameCodes[i]) {
-                return activeGames[_gameCode].playerAddresses; // '.players' is mapping
+                return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
             }
         }
         return new address[](0);
@@ -489,14 +532,14 @@ contract GamerTokeAward is ERC20, Ownable {
         // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
         //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
         //    Modifying the newGame will indeed directly affect the state stored in activeGames[gameCode].
-        Game storage newGame = activeGames[gameCode];
-        
+        Event_0 storage newGame = activeGames[gameCode];
+    
         // set properties for default empty 'Game' struct
         newGame.host = msg.sender;
         newGame.gameName = _gameName;
         newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
-        newGame.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
+        newGame.event_2.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
+        newGame.event_1.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
         newGame.createTime = block.timestamp;
         newGame.createBlockNum = block.number;
         newGame.startTime = _startTime;
@@ -520,14 +563,14 @@ contract GamerTokeAward is ERC20, Ownable {
         require(gameCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        Game storage game = activeGames[gameCode];
+        Event_0 storage game = activeGames[gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if game launched
-        require(!game.launched, "err: event launched :(");
+        require(!game.event_1.launched, "err: event launched :(");
 
         // check msg.sender already registered
-        require(!game.players[msg.sender], 'err: already registered for this gameCode :p');
+        require(!game.event_1.players[msg.sender], 'err: already registered for this gameCode :p');
 
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
@@ -539,7 +582,7 @@ contract GamerTokeAward is ERC20, Ownable {
         game = _addPlayerToEvent(msg.sender, game);
         
         // notify client side that a player was registerd for event
-        emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.playerCnt);
+        emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.event_1.playerCnt);
         
         return true;
     }
@@ -550,17 +593,17 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gameCode != address(0), 'err: no game code ;l');
 
         // get/validate active game
-        Game storage game = activeGames[_gameCode];
+        Event_0 storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
         // check if game launched
-        require(!game.launched, 'err: event launched :(');
+        require(!game.event_1.launched, 'err: event launched :(');
 
         // check _player already registered
-        require(!game.players[_player], 'err: player already registered for this gameCode :p');
+        require(!game.event_1.players[_player], 'err: player already registered for this gameCode :p');
 
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
@@ -572,7 +615,7 @@ contract GamerTokeAward is ERC20, Ownable {
         game = _addPlayerToEvent(_player, game);
 
         // notify client side that a player was registerd for event
-        emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.playerCnt);
+        emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.event_1.playerCnt);
 
         return true;
     }
@@ -584,26 +627,26 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
-        Game storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeGames[_eventCode];
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
+        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
         require(isValidSender, 'err: only players or host :<>');
 
         // for host|player|keeper cancel, verify event not launched
-        require(!evt.launched, 'err: event started :<>'); 
+        require(!evt.event_1.launched, 'err: event started :<>'); 
 
         // for player cancel, also verify event expTime must be passed 
-        if (evt.players[msg.sender]) {
+        if (evt.event_1.players[msg.sender]) {
             require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
         } 
 
         //  loop through players, choose stable for refund, transfer from IERC20
-        for (uint i=0; i < evt.playerAddresses.length; i++) {
+        for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
             // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
             // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
-            // address stable = _transferBestDebitStableUSD(evt.players[i], evt.refundUSD_ind);
+            // address stable = _transferBestDebitStableUSD(evt.event_1.players[i], evt.event_2.refundUSD_ind);
 
             // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
@@ -616,17 +659,17 @@ contract GamerTokeAward is ERC20, Ownable {
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredit(evt.playerAddresses[i], evt.refundUSD_ind, false); // false = credit
+            _updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
-            emit ProcessedRefund(evt.playerAddresses[i], evt.refundUSD_ind, _eventCode, evt.launched, evt.expTime);
+            emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
 
         // set event params to end state
         evt = _endEvent(evt, _eventCode);
 
         // notify listeners of canceled event
-        emit CanceledEvent(msg.sender, _eventCode, evt.launched, evt.expTime, evt.playerCnt, evt.prizePoolUSD, evt.totalFeesUSD, evt.refundsUSD, evt.refundUSD_ind);
+        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
     }
 
     // host can start event w/ players pre-registerd for gameCode
@@ -634,7 +677,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gameCode != address(0), 'err: no game code :p');
 
         // get/validate active game
-        Game storage game = activeGames[_gameCode];
+        Event_0 storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
@@ -642,7 +685,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
         //  calc/deduct all fees & generate 'buyAndBurnUSD' from 'serviceFeeUSD'
-        game = _generatePrizePool(game); // ? Game storage game = _generatePrizePool(game); ?
+        game = _generatePrizePool(game); // ? Event_0 storage game = _generatePrizePool(game); ?
         game = _launchEvent(game); // set event state to 'launched = true'
 
         return true;
@@ -654,29 +697,29 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_winners.length > 0, 'err: no winners :p');
 
         // get/validate active game
-        Game storage game = activeGames[_gameCode];
+        Event_0 storage game = activeGames[_gameCode];
         require(game.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
         require(game.host == msg.sender, 'err: only host :/');
 
-        // check if # of _winners == .winPercs array length (set during eventCreate)
-        require(game.winPercs.length == _winners.length, 'err: number of winners =(');
+        // check if # of _winners == .event_2.winPercs array length (set during eventCreate)
+        require(game.event_2.winPercs.length == _winners.length, 'err: number of winners =(');
 
         // buy GTA from open market (using 'buyAndBurnUSD')
-        uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(game.buyAndBurnUSD), game.buyAndBurnUSD);
+        uint256 gta_amnt_burn = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(game.event_2.buyAndBurnUSD), game.event_2.buyAndBurnUSD);
 
         // calc 'gta_amnt_mint' using 'buyAndBurnMintPerc' of 'gta_amnt_burn', divided equally to all '_winners'
         uint256 gta_amnt_mint = (gta_amnt_burn * (buyAndBurnMintPerc/100)) / _winners.length;
 
-        // loop through _winners: distribute 'game.winPercs'
+        // loop through _winners: distribute 'game.event_2.winPercs'
         for (uint16 i=0; i < _winners.length; i++) {
             // verify winner address was registered in the game
-            require(game.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
+            require(game.event_1.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
             // calc win_usd
             address winner = _winners[i];
-            uint32 win_usd = game.payoutsUSD[i];
+            uint32 win_usd = game.event_2.payoutsUSD[i];
 
             // pay winner
             address stable = _transferBestDebitStableUSD(winner, win_usd);
@@ -688,18 +731,18 @@ contract GamerTokeAward is ERC20, Ownable {
             _mint(winner, gta_amnt_mint);
 
             // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, i, game.winPercs[i], win_usd, game.prizePoolUSD, stable);
+            emit EndEventDistribution(winner, i, game.event_2.winPercs[i], win_usd, game.event_2.prizePoolUSD, stable);
         }
 
         // pay host & keeper
-        address stable_host = _transferBestDebitStableUSD(game.host, game.hostFeeUSD);
-        address stable_keep = _transferBestDebitStableUSD(keeper, game.keeperFeeUSD);
+        address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
+        address stable_keep = _transferBestDebitStableUSD(keeper, game.event_1.keeperFeeUSD);
 
         // set event params to end state
         game = _endEvent(game, _gameCode);
 
         // notify client side that an end event occurred successfully
-        emit EndEventActivity(_gameCode, game.host, _winners, game.prizePoolUSD, game.hostFeeUSD, game.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
+        emit EndEventActivity(_gameCode, game.host, _winners, game.event_2.prizePoolUSD, game.event_2.hostFeeUSD, game.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
     }
@@ -892,19 +935,19 @@ contract GamerTokeAward is ERC20, Ownable {
         return stable;
     }
 
-    function _addPlayerToEvent(address _player, Game storage _evt) private returns (Game storage) {
-        _evt.players[_player] = true;
-        _evt.playerAddresses.push(_player);
-        _evt.playerCnt = uint32(_evt.playerAddresses.length);
+    function _addPlayerToEvent(address _player, Event_0 storage _evt) private returns (Event_0 storage) {
+        _evt.event_1.players[_player] = true;
+        _evt.event_1.playerAddresses.push(_player);
+        _evt.event_1.playerCnt = uint32(_evt.event_1.playerAddresses.length);
         return _evt;
     }
 
     // set event param to end state
-    function _endEvent(Game storage _evt, address _evtCode) private returns (Game storage) {
+    function _endEvent(Event_0 storage _evt, address _evtCode) private returns (Event_0 storage) {
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
         _evt.endBlockNum = block.number;
-        _evt.ended = true;
+        _evt.event_1.ended = true;
 
         // delete game mapping
         delete activeGames[_evtCode];
@@ -916,17 +959,17 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // set event params to launched state
-    function _launchEvent(Game storage _evt) private returns (Game storage ) {
+    function _launchEvent(Event_0 storage _evt) private returns (Event_0 storage ) {
         // set event fee calculations & prizePoolUSD
         // set event launched state
         _evt.launchTime = block.timestamp;
         _evt.launchBlockNum = block.number;
-        _evt.launched = true;
+        _evt.event_1.launched = true;
         return _evt;
     }
 
     // calculate prize pool, payoutsUSD, fees, refunds, totals
-    function _generatePrizePool(Game storage _evt) private returns (Game storage) {
+    function _generatePrizePool(Event_0 storage _evt) private returns (Event_0 storage) {
         /* DEDUCTING FEES
             current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
              - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
@@ -947,45 +990,45 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // calc individual player fees (BEFORE generating 'prizePoolUSD') 
         //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
-        _evt.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.keeperFeePerc/100);
-        _evt.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.serviceFeePerc/100);
-        _evt.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.supportFeePerc/100);
+        _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.keeperFeePerc/100);
+        _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.serviceFeePerc/100);
+        _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.supportFeePerc/100);
 
         // calc total fees for each individual 'entryFeeUSD' paid
-        _evt.totalFeesUSD_ind = _evt.keeperFeeUSD_ind + _evt.serviceFeeUSD_ind + _evt.supportFeeUSD_ind;
+        _evt.event_2.totalFeesUSD_ind = _evt.event_2.keeperFeeUSD_ind + _evt.event_2.serviceFeeUSD_ind + _evt.event_2.supportFeeUSD_ind;
 
         // calc: 'hostFeeUSD_ind' = 'hostFeePerc' of single 'entryFeeUSD' - 'totalFeesUSD_ind'
-        _evt.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.totalFeesUSD_ind) * (_evt.hostFeePerc/100);
+        _evt.event_2.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind) * (_evt.event_1.hostFeePerc/100);
 
         // calc total fees for all 'entryFeeUSD' paid
-        _evt.keeperFeeUSD = _evt.keeperFeeUSD_ind * _evt.playerCnt;
-        _evt.serviceFeeUSD = _evt.serviceFeeUSD_ind * _evt.playerCnt; // GROSS
-        _evt.supportFeeUSD = _evt.supportFeeUSD_ind * _evt.playerCnt;
-        _evt.totalFeesUSD = _evt.keeperFeeUSD + _evt.serviceFeeUSD + _evt.supportFeeUSD;
+        _evt.event_1.keeperFeeUSD = _evt.event_2.keeperFeeUSD_ind * _evt.event_1.playerCnt;
+        _evt.event_1.serviceFeeUSD = _evt.event_2.serviceFeeUSD_ind * _evt.event_1.playerCnt; // GROSS
+        _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.playerCnt;
+        _evt.event_2.totalFeesUSD = _evt.event_1.keeperFeeUSD + _evt.event_1.serviceFeeUSD + _evt.event_1.supportFeeUSD;
 
         // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
         //                      or do we want to let the host choose?
         // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
         //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
-        _evt.buyAndBurnUSD = _evt.serviceFeeUSD * (_evt.buyAndBurnPerc/100);
-        _evt.serviceFeeUSD -= _evt.buyAndBurnUSD; // NET
+        _evt.event_2.buyAndBurnUSD = _evt.event_1.serviceFeeUSD * (_evt.event_1.buyAndBurnPerc/100);
+        _evt.event_1.serviceFeeUSD -= _evt.event_2.buyAndBurnUSD; // NET
 
         // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
-        _evt.refundUSD_ind = _evt.entryFeeUSD - _evt.totalFeesUSD_ind; 
-        _evt.refundsUSD = _evt.refundUSD_ind * _evt.playerCnt;
+        _evt.event_2.refundUSD_ind = _evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind; 
+        _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.playerCnt;
 
         // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
-        _evt.prizePoolUSD = (_evt.entryFeeUSD * _evt.playerCnt) - _evt.totalFeesUSD;
+        _evt.event_2.prizePoolUSD = (_evt.entryFeeUSD * _evt.event_1.playerCnt) - _evt.event_2.totalFeesUSD;
 
         // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
-        _evt.hostFeeUSD = _evt.prizePoolUSD * (_evt.hostFeePerc/100);
+        _evt.event_2.hostFeeUSD = _evt.event_2.prizePoolUSD * (_evt.event_1.hostFeePerc/100);
 
         // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
-        _evt.prizePoolUSD -= _evt.hostFeeUSD;
+        _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
         
         // calc payoutsUSD (finally, AFTER all deductions )
-        for (uint i=0; i < _evt.winPercs.length; i++) {
-            _evt.payoutsUSD.push(_evt.prizePoolUSD * _evt.winPercs[i]);
+        for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
+            _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * _evt.event_2.winPercs[i]);
         }
 
         return _evt;
