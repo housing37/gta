@@ -4,10 +4,14 @@ pragma solidity ^0.8.20;
 // deploy
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 // local
 import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
+import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
+// import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
 
 // $ npm install @openzeppelin/contracts
 // $ npm install @uniswap/v2-core
@@ -17,30 +21,30 @@ import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"
 // import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
 
 
-interface IUniswapV2 {
-    // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
-    function swapExactTokensForTokens(
-        uint amountIn,
-        uint amountOutMin,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    function swapTokensForExactTokens(
-        uint amountOut,
-        uint amountInMax,
-        address[] calldata path,
-        address to,
-        uint deadline
-    ) external returns (uint[] memory amounts);
-    function swapExactETHForTokens(
-        uint amountOutMin, 
-        address[] calldata path, 
-        address to, 
-        uint deadline
-    ) external payable returns (uint[] memory amounts);
-    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-}
+// interface IUniswapV2 {
+//     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
+//     function swapExactTokensForTokens(
+//         uint amountIn,
+//         uint amountOutMin,
+//         address[] calldata path,
+//         address to,
+//         uint deadline
+//     ) external returns (uint[] memory amounts);
+//     function swapTokensForExactTokens(
+//         uint amountOut,
+//         uint amountInMax,
+//         address[] calldata path,
+//         address to,
+//         uint deadline
+//     ) external returns (uint[] memory amounts);
+//     function swapExactETHForTokens(
+//         uint amountOutMin, 
+//         address[] calldata path, 
+//         address to, 
+//         uint deadline
+//     ) external payable returns (uint[] memory amounts);
+//     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
+// }
 
 /* terminology...
         join -> game, event, activity
@@ -83,9 +87,6 @@ contract GTADelegate {
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
     // mapping(address => Event_0) private activeGames;
-    
-    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    uint8 public hostRequirementPerc = 100; // uint8 max = 255
     
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 public activeGameCount = 0; 
@@ -133,6 +134,16 @@ contract GTADelegate {
 
     // min entryFeeUSD host can create event with (keeper control)
     uint32 public minEventEntryFeeUSD = 0;
+
+    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
+    uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
+
+    // LEFT OFF HERE ... should there be a lower max than 65,535 ?
+    //      (that keeper should be limited to send)
+    function setHostGtaBalReqPerc(uint16 _perc) public onlyKeeper {
+        require(_perc <= type(uint16).max, 'err: required balance too high :/');
+        hostGtaBalReqPerc = _perc;
+    }
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -448,7 +459,7 @@ contract GTADelegate {
         gta_stab_path[0] = address(this);
         gta_stab_path[1] = _getNextStableTokDeposit();
         (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
-        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostRequirementPerc/100));
+        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100));
     }
 
     function _getTotalsOfArray(uint8[] calldata _arr) public view onlyKeeper returns (uint8) {
@@ -607,7 +618,7 @@ contract GTADelegate {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint8 i = 0; i < routersUniswapV2.length; i++) {
-            uint256[] memory amountsOut = IUniswapV2(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
+            uint256[] memory amountsOut = IUniswapV2Router02(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
             if (amountsOut[amountsOut.length-1] > currHigh) {
                 currHigh = amountsOut[amountsOut.length-1];
                 currHighIdx = i;
@@ -620,7 +631,7 @@ contract GTADelegate {
     // uniwswap v2 protocol based: get quote and execute swap
     function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) public onlyKeeper returns (uint256) {
         //address[] memory path = [weth, wpls];
-        uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
+        uint256[] memory amountsOut = IUniswapV2Router02(router).getAmountsOut(amntIn, path); // quote swap
         uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
                 
         // verifiy new balance of token received
@@ -633,7 +644,7 @@ contract GTADelegate {
     // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
     function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, bool fromETH) private returns (uint256) {
         // emit logRFL(address(this), msg.sender, "logRFL 6a");
-        IUniswapV2 swapRouter = IUniswapV2(router);
+        IUniswapV2Router02 swapRouter = IUniswapV2Router02(router);
         
         // emit logRFL(address(this), msg.sender, "logRFL 6b");
         IERC20(address(path[0])).approve(address(swapRouter), amntIn);

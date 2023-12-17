@@ -79,7 +79,7 @@ contract GamerTokeAward is ERC20, Ownable {
     mapping(address => Event_0) private activeGames;
     
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    uint8 public hostRequirementPerc = 100; // uint8 max = 255
+    // uint8 public hostRequirementPerc = 100; // uint8 max = 255
     
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 public activeGameCount = 0; 
