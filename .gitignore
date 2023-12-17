@@ -1,6 +1,14 @@
 ###############################
 # house_110723 (model house_102323)
 ###############################
+## vscode
+.vscode/
+
+## solidity & npm support
+bin/
+node_modules/
+package-lock.json
+
 ## misc OSx
 *~
 .#.*
