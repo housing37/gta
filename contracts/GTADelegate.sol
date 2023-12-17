@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;        
+pragma solidity ^0.8.20;        
 
 // deploy
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-// import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-// import "@openzeppelin/contracts/access/Ownable.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+// import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 // local
-// import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
-// import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
-// import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
+import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
 
 // $ npm install @openzeppelin/contracts
 // $ npm install @uniswap/v2-core
@@ -78,11 +75,14 @@ contract GTADelegate {
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
-    address private constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
+    function getSwapRouters() public view onlyKeeper returns (address[] memory) {
+        return routersUniswapV2;
+    }
+    address public constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
         
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
-    mapping(address => Event_0) private activeGames;
+    // mapping(address => Event_0) private activeGames;
     
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
     uint8 public hostRequirementPerc = 100; // uint8 max = 255
@@ -114,163 +114,164 @@ contract GTADelegate {
     mapping(address => uint256) private whitelistPendingDebits;
 
     // usd credits used to process player deposits, registers, refunds
-    mapping(address => uint32) private creditsUSD;
+    mapping(address => uint32) public creditsUSD;
 
     // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
     address[] private creditsAddrArray; 
 
     // minimum deposits allowed (in usd value)
+    //  set constant floor/ceiling so keeper can't lock people out
     uint8 public constant minDepositUSD_floor = 1; // 1 USD 
     uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
-    uint8 public minDepositUSD = 0; // dynamic (keeper controlled)
+    uint8 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
 
     // enable/disable refunds for less than min deposit (keeper controlled)
     bool public enableMinDepositRefunds = true;
 
     // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
-    uint256 private accruedGasFeeRefundLoss = 0; 
+    uint256 public accruedGasFeeRefundLoss = 0; 
 
     // min entryFeeUSD host can create event with (keeper control)
-    uint256 public minEventEntryFeeUSD = 0;
+    uint32 public minEventEntryFeeUSD = 0;
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
 
     // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
-    uint256 private depositFeePerc = 0;
+    uint256 public depositFeePerc = 0;
 
     // % of events total 'entryFeeUSD' collected (keeper controlled)
-    uint8 public keeperFeePerc = 0;
-    uint8 public serviceFeePerc = 0;
-    uint8 public supportFeePerc = 0;
+    uint8 public keeperFeePerc = 1; // 1% of event total entryFeeUSD
+    uint8 public serviceFeePerc = 10; // 10% of event total entryFeeUSD
+    uint8 public supportFeePerc = 0; // 0% of event total entryFeeUSD
 
-    // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
-    //  and % of buy & burn GTA to mint for winners
-    // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
-    uint8 public buyAndBurnPerc = 50;
-    uint8 public buyAndBurnMintPerc;
+    // // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
+    // //  and % of buy & burn GTA to mint for winners
+    // // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
+    // uint8 public buyAndBurnPerc = 50;
+    // uint8 public mintGtaPerc;
 
-    // code required for 'burnGTA'
-    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    uint16 private BURN_CODE_EASY;
-    uint32 private BURN_CODE_HARD; 
-    uint64 public BURN_CODE_GUESS_CNT = 0;
-    bool public USE_BURN_CODE_HARD = false;
+    // // code required for 'burnGTA'
+    // //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    // //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    // uint16 private BURN_CODE_EASY;
+    // uint32 private BURN_CODE_HARD; 
+    // uint64 public BURN_CODE_GUESS_CNT = 0;
+    // bool public USE_BURN_CODE_HARD = false;
 
-    /* -------------------------------------------------------- */
-    /* STRUCTURES                                               */
-    /* -------------------------------------------------------- */
-    /* _ GAME SUPPORT _ */
-    struct Event_0 {
-        /** cons */
-        address host;           // input param
-        string gameName;        // input param
-        uint32 entryFeeUSD;     // input param
+    // /* -------------------------------------------------------- */
+    // /* STRUCTURES                                               */
+    // /* -------------------------------------------------------- */
+    // /* _ GAME SUPPORT _ */
+    // struct Event_0 {
+    //     /** cons */
+    //     address host;           // input param
+    //     string gameName;        // input param
+    //     uint32 entryFeeUSD;     // input param
         
-        /** EVENT SUPPORT - mostly host set */
-        uint256 createTime;     // 'createGame'
-        uint256 createBlockNum; // 'createGame'
-        uint256 startTime;      // host scheduled start time
-        uint256 launchTime;     // 'hostStartEvent'
-        uint256 launchBlockNum; // 'hostStartEvent'
-        uint256 endTime;        // 'hostEndGameWithWinners'
-        uint256 endBlockNum;    // 'hostEndGameWithWinners'
-        uint256 expTime;        // expires if not launched by this time
-        uint256 expBlockNum;    // 'cancelEventProcessRefunds'
+    //     /** EVENT SUPPORT - mostly host set */
+    //     uint256 createTime;     // 'createGame'
+    //     uint256 createBlockNum; // 'createGame'
+    //     uint256 startTime;      // host scheduled start time
+    //     uint256 launchTime;     // 'hostStartEvent'
+    //     uint256 launchBlockNum; // 'hostStartEvent'
+    //     uint256 endTime;        // 'hostEndGameWithWinners'
+    //     uint256 endBlockNum;    // 'hostEndGameWithWinners'
+    //     uint256 expTime;        // expires if not launched by this time
+    //     uint256 expBlockNum;    // 'cancelEventProcessRefunds'
 
-        // mapping(address => Event_1) event_1;
-        // mapping(address => Event_2) event_2;
-        Event_1 event_1;
-        Event_2 event_2;
-    }
-    struct Event_1 { 
-        // ------------------------------------------
-        bool launched;  // 'hostStartEvent'
-        bool ended;     // 'hostEndEventWithWinners'
-        bool expired;   // 'cancelEventProcessRefunds'
-        // LEFT OFF HERE ... 'expired' is never used
+    //     // mapping(address => Event_1) event_1;
+    //     // mapping(address => Event_2) event_2;
+    //     Event_1 event_1;
+    //     Event_2 event_2;
+    // }
+    // struct Event_1 { 
+    //     // ------------------------------------------
+    //     bool launched;  // 'hostStartEvent'
+    //     bool ended;     // 'hostEndEventWithWinners'
+    //     bool expired;   // 'cancelEventProcessRefunds'
+    //     // LEFT OFF HERE ... 'expired' is never used
 
-        // ------------------------------------------
-        mapping(address => bool) players; // true = registerd 
-        address[] playerAddresses; // traversal access
-        uint32 playerCnt;       // length or players; max 4,294,967,295
+    //     // ------------------------------------------
+    //     mapping(address => bool) players; // true = registerd 
+    //     address[] playerAddresses; // traversal access
+    //     uint32 playerCnt;       // length or players; max 4,294,967,295
 
-        /** host set */
-        uint8 hostFeePerc;      // x% of prizePoolUSD
+    //     /** host set */
+    //     uint8 hostFeePerc;      // x% of prizePoolUSD
 
-        /** keeper set */
-        uint8 keeperFeePerc;    // 1% of total entryFeeUSD
-        uint8 serviceFeePerc;   // 10% of total entryFeeUSD
-        uint8 supportFeePerc;   // 0% of total entryFeeUSD
-        uint8 buyAndBurnPerc;   // 50% of serviceFeeUSD
+    //     /** keeper set */
+    //     uint8 keeperFeePerc;    // 1% of total entryFeeUSD
+    //     uint8 serviceFeePerc;   // 10% of total entryFeeUSD
+    //     uint8 supportFeePerc;   // 0% of total entryFeeUSD
+    //     uint8 buyAndBurnPerc;   // 50% of serviceFeeUSD
 
-        // uint8 mintDistrPerc;    // % of ?
+    //     // uint8 mintDistrPerc;    // % of ?
         
-        /** _generatePrizePool */
-        uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
-        uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
-        uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
+    //     /** _generatePrizePool */
+    //     uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
+    //     uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
+    //     uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
 
-    }
-    struct Event_2 { 
-        uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
-        uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
-        uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
+    // }
+    // struct Event_2 { 
+    //     uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
+    //     uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
+    //     uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
 
-        // ------------------------------------------
-        uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
-        uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
+    //     // ------------------------------------------
+    //     uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
+    //     uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
         
-        /** _generatePrizePool */
-        uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
-        uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
-        uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
-        uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
-        uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
-        uint32 refundsUSD;          // refundUSD_ind * evt.event_1.playerCnt
-        uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
+    //     /** _generatePrizePool */
+    //     uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
+    //     uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
+    //     uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
+    //     uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
+    //     uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
+    //     uint32 refundsUSD;          // refundUSD_ind * evt.event_1.playerCnt
+    //     uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
 
-        uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
-    }
-    /** _ DEFI SUPPORT _ */
-    // used for deposits in keeper call to 'settleBalances'
-    struct TxDeposit {
-        address token;
-        address sender;
-        uint256 amount;
-    }
+    //     uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
+    // }
+    // /** _ DEFI SUPPORT _ */
+    // // used for deposits in keeper call to 'settleBalances'
+    // struct TxDeposit {
+    //     address token;
+    //     address sender;
+    //     uint256 amount;
+    // }
     
-    /* -------------------------------------------------------- */
-    /* EVENTS                                                   */
-    /* -------------------------------------------------------- */
-    // emit to client side when mnimium deposit refund is not met
-    event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
+    // /* -------------------------------------------------------- */
+    // /* EVENTS                                                   */
+    // /* -------------------------------------------------------- */
+    // // emit to client side when mnimium deposit refund is not met
+    // event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
 
-    // emit to client side when deposit fails; only due to min deposit fail (120323)
-    event DepositFailed(address sender, address token, uint256 tokenAmount, uint256 stableAmount, uint256 minDepositUSD, bool refundsEnabled);
+    // // emit to client side when deposit fails; only due to min deposit fail (120323)
+    // event DepositFailed(address sender, address token, uint256 tokenAmount, uint256 stableAmount, uint256 minDepositUSD, bool refundsEnabled);
 
-    // emit to client side when deposit processed (after sender's manual transfer to contract)
-    event DepositProcessed(address sender, address token, uint256 amount, uint256 stable_swap_fee, uint256 depositFee, uint256 balance);
+    // // emit to client side when deposit processed (after sender's manual transfer to contract)
+    // event DepositProcessed(address sender, address token, uint256 amount, uint256 stable_swap_fee, uint256 depositFee, uint256 balance);
 
-    // notify client side that an event distribution (winner payout) has occurred successuflly
-    event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
+    // // notify client side that an event distribution (winner payout) has occurred successuflly
+    // event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
 
-    // notify client side that an end event has occurred successfully
-    event EndEventActivity(address evtCode, address host, address[] winners, uint32 prize_pool_usd, uint32 host_fee_usd, uint32 keeper_fee_usd, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
+    // // notify client side that an end event has occurred successfully
+    // event EndEventActivity(address evtCode, address host, address[] winners, uint32 prize_pool_usd, uint32 host_fee_usd, uint32 keeper_fee_usd, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
 
-    // notify client side that an event has been canceled
-    event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
-    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
+    // // notify client side that an event has been canceled
+    // event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
+    // event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
-    // notify client side that someoen cracked the burn code and burned all gta in this contract
-    event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
+    // // notify client side that someoen cracked the burn code and burned all gta in this contract
+    // event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
     
-    // notify clients a new burn code is set with type (easy, hard)
-    event BurnCodeReset(bool setToHard);
+    // // notify clients a new burn code is set with type (easy, hard)
+    // event BurnCodeReset(bool setToHard);
 
-    // notify client side that a player was registerd for event
-    event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
+    // // notify client side that a player was registerd for event
+    // event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
 
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
@@ -289,94 +290,9 @@ contract GTADelegate {
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
-    // modifier onlyAdmins(address gameCode) {
-    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-    //     bool isHost = msg.sender == activeGames[gameCode].host;
-    //     bool isKeeper = msg.sender == keeper;
-    //     bool isOwner = msg.sender == owner(); // from 'Ownable'
-    //     require(isKeeper || isOwner || isHost, 'err: only admins :/*');
-    //     _;
-    // }
-    modifier onlyHost(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        require(msg.sender == activeGames[gameCode].host, "Only the host :0");
-        _;
-    }    
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
-    }
-    modifier validGameCode(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        _;
-    }
-
-    /* -------------------------------------------------------- */
-    /* SIDE QUEST... CRACK THE BURN CODE                        */
-    /* -------------------------------------------------------- */
-    // public can try to guess the burn code (burn buyAndBurnPerc of the balance, earn the rest)
-    // code required for 'burnGTA'
-    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    // function burnGTA_HARD(uint32 burnCode) public returns (bool) {
-    //     BURN_CODE_GUESS_CNT++; // keep track of guess count
-    //     require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
-    //     require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
-    //     return _burnGTA();
-    // }
-    // function burnGTA_EASY(uint16 burnCode) public returns (bool) {
-    //     BURN_CODE_GUESS_CNT++; // keep track of guess count
-    //     require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
-    //     require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
-    //     return _burnGTA();
-    // }
-    // function _burnGTA() private returns (bool) {
-    //     uint256 bal = balanceOf(address(this));
-    //     require(bal > 0, 'err: no GTA to burn :p');
-
-    //     // burn it.. burn it real good...
-    //     //  burn 'buyAndBurnPerc' of 'bal', send rest to cracker
-    //     uint256 bal_burn = bal * (buyAndBurnPerc/100);
-    //     uint256 bal_earn = bal - bal_burn;
-    //     IERC20(address(this)).transfer(address(0), bal_burn);
-    //     IERC20(address(this)).transfer(msg.sender, bal_earn);
-
-    //     // notify the world that shit was burned
-    //     emit BurnedGTA(bal, msg.sender, BURN_CODE_GUESS_CNT);
-
-    //     // reset guess count
-    //     BURN_CODE_GUESS_CNT = 0;
-
-    //     return true;
-    // }
-
-    // code required for 'burnGTA'
-    function setBurnCodeEasy(uint16 bc) public onlyKeeper {
-        require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
-        BURN_CODE_EASY = bc;
-        USE_BURN_CODE_HARD = false;
-        emit BurnCodeReset(USE_BURN_CODE_HARD);
-    }
-    function setBurnCodeHard(uint32 bc) public onlyKeeper {
-        require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
-        BURN_CODE_HARD = bc;
-        USE_BURN_CODE_HARD = true;
-        emit BurnCodeReset(USE_BURN_CODE_HARD);
-    }
-    function getBurnCodes() public onlyKeeper returns (uint32[2] memory) {
-        return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
-    }
-
-    // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
-    //  and % of buy & burn GTA to mint for winners
-    // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
-    function setBuyAndBurnPerc(uint8 _perc) public onlyKeeper {
-        require(_perc <= 100, 'err: invalid percent :(');
-        buyAndBurnPerc = _perc;
-    }
-    function setBuyAndBurnMintPerc(uint8 _perc) public onlyKeeper {
-        require(_perc <= 100, 'err: invalid percent :O');
-        buyAndBurnMintPerc = _perc;
     }
 
     /* -------------------------------------------------------- */
@@ -386,6 +302,7 @@ contract GTADelegate {
     function getKeeper() public view onlyKeeper returns (address) {
         return keeper;
     }
+
     function getGameCodes() public view onlyKeeper returns (address[] memory) {
         return activeGameCodes;
     }
@@ -411,16 +328,20 @@ contract GTADelegate {
         maxHostFeePerc = _perc;
         return true;
     }
-    function getCreditAddresses() public onlyKeeper returns (address[] memory) {
+    function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
         return creditsAddrArray;
     }
-    function getCredits(address _player) public onlyKeeper returns (uint256) {
+    function getCredits(address _player) public view onlyKeeper returns (uint32) {
         return creditsUSD[_player];
     }
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
         require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
         minEventEntryFeeUSD = _amount;
+    }
+    function addAccruedGFRL(uint256 _gasAmnt) public onlyKeeper returns (uint256) {
+        accruedGasFeeRefundLoss += _gasAmnt;
+        return accruedGasFeeRefundLoss;
     }
     function getAccruedGFRL() public view onlyKeeper returns (uint256) {
         return accruedGasFeeRefundLoss;
@@ -430,13 +351,21 @@ contract GTADelegate {
         accruedGasFeeRefundLoss = 0;
         return true;
     }
-    function getContractStablesAndAlts() public onlyKeeper returns (address[] memory, address[] memory) {
+    function getContractStablesAndAlts() public view onlyKeeper returns (address[] memory, address[] memory) {
         return (contractStables, contractAlts); // tokens that have ever been whitelisted
     }
     
+    // minimum deposits allowed (in usd value)
+    //  set constant floor/ceiling so keeper can't lock people out
     function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
+    }
+    function getWhitelistStables() public view onlyKeeper returns (address[] memory) {
+        return whitelistStables;
+    }
+    function getWhitelistAlts() public view onlyKeeper returns (address[] memory) {
+        return whitelistAlts;
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
@@ -548,113 +477,6 @@ contract GTADelegate {
         return stable;
     }
 
-    // function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
-    //     // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
-    //     address stable = _getBestDebitStableUSD(_amountUSD);
-
-    //     // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
-    //     IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
-    //     return stable;
-    // }
-
-    // function _addPlayerToEvent(address _player, Event_0 memory _evt) public returns (Event_0 memory) {
-    //     _evt.event_1.players[_player] = true;
-    //     _evt.event_1.playerAddresses.push(_player);
-    //     _evt.event_1.playerCnt = uint32(_evt.event_1.playerAddresses.length);
-    //     return _evt;
-    // }
-
-    // // set event param to end state
-    // function _endEvent(Event_0 storage _evt, address _evtCode) private returns (Event_0 storage) {
-    //     // set game end state (doesn't matter if its about to be deleted)
-    //     _evt.endTime = block.timestamp;
-    //     _evt.endBlockNum = block.number;
-    //     _evt.event_1.ended = true;
-
-    //     // delete game mapping
-    //     delete activeGames[_evtCode];
-
-    //     // decrement support
-    //     activeGameCodes = _remAddressFromArray(_evtCode, activeGameCodes);
-    //     activeGameCount--;
-    //     return _evt;
-    // }
-
-    // // set event params to launched state
-    // function _launchEvent(Event_0 storage _evt) private returns (Event_0 storage ) {
-    //     // set event fee calculations & prizePoolUSD
-    //     // set event launched state
-    //     _evt.launchTime = block.timestamp;
-    //     _evt.launchBlockNum = block.number;
-    //     _evt.event_1.launched = true;
-    //     return _evt;
-    // }
-
-    // // calculate prize pool, payoutsUSD, fees, refunds, totals
-    // function _generatePrizePool(Event_0 storage _evt) private returns (Event_0 storage) {
-    //     /* DEDUCTING FEES
-    //         current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
-    //          - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-    //          - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
-    //          - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
-    //          - win payouts -> taken from net 'prizePoolUSD' generated below
-
-    //         Formula ...
-    //             keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
-    //             serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
-    //             supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
-
-    //             GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
-    //                 hostFeeUSD = prizePoolUSD * hostFeePerc
-    //             NET prizePoolUSD -= hostFeeUSD
-    //                 payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
-    //     */
-
-    //     // calc individual player fees (BEFORE generating 'prizePoolUSD') 
-    //     //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
-    //     _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.keeperFeePerc/100);
-    //     _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.serviceFeePerc/100);
-    //     _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (_evt.event_1.supportFeePerc/100);
-
-    //     // calc total fees for each individual 'entryFeeUSD' paid
-    //     _evt.event_2.totalFeesUSD_ind = _evt.event_2.keeperFeeUSD_ind + _evt.event_2.serviceFeeUSD_ind + _evt.event_2.supportFeeUSD_ind;
-
-    //     // calc: 'hostFeeUSD_ind' = 'hostFeePerc' of single 'entryFeeUSD' - 'totalFeesUSD_ind'
-    //     _evt.event_2.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind) * (_evt.event_1.hostFeePerc/100);
-
-    //     // calc total fees for all 'entryFeeUSD' paid
-    //     _evt.event_1.keeperFeeUSD = _evt.event_2.keeperFeeUSD_ind * _evt.event_1.playerCnt;
-    //     _evt.event_1.serviceFeeUSD = _evt.event_2.serviceFeeUSD_ind * _evt.event_1.playerCnt; // GROSS
-    //     _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.playerCnt;
-    //     _evt.event_2.totalFeesUSD = _evt.event_1.keeperFeeUSD + _evt.event_1.serviceFeeUSD + _evt.event_1.supportFeeUSD;
-
-    //     // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyAndBurnPerc'?
-    //     //                      or do we want to let the host choose?
-    //     // calc: tot 'buyAndBurnUSD' = 'buyAndBurnPerc' of 'serviceFeeUSD'
-    //     //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyAndBurnUSD'
-    //     _evt.event_2.buyAndBurnUSD = _evt.event_1.serviceFeeUSD * (_evt.event_1.buyAndBurnPerc/100);
-    //     _evt.event_1.serviceFeeUSD -= _evt.event_2.buyAndBurnUSD; // NET
-
-    //     // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
-    //     _evt.event_2.refundUSD_ind = _evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind; 
-    //     _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.playerCnt;
-
-    //     // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
-    //     _evt.event_2.prizePoolUSD = (_evt.entryFeeUSD * _evt.event_1.playerCnt) - _evt.event_2.totalFeesUSD;
-
-    //     // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
-    //     _evt.event_2.hostFeeUSD = _evt.event_2.prizePoolUSD * (_evt.event_1.hostFeePerc/100);
-
-    //     // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
-    //     _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
-        
-    //     // calc payoutsUSD (finally, AFTER all deductions )
-    //     for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
-    //         _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * _evt.event_2.winPercs[i]);
-    //     }
-
-    //     return _evt;
-    // }
 
     function _generateAddressHash(address host, string memory uid) public view onlyKeeper returns (address) {
         // Concatenate the address and the string, and then hash the result
@@ -667,18 +489,15 @@ contract GTADelegate {
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
     // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
-    function _getNextStableTokDeposit() private returns (address) {
+    function _getNextStableTokDeposit() public onlyKeeper returns (address) {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
         whitelistStablesUseIdx++;
         if (whitelistStablesUseIdx >= whitelistStables.length) { whitelistStablesUseIdx=0; }
         return stable_addr;
     }
 
-    // LEFT OFF HERE ... changing 'private' to 'public' causes contract code size error
-    //                      exceeding limit by about 1000 bytes
-    //      "Warning: Contract code size is 25699 bytes and exceeds 24576 bytes"
     // keeper 'SANITY CHECK' for 'settleBalances'
-    function _sanityCheck(address token, uint256 amount) private returns (bool) {
+    function _sanityCheck(address token, uint256 amount) public onlyKeeper returns (bool) {
         // SANITY CHECK: 
         //  settles whitelist debits accrued during 'hostEndEventWithWinners'
         //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
@@ -784,7 +603,7 @@ contract GTADelegate {
     }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
+    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) public view onlyKeeper returns (uint8, uint256) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint8 i = 0; i < routersUniswapV2.length; i++) {
@@ -799,7 +618,7 @@ contract GTADelegate {
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
-    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) private returns (uint256) {
+    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) public onlyKeeper returns (uint256) {
         //address[] memory path = [weth, wpls];
         uint256[] memory amountsOut = IUniswapV2(router).getAmountsOut(amntIn, path); // quote swap
         uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
