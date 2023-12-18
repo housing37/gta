@@ -43,13 +43,11 @@ contract GamerTokeAward is ERC20, Ownable {
     // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
 
     // // game experation time (keeper control)
-    // uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
+    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
     
-
-    // /** _ DEFI SUPPORT _ */
+    /** _ DEFI SUPPORT _ */
     // track last block # used to update 'creditsUSD' in 'settleBalances'
-    // uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-    
+    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
     // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
     //  and % of buy & burn GTA to mint for winners
@@ -178,7 +176,6 @@ contract GamerTokeAward is ERC20, Ownable {
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
     GTADelegate private _gtad;
-    // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
     constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
@@ -240,13 +237,13 @@ contract GamerTokeAward is ERC20, Ownable {
 
         return true;
     }
-    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
-        if (from != address(this)) {
-            return super.transferFrom(from, to, value);
-        } else {
-            _transfer(from, to, value); // balance checks, etc. indeed occur
-        }
-        return true;
+
+    /* -------------------------------------------------------- */
+    /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
+    /* -------------------------------------------------------- */
+    function setGameExpSec(uint32 _sec) public onlyKeeper {
+        require(_sec > 0, 'err: no zero :{}');
+        gameExpSec = _sec;
     }
     // code required for 'burnGTA'
     function resetBurnCodeEasy(uint16 bc) public onlyKeeper {
@@ -268,10 +265,9 @@ contract GamerTokeAward is ERC20, Ownable {
     function getBurnCodes() public view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-
-    /* -------------------------------------------------------- */
-    /* PUBLIC ACCESSORS                                         */
-    /* -------------------------------------------------------- */
+    function getLastBlockNumUpdate() public view onlyKeeper returns (uint32) {
+        return lastBlockNumUpdate;
+    }
     function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
         require(_host != address(0), "err: invalid host :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
@@ -327,7 +323,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
 
         // SAFE-ADD
-        uint64 _expTime = _startTime + uint64(_gtad.getGameExpSec());
+        uint64 _expTime = _startTime + uint64(gameExpSec);
         require(_expTime > _startTime, "err: stop f*ckin around :X");
 
         // verify active game name/code doesn't exist yet
@@ -561,7 +557,7 @@ contract GamerTokeAward is ERC20, Ownable {
     //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
         uint256 start_refund = gasleft(); // record start gas amount
-        require(_gtad.getLastBlockNumUpdate() < _lastBlockNum, 'err: invalid _lastBlockNum :O');
+        require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
         //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
@@ -657,7 +653,7 @@ contract GamerTokeAward is ERC20, Ownable {
         }
 
         // update last block number
-        _gtad.setLastBlockNumUpdate(_lastBlockNum);
+        lastBlockNumUpdate = _lastBlockNum;
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
         uint256 gas_refund = (start_refund - gasleft()) * tx.gasprice;
@@ -773,5 +769,17 @@ contract GamerTokeAward is ERC20, Ownable {
         }
 
         return _evt;
+    }
+
+    /* -------------------------------------------------------- */
+    /* ERC20 - OVERRIDES                                        */
+    /* -------------------------------------------------------- */
+    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
+        if (from != address(this)) {
+            return super.transferFrom(from, to, value);
+        } else {
+            _transfer(from, to, value); // balance checks, etc. indeed occur
+        }
+        return true;
     }
 }
