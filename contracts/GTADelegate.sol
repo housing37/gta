@@ -42,14 +42,15 @@ contract GTADelegate {
 
     // track activeGameCodes array for keeper 'getGameCodes'
     address[] private activeGameCodes;
-    
+    // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
+
     // game experation time (keeper control)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
-    
+
     /** _ DEFI SUPPORT _ */
     // track last block # used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-    // LEFT OFF HERE ... should 'lastBlockNumUpdate' be sourced in GTADelegate?
+    
 
 
     // arrays of accepted usd stable & alts for player deposits
@@ -132,15 +133,16 @@ contract GTADelegate {
     function getGameCodes() public view onlyKeeper returns (address[] memory) {
         return activeGameCodes;
     }
-    function getGameExpSec() public view onlyKeeper returns (uint64) {
+    function getGameExpSec() public view onlyKeeper returns (uint32) {
         return gameExpSec;
+    }
+    function setGameExpSec(uint32 _sec) public onlyKeeper {
+        require(_sec > 0, 'err: no zero :{}');
+        gameExpSec = _sec;
     }
     function setKeeper(address _newKeeper) public onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
-    }
-    function setGameExpSec(uint32 _sec) public onlyKeeper {
-        gameExpSec = _sec;
     }
     function setDepositFeePerc(uint8 _perc) public onlyKeeper {
         require(_perc <= 100, 'err: max 100%');
@@ -148,6 +150,10 @@ contract GTADelegate {
     }
     function getLastBlockNumUpdate() public view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
+    }
+    function setLastBlockNumUpdate(uint32 _lastBlockNum) public onlyKeeper {
+        if (_lastBlockNum > lastBlockNumUpdate) { lastBlockNumUpdate = lastBlockNumUpdate; }
+        // LEFT OFF HERE ... this means keeper can just set last block number to what they want :/
     }
     function setMaxHostFeePerc(uint8 _perc) public onlyKeeper returns (bool) {
         require(_perc <= 100, 'err: max 100%');

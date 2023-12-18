@@ -40,14 +40,16 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // track activeGameCodes array for keeper 'getGameCodes'
     address[] private activeGameCodes;
+    // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
+
+    // // game experation time (keeper control)
+    // uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
     
-    // game experation time (keeper control)
-    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
-    
-    /** _ DEFI SUPPORT _ */
+
+    // /** _ DEFI SUPPORT _ */
     // track last block # used to update 'creditsUSD' in 'settleBalances'
-    uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-    // LEFT OFF HERE ... should 'lastBlockNumUpdate' be sourced in GTADelegate?
+    // uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
+    
 
     // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
     //  and % of buy & burn GTA to mint for winners
@@ -164,7 +166,7 @@ contract GamerTokeAward is ERC20, Ownable {
     event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
     // notify client side that someoen cracked the burn code and burned all gta in this contract
-    event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
+    event BurnedGTA(uint256 bal_cleaned, uint256 bal_burned, uint256 bal_earned, address code_cracker, uint64 guess_count);
     
     // notify clients a new burn code is set with type (easy, hard)
     event BurnCodeReset(bool setToHard);
@@ -227,32 +229,42 @@ contract GamerTokeAward is ERC20, Ownable {
         //  burn 'burnGtaPerc' of 'bal', send rest to cracker
         uint256 bal_burn = bal * (burnGtaPerc/100);
         uint256 bal_earn = bal - bal_burn;
-        IERC20(address(this)).transfer(address(0), bal_burn);
-        IERC20(address(this)).transfer(msg.sender, bal_earn);
+        transferFrom(address(this), address(0), bal_burn);
+        transferFrom(address(this), msg.sender, bal_earn);
 
         // notify the world that shit was burned
-        emit BurnedGTA(bal, msg.sender, BURN_CODE_GUESS_CNT);
+        emit BurnedGTA(bal, bal_burn, bal_earn, msg.sender, BURN_CODE_GUESS_CNT);
 
         // reset guess count
         BURN_CODE_GUESS_CNT = 0;
 
         return true;
     }
-
+    function transferFrom(address from, address to, uint256 value) public override returns (bool) {
+        if (from != address(this)) {
+            return super.transferFrom(from, to, value);
+        } else {
+            _transfer(from, to, value); // balance checks, etc. indeed occur
+        }
+        return true;
+    }
     // code required for 'burnGTA'
-    function setBurnCodeEasy(uint16 bc) public onlyKeeper {
+    function resetBurnCodeEasy(uint16 bc) public onlyKeeper {
         require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
         BURN_CODE_EASY = bc;
         USE_BURN_CODE_HARD = false;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function setBurnCodeHard(uint32 bc) public onlyKeeper {
+    function resetBurnCodeHard(uint32 bc) public onlyKeeper {
         require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
         BURN_CODE_HARD = bc;
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-
+    function setBurnCodeHard(bool _hard) public onlyKeeper {
+        USE_BURN_CODE_HARD = _hard;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
+    }
     function getBurnCodes() public view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
@@ -261,19 +273,21 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
     function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
-        require(_host != address(0), "err: invalid host address :/" );
+        require(_host != address(0), "err: invalid host :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
         address _gameCode = getGameCode(_host, _gameName); // generate hash
         return getPlayers(_gameCode);
     }
     function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
-        require(_gameCode != address(0), 'err: invalid game code :O');
-        for (uint i=0; i < activeGameCodes.length; i++) {
-            if (_gameCode == activeGameCodes[i]) {
-                return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
-            }
-        }
-        return new address[](0);
+        require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
+        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+
+        // for (uint i=0; i < activeGameCodes.length; i++) {
+        //     if (_gameCode == activeGameCodes[i]) {
+        //         return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+        //     }
+        // }
+        // return new address[](0);
     }
 
     /* -------------------------------------------------------- */
@@ -312,6 +326,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gtad._getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
         require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
 
+        // SAFE-ADD
+        uint64 _expTime = _startTime + uint64(_gtad.getGameExpSec());
+        require(_expTime > _startTime, "err: stop f*ckin around :X");
+
         // verify active game name/code doesn't exist yet
         address gameCode = _gtad._generateAddressHash(msg.sender, _gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
@@ -330,7 +348,7 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.createTime = block.timestamp;
         newGame.createBlockNum = block.number;
         newGame.startTime = _startTime;
-        newGame.expTime = _startTime + gameExpSec;
+        newGame.expTime = _expTime;
 
         // increment support
         activeGameCodes = _gtad._addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
@@ -543,7 +561,7 @@ contract GamerTokeAward is ERC20, Ownable {
     //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
     function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
         uint256 start_refund = gasleft(); // record start gas amount
-        require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
+        require(_gtad.getLastBlockNumUpdate() < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
         //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
@@ -639,7 +657,7 @@ contract GamerTokeAward is ERC20, Ownable {
         }
 
         // update last block number
-        lastBlockNumUpdate = _lastBlockNum;
+        _gtad.setLastBlockNumUpdate(_lastBlockNum);
 
         // -1) calc gas used to this point & refund to 'keeper' (in wei)
         uint256 gas_refund = (start_refund - gasleft()) * tx.gasprice;
