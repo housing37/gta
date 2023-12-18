@@ -6,76 +6,25 @@ pragma solidity ^0.8.20;
 // import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 // import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
-// local
+// local _ $ npm install @openzeppelin/contracts @uniswap/v2-core @uniswap/v2-periphery
 import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
 import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 // import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
-
-// $ npm install @openzeppelin/contracts
-// $ npm install @uniswap/v2-core
-// import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
-// import "./@openzeppelin/contracts/access/Ownable.sol"; 
-// import "./@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
 // import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
-
-
-// interface IUniswapV2 {
-//     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
-//     function swapExactTokensForTokens(
-//         uint amountIn,
-//         uint amountOutMin,
-//         address[] calldata path,
-//         address to,
-//         uint deadline
-//     ) external returns (uint[] memory amounts);
-//     function swapTokensForExactTokens(
-//         uint amountOut,
-//         uint amountInMax,
-//         address[] calldata path,
-//         address to,
-//         uint deadline
-//     ) external returns (uint[] memory amounts);
-//     function swapExactETHForTokens(
-//         uint amountOutMin, 
-//         address[] calldata path, 
-//         address to, 
-//         uint deadline
-//     ) external payable returns (uint[] memory amounts);
-//     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-// }
 
 /* terminology...
         join -> game, event, activity
     register -> player, delegates, users, participants, entrants
         payout -> winnings, earnings, rewards, recipients 
 */
-
-// LEFT OFF HERE ... compilation fails
-//  remix error....
-/** 
-    Warning: Contract code size is 50685 bytes and exceeds 24576 bytes (a limit introduced in Spurious Dragon). This contract may not be deployable on Mainnet. Consider enabling the optimizer (with a low "runs" value!), turning off revert strings, or using libraries.
-    --> contracts/gta.sol:52:1:
-    |
-    52 | contract GamerTokeAward is ERC20, Ownable {
-    | ^ (Relevant source part starts here and spans across multiple lines).
-
-    StructDefinition
-    contracts/gta.sol 150:4
-
- */
- // LEFT OFF HERE ... divide up contract to lower the size
 contract GTADelegate {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
     address private keeper; // 37, curator, manager, caretaker, keeper
-    
-    /* _ TOKEN INIT SUPPORT _ */
-    string private constant tok_name = "_TEST GTA IERC20";
-    string private constant tok_symb = "_TEST_GTA";
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
@@ -100,6 +49,8 @@ contract GTADelegate {
     /** _ DEFI SUPPORT _ */
     // track last block # used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
+    // LEFT OFF HERE ... should 'lastBlockNumUpdate' be sourced in GTADelegate?
+
 
     // arrays of accepted usd stable & alts for player deposits
     address[] public whitelistAlts;
@@ -156,147 +107,12 @@ contract GTADelegate {
     uint8 public serviceFeePerc = 10; // 10% of event total entryFeeUSD
     uint8 public supportFeePerc = 0; // 0% of event total entryFeeUSD
 
-    // // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
-    // //  and % of buy & burn GTA to mint for winners
-    // // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
-    // uint8 public buyAndBurnPerc = 50;
-    // uint8 public mintGtaPerc;
-
-    // // code required for 'burnGTA'
-    // //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    // //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    // uint16 private BURN_CODE_EASY;
-    // uint32 private BURN_CODE_HARD; 
-    // uint64 public BURN_CODE_GUESS_CNT = 0;
-    // bool public USE_BURN_CODE_HARD = false;
-
-    // /* -------------------------------------------------------- */
-    // /* STRUCTURES                                               */
-    // /* -------------------------------------------------------- */
-    // /* _ GAME SUPPORT _ */
-    // struct Event_0 {
-    //     /** cons */
-    //     address host;           // input param
-    //     string gameName;        // input param
-    //     uint32 entryFeeUSD;     // input param
-        
-    //     /** EVENT SUPPORT - mostly host set */
-    //     uint256 createTime;     // 'createGame'
-    //     uint256 createBlockNum; // 'createGame'
-    //     uint256 startTime;      // host scheduled start time
-    //     uint256 launchTime;     // 'hostStartEvent'
-    //     uint256 launchBlockNum; // 'hostStartEvent'
-    //     uint256 endTime;        // 'hostEndGameWithWinners'
-    //     uint256 endBlockNum;    // 'hostEndGameWithWinners'
-    //     uint256 expTime;        // expires if not launched by this time
-    //     uint256 expBlockNum;    // 'cancelEventProcessRefunds'
-
-    //     // mapping(address => Event_1) event_1;
-    //     // mapping(address => Event_2) event_2;
-    //     Event_1 event_1;
-    //     Event_2 event_2;
-    // }
-    // struct Event_1 { 
-    //     // ------------------------------------------
-    //     bool launched;  // 'hostStartEvent'
-    //     bool ended;     // 'hostEndEventWithWinners'
-    //     bool expired;   // 'cancelEventProcessRefunds'
-    //     // LEFT OFF HERE ... 'expired' is never used
-
-    //     // ------------------------------------------
-    //     mapping(address => bool) players; // true = registerd 
-    //     address[] playerAddresses; // traversal access
-    //     uint32 playerCnt;       // length or players; max 4,294,967,295
-
-    //     /** host set */
-    //     uint8 hostFeePerc;      // x% of prizePoolUSD
-
-    //     /** keeper set */
-    //     uint8 keeperFeePerc;    // 1% of total entryFeeUSD
-    //     uint8 serviceFeePerc;   // 10% of total entryFeeUSD
-    //     uint8 supportFeePerc;   // 0% of total entryFeeUSD
-    //     uint8 buyAndBurnPerc;   // 50% of serviceFeeUSD
-
-    //     // uint8 mintDistrPerc;    // % of ?
-        
-    //     /** _generatePrizePool */
-    //     uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
-    //     uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
-    //     uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
-
-    // }
-    // struct Event_2 { 
-    //     uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
-    //     uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
-    //     uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
-
-    //     // ------------------------------------------
-    //     uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
-    //     uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
-        
-    //     /** _generatePrizePool */
-    //     uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
-    //     uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
-    //     uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
-    //     uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
-    //     uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
-    //     uint32 refundsUSD;          // refundUSD_ind * evt.event_1.playerCnt
-    //     uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
-
-    //     uint32 buyAndBurnUSD;   // serviceFeeUSD * buyAndBurnPerc
-    // }
-    // /** _ DEFI SUPPORT _ */
-    // // used for deposits in keeper call to 'settleBalances'
-    // struct TxDeposit {
-    //     address token;
-    //     address sender;
-    //     uint256 amount;
-    // }
-    
-    // /* -------------------------------------------------------- */
-    // /* EVENTS                                                   */
-    // /* -------------------------------------------------------- */
-    // // emit to client side when mnimium deposit refund is not met
-    // event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
-
-    // // emit to client side when deposit fails; only due to min deposit fail (120323)
-    // event DepositFailed(address sender, address token, uint256 tokenAmount, uint256 stableAmount, uint256 minDepositUSD, bool refundsEnabled);
-
-    // // emit to client side when deposit processed (after sender's manual transfer to contract)
-    // event DepositProcessed(address sender, address token, uint256 amount, uint256 stable_swap_fee, uint256 depositFee, uint256 balance);
-
-    // // notify client side that an event distribution (winner payout) has occurred successuflly
-    // event EndEventDistribution(address winner, uint16 win_place, uint8 win_perc, uint32 win_usd, uint32 win_pool_usd, address stable);
-
-    // // notify client side that an end event has occurred successfully
-    // event EndEventActivity(address evtCode, address host, address[] winners, uint32 prize_pool_usd, uint32 host_fee_usd, uint32 keeper_fee_usd, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
-
-    // // notify client side that an event has been canceled
-    // event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
-    // event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
-
-    // // notify client side that someoen cracked the burn code and burned all gta in this contract
-    // event BurnedGTA(uint256 amount_burned, address code_cracker, uint64 guess_count);
-    
-    // // notify clients a new burn code is set with type (easy, hard)
-    // event BurnCodeReset(bool setToHard);
-
-    // // notify client side that a player was registerd for event
-    // event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
-
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
     constructor() {
         keeper = msg.sender;
     }
-    
-    // constructor(uint256 _initSupply, string memory _name, string memory _symbol) ERC20(_name, _symbol) Ownable(msg.sender) {
-    // constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
-    //     // Set sender to keeper ('Ownable' maintains '_owner')
-    //     keeper = msg.sender;
-    //     _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
-    // }
 
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
@@ -313,7 +129,6 @@ contract GTADelegate {
     function getKeeper() public view onlyKeeper returns (address) {
         return keeper;
     }
-
     function getGameCodes() public view onlyKeeper returns (address[] memory) {
         return activeGameCodes;
     }
@@ -487,7 +302,6 @@ contract GTADelegate {
         require(stable != address(0), 'err: low market stable address is 0 _ :+0');
         return stable;
     }
-
 
     function _generateAddressHash(address host, string memory uid) public view onlyKeeper returns (address) {
         // Concatenate the address and the string, and then hash the result

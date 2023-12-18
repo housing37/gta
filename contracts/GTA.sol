@@ -5,64 +5,18 @@ pragma solidity ^0.8.0;
 // import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 // import "@openzeppelin/contracts/access/Ownable.sol";
 
-// local
+// local _ $ npm install @openzeppelin/contracts
 import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
+
+// iterface
 import "./GTADelegate.sol";
-
-// $ npm install @openzeppelin/contracts
-// $ npm install @uniswap/v2-core
-// import "./@openzeppelin/contracts/token/ERC20/ERC20.sol";
-// import "./@openzeppelin/contracts/access/Ownable.sol"; 
-// import "./@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
-// import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
-
-
-// interface IUniswapV2 {
-//     // ref: https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router01.sol
-//     function swapExactTokensForTokens(
-//         uint amountIn,
-//         uint amountOutMin,
-//         address[] calldata path,
-//         address to,
-//         uint deadline
-//     ) external returns (uint[] memory amounts);
-//     function swapTokensForExactTokens(
-//         uint amountOut,
-//         uint amountInMax,
-//         address[] calldata path,
-//         address to,
-//         uint deadline
-//     ) external returns (uint[] memory amounts);
-//     function swapExactETHForTokens(
-//         uint amountOutMin, 
-//         address[] calldata path, 
-//         address to, 
-//         uint deadline
-//     ) external payable returns (uint[] memory amounts);
-//     function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-// }
 
 /* terminology...
         join -> game, event, activity
     register -> player, delegates, users, participants, entrants
         payout -> winnings, earnings, rewards, recipients 
 */
-
-// LEFT OFF HERE ... compilation fails
-//  remix error....
-/** 
-    Warning: Contract code size is 50685 bytes and exceeds 24576 bytes (a limit introduced in Spurious Dragon). This contract may not be deployable on Mainnet. Consider enabling the optimizer (with a low "runs" value!), turning off revert strings, or using libraries.
-    --> contracts/gta.sol:52:1:
-    |
-    52 | contract GamerTokeAward is ERC20, Ownable {
-    | ^ (Relevant source part starts here and spans across multiple lines).
-
-    StructDefinition
-    contracts/gta.sol 150:4
-
- */
- // LEFT OFF HERE ... divide up contract to lower the size
 contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
@@ -94,42 +48,6 @@ contract GamerTokeAward is ERC20, Ownable {
     // track last block # used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
     // LEFT OFF HERE ... should 'lastBlockNumUpdate' be sourced in GTADelegate?
-
-    // // arrays of accepted usd stable & alts for player deposits
-    // address[] public whitelistAlts;
-    // address[] public whitelistStables;
-    // uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
-
-    // // track all stables & alts that this contract has whitelisted
-    // address[] private contractStables;
-    // address[] private contractAlts;
-
-    // // track this contract's stable token balances & debits (required for keeper 'SANITY CHECK')
-    // mapping(address => uint256) private contractBalances;
-    // mapping(address => uint256) private whitelistPendingDebits;
-
-    // // usd credits used to process player deposits, registers, refunds
-    // mapping(address => uint32) private creditsUSD;
-
-    // // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
-    // address[] private creditsAddrArray; 
-
-    // // minimum deposits allowed (in usd value)
-    // uint8 public constant minDepositUSD_floor = 1; // 1 USD 
-    // uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
-    // uint8 public minDepositUSD = 0; // dynamic (keeper controlled)
-
-    // // enable/disable refunds for less than min deposit (keeper controlled)
-    // bool public enableMinDepositRefunds = true;
-
-    // // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
-    // uint256 private accruedGasFeeRefundLoss = 0; 
-
-    // // min entryFeeUSD host can create event with (keeper control)
-    // uint256 public minEventEntryFeeUSD = 0;
-
-    // // max % of prizePoolUSD the host may charge (keeper controlled)
-    // uint8 public maxHostFeePerc = 100;
 
     // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
     //  and % of buy & burn GTA to mint for winners
@@ -277,19 +195,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
     }
-    // modifier onlyHost(address gameCode) {
-    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-    //     require(msg.sender == activeGames[gameCode].host, "Only the host :0");
-    //     _;
-    // }    
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
     }
-    // modifier validGameCode(address gameCode) {
-    //     require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-    //     _;
-    // }
 
     /* -------------------------------------------------------- */
     /* SIDE QUEST... CRACK THE BURN CODE                        */
@@ -347,9 +256,6 @@ contract GamerTokeAward is ERC20, Ownable {
     function getBurnCodes() public view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-
-
-    
 
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
@@ -740,6 +646,9 @@ contract GamerTokeAward is ERC20, Ownable {
         payable(msg.sender).transfer(gas_refund); // tx.gasprice in wei
     }
 
+    /* -------------------------------------------------------- */
+    /* PRIVATE - SUPPORTING                                     */
+    /* -------------------------------------------------------- */
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
         address stable = _gtad._getBestDebitStableUSD(_amountUSD);
@@ -847,28 +756,4 @@ contract GamerTokeAward is ERC20, Ownable {
 
         return _evt;
     }
-    // function _sanityCheck(address token, uint256 amount) private returns (bool) {
-    //     // SANITY CHECK: 
-    //     //  settles whitelist debits accrued during 'hostEndEventWithWinners'
-    //     //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
-    //     //  require: keeper calculated (delegated) balance == on-chain balance
-    //     _settlePendingDebit(token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
-    //     _increaseContractBalance(token, amount); // sync 'contractBalances' w/ this 'Transfer' emit
-    //     uint256 chainBal = IERC20(token).balanceOf(address(this));
-    //     return contractBalances[token] == chainBal;
-    // }
-
-    // // deduct debits accrued from 'hostEndEventWithWinners'
-    // function _settlePendingDebit(address _token) private {
-    //     require(contractBalances[_token] >= whitelistPendingDebits[_token], 'err: insefficient balance to settle debit :O');
-    //     contractBalances[_token] -= whitelistPendingDebits[_token];
-    //     delete whitelistPendingDebits[_token];
-    // }
-
-    // // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
-    // function _increaseContractBalance(address _token, uint256 _amount) private {
-    //     require(_token != address(0), 'err: no address :{');
-    //     require(_amount != 0, 'err: no amount :{');
-    //     contractBalances[_token] += _amount;
-    // }
 }
