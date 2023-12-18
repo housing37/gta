@@ -17,6 +17,9 @@ import "./GTADelegate.sol";
     register -> player, delegates, users, participants, entrants
         payout -> winnings, earnings, rewards, recipients 
 */
+interface IGTADelegate {
+
+}
 contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
@@ -32,15 +35,18 @@ contract GamerTokeAward is ERC20, Ownable {
     // map generated gameCode address to Game struct
     mapping(address => Event_0) private activeGames;
     
-    // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    // uint8 public hostRequirementPerc = 100; // uint8 max = 255
-    
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 public activeGameCount = 0; 
 
     // track activeGameCodes array for keeper 'getGameCodes'
     address[] private activeGameCodes;
     // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
+
+    // usd credits used to process player deposits, registers, refunds
+    mapping(address => uint32) public creditsUSD;
+
+    // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
+    address[] private creditsAddrArray; 
 
     // // game experation time (keeper control)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
@@ -85,8 +91,6 @@ contract GamerTokeAward is ERC20, Ownable {
         uint256 expTime;        // expires if not launched by this time
         uint256 expBlockNum;    // 'cancelEventProcessRefunds'
 
-        // mapping(address => Event_1) event_1;
-        // mapping(address => Event_2) event_2;
         Event_1 event_1;
         Event_2 event_2;
     }
@@ -175,12 +179,16 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
-    GTADelegate private _gtad;
-    constructor(uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+    IGTADelegate private GTAD;
+    constructor(uint256 _initSupply, address _gtad) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         // Set sender to keeper ('Ownable' maintains '_owner')
         keeper = msg.sender;
+        setGTAD(_gtad); // onlyKeeper
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
-        _gtad = new GTADelegate();
+    }
+    function setGTAD(address _gtad) public onlyKeeper {
+        require(_gtad != address(0), 'err: invalid delegate contract address :/');
+        GTAD = IGTADelegate(_gtad);
     }
 
     /* -------------------------------------------------------- */
@@ -241,6 +249,13 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
+    function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
+        require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
+        return creditsAddrArray;
+    }
+    function getCredits(address _player) public view onlyKeeper returns (uint32) {
+        return creditsUSD[_player];
+    }
     function setGameExpSec(uint32 _sec) public onlyKeeper {
         require(_sec > 0, 'err: no zero :{}');
         gameExpSec = _sec;
@@ -291,7 +306,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     // get this user credits ('creditsUSD' are not available for withdrawel)
     function myCredits() public view returns (uint32) {
-        return _gtad.getCredits(msg.sender);
+        return getCredits(msg.sender);
     }
 
     // gameCode = hash(_host, _gameName)
@@ -301,33 +316,34 @@ contract GamerTokeAward is ERC20, Ownable {
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
         // generate gameCode from host address and game name
-        address gameCode = _gtad._generateAddressHash(_host, _gameName);
+        address gameCode = GTAD._generateAddressHash(_host, _gameName);
         require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
         
         return gameCode;
     }
 
+    // public accessor
     function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
-        require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
+        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
     function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= _gtad.minEventEntryFeeUSD(), "err: entry fee too low :/");
-        require(_hostFeePerc <= _gtad.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
+        require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
+        require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length > 0, 'err: no winners? :O');
-        require(_gtad._getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
-        require(_gtad._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
+        require(GTAD._getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
+        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
 
         // SAFE-ADD
         uint64 _expTime = _startTime + uint64(gameExpSec);
         require(_expTime > _startTime, "err: stop f*ckin around :X");
 
         // verify active game name/code doesn't exist yet
-        address gameCode = _gtad._generateAddressHash(msg.sender, _gameName);
+        address gameCode = GTAD._generateAddressHash(msg.sender, _gameName);
         require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
 
         // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
@@ -347,7 +363,7 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.expTime = _expTime;
 
         // increment support
-        activeGameCodes = _gtad._addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
+        activeGameCodes = GTAD._addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
         // return gameCode to caller
@@ -374,10 +390,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(!game.event_1.players[msg.sender], 'err: already registered for this gameCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < _gtad.getCredits(msg.sender), 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
+        require(game.entryFeeUSD < getCredits(msg.sender), 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
         // debit entry fee from msg.sender credits (player)
-        _gtad._updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
         _addPlayerToEvent(msg.sender, gameCode);
@@ -407,10 +423,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(!game.event_1.players[_player], 'err: player already registered for this gameCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < _gtad.getCredits(msg.sender), 'err: not enough credits :(, send whitelistAlts or whitelistStables');
+        require(game.entryFeeUSD < getCredits(msg.sender), 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
-        _gtad._updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
         _addPlayerToEvent(_player, _gameCode);
@@ -460,7 +476,7 @@ contract GamerTokeAward is ERC20, Ownable {
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _gtad._updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+            _updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
@@ -508,7 +524,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(game.event_2.winPercs.length == _winners.length, 'err: number of winners =(');
 
         // buy GTA from open market (using 'buyGtaUSD')
-        uint256 gta_amnt_buy = _gtad._processBuyAndBurnStableSwap(_gtad._getBestDebitStableUSD(game.event_2.buyGtaUSD), game.event_2.buyGtaUSD);
+        uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(game.event_2.buyGtaUSD), game.event_2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy', divided equally to all '_winners'
         uint256 gta_amnt_mint = (gta_amnt_buy * (mintGtaPerc/100)) / _winners.length;
@@ -526,7 +542,7 @@ contract GamerTokeAward is ERC20, Ownable {
             address stable = _transferBestDebitStableUSD(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
-            _gtad._increaseWhitelistPendingDebit(stable, win_usd);
+            GTAD._increaseWhitelistPendingDebit(stable, win_usd);
 
             // mint GTA to this winner (amount is same for all winners)
             _mint(winner, gta_amnt_mint);
@@ -564,8 +580,8 @@ contract GamerTokeAward is ERC20, Ownable {
         //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
         //      2) recipient = this contract address (else '_sanityCheck' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            bool is_wl_stab = _gtad._isTokenInArray(dataArray[i].token, _gtad.getWhitelistStables());
-            bool is_wl_alt = _gtad._isTokenInArray(dataArray[i].token, _gtad.getWhitelistAlts());
+            bool is_wl_stab = GTAD._isTokenInArray(dataArray[i].token, GTAD.getWhitelistStables());
+            bool is_wl_alt = GTAD._isTokenInArray(dataArray[i].token, GTAD.getWhitelistAlts());
             if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
             
             address tok_addr = dataArray[i].token;
@@ -577,7 +593,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
             // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
             //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
-            require(_gtad._sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+            require(GTAD._sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
 
             // default: if found in 'whitelistStables'
             uint256 stable_credit_amnt = tok_amnt; 
@@ -587,19 +603,19 @@ contract GamerTokeAward is ERC20, Ownable {
             if (!is_wl_stab) {
 
                 // get stable coin to use & create swap path to it
-                address stable_addr = _gtad._getNextStableTokDeposit();
+                address stable_addr = GTAD._getNextStableTokDeposit();
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
                 address[] memory alt_stab_path = new address[](2);
                 alt_stab_path[0] = tok_addr;
                 alt_stab_path[1] = stable_addr;
-                (uint8 rtrIdx, uint256 stableAmnt) = _gtad._best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
+                (uint8 rtrIdx, uint256 stableAmnt) = GTAD._best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
 
                 // if stable amount quote is below min deposit required
-                if (stableAmnt < _gtad.minDepositUSD()) {  
+                if (stableAmnt < GTAD.minDepositUSD()) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (_gtad.enableMinDepositRefunds()) {
+                    if (GTAD.enableMinDepositRefunds()) {
                         // log gas used for refund
                         uint256 start_trans = gasleft();
 
@@ -608,14 +624,14 @@ contract GamerTokeAward is ERC20, Ownable {
 
                         // log gas used for refund
                         uint256 gas_trans_loss = (start_trans - gasleft()) * tx.gasprice;
-                        _gtad.addAccruedGFRL(gas_trans_loss);
+                        GTAD.addAccruedGFRL(gas_trans_loss);
 
                         // notify client listeners that refund was processed
-                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, _gtad.accruedGasFeeRefundLoss());
+                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, GTAD.accruedGasFeeRefundLoss());
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, _gtad.minDepositUSD(), _gtad.enableMinDepositRefunds());
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds());
 
                     // skip to next transfer in 'dataArray'
                     continue;
@@ -623,14 +639,14 @@ contract GamerTokeAward is ERC20, Ownable {
 
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = _gtad._swap_v2_wrap(alt_stab_path, _gtad.getSwapRouters()[rtrIdx], tok_amnt);
+                stable_credit_amnt = GTAD._swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt);
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
                 address[] memory wpls_stab_path = new address[](2);
-                wpls_stab_path[0] = _gtad.TOK_WPLS();
+                wpls_stab_path[0] = GTAD.TOK_WPLS();
                 wpls_stab_path[1] = stable_addr;
-                (uint8 idx, uint256 amountOut) = _gtad._best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
+                (uint8 idx, uint256 amountOut) = GTAD._best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
                 stable_swap_fee = amountOut;
 
@@ -639,14 +655,14 @@ contract GamerTokeAward is ERC20, Ownable {
             }
 
             // 1) debit deposit fees from 'stable_credit_amnt' (keeper optional)
-            uint256 depositFee = stable_credit_amnt * (_gtad.depositFeePerc()/100);
+            uint256 depositFee = stable_credit_amnt * (GTAD.depositFeePerc()/100);
             uint256 stable_net_amnt = stable_credit_amnt - depositFee; 
 
             // convert wei to ether (uint256 to uint32)
             uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
 
             // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
-            _gtad._updateCredit(src_addr, usd_net_amnt, false); // false = credit
+            _updateCredit(src_addr, usd_net_amnt, false); // false = credit
 
             // notify client side, deposit successful
             emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
@@ -663,9 +679,26 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - SUPPORTING                                     */
     /* -------------------------------------------------------- */
+    // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
+    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) public onlyKeeper {
+        if (_debit) { 
+            // ensure there is enough credit before debit
+            require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
+            creditsUSD[_player] -= _amountUSD;
+
+            // if balance is now 0, remove _player from balance tracking
+            if (creditsUSD[_player] == 0) {
+                delete creditsUSD[_player];
+                creditsAddrArray = GTAD._remAddressFromArray(_player, creditsAddrArray);
+            }
+        } else { 
+            creditsUSD[_player] += _amountUSD; 
+            creditsAddrArray = GTAD._addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
+        }
+    }
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
-        address stable = _gtad._getBestDebitStableUSD(_amountUSD);
+        address stable = GTAD._getBestDebitStableUSD(_amountUSD);
 
         // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
@@ -691,7 +724,7 @@ contract GamerTokeAward is ERC20, Ownable {
         delete activeGames[_evtCode];
 
         // decrement support
-        activeGameCodes = _gtad._remAddressFromArray(_evtCode, activeGameCodes);
+        activeGameCodes = GTAD._remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
     }
 
@@ -727,9 +760,9 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // calc individual player fees (BEFORE generating 'prizePoolUSD') 
         //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
-        _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (_gtad.keeperFeePerc()/100);
-        _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (_gtad.serviceFeePerc()/100);
-        _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (_gtad.supportFeePerc()/100);
+        _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (GTAD.keeperFeePerc()/100);
+        _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (GTAD.serviceFeePerc()/100);
+        _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (GTAD.supportFeePerc()/100);
 
         // calc total fees for each individual 'entryFeeUSD' paid
         _evt.event_2.totalFeesUSD_ind = _evt.event_2.keeperFeeUSD_ind + _evt.event_2.serviceFeeUSD_ind + _evt.event_2.supportFeeUSD_ind;

@@ -57,11 +57,11 @@ contract GTADelegate {
     mapping(address => uint256) private contractBalances;
     mapping(address => uint256) private whitelistPendingDebits;
 
-    // usd credits used to process player deposits, registers, refunds
-    mapping(address => uint32) public creditsUSD;
+    // // usd credits used to process player deposits, registers, refunds
+    // mapping(address => uint32) public creditsUSD;
 
-    // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
-    address[] private creditsAddrArray; 
+    // // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
+    // address[] private creditsAddrArray; 
 
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
@@ -137,13 +137,13 @@ contract GTADelegate {
         maxHostFeePerc = _perc;
         return true;
     }
-    function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
-        require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
-        return creditsAddrArray;
-    }
-    function getCredits(address _player) public view onlyKeeper returns (uint32) {
-        return creditsUSD[_player];
-    }
+    // function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
+    //     require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
+    //     return creditsAddrArray;
+    // }
+    // function getCredits(address _player) public view onlyKeeper returns (uint32) {
+    //     return creditsUSD[_player];
+    // }
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
         require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
         minEventEntryFeeUSD = _amount;
@@ -335,23 +335,23 @@ contract GTADelegate {
         whitelistPendingDebits[token] += amount;
     }
 
-    // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) public onlyKeeper {
-        if (_debit) { 
-            // ensure there is enough credit before debit
-            require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
-            creditsUSD[_player] -= _amountUSD;
+    // // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
+    // function _updateCredit(address _player, uint32 _amountUSD, bool _debit) public onlyKeeper {
+    //     if (_debit) { 
+    //         // ensure there is enough credit before debit
+    //         require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
+    //         creditsUSD[_player] -= _amountUSD;
 
-            // if balance is now 0, remove _player from balance tracking
-            if (creditsUSD[_player] == 0) {
-                delete creditsUSD[_player];
-                creditsAddrArray = _remAddressFromArray(_player, creditsAddrArray);
-            }
-        } else { 
-            creditsUSD[_player] += _amountUSD; 
-            creditsAddrArray = _addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
-        }
-    }
+    //         // if balance is now 0, remove _player from balance tracking
+    //         if (creditsUSD[_player] == 0) {
+    //             delete creditsUSD[_player];
+    //             creditsAddrArray = _remAddressFromArray(_player, creditsAddrArray);
+    //         }
+    //     } else { 
+    //         creditsUSD[_player] += _amountUSD; 
+    //         creditsAddrArray = _addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
+    //     }
+    // }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
