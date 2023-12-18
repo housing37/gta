@@ -36,7 +36,16 @@ class WEB3:
         w3, account                     = self.init_web3()
         gas_tup                         = self.get_gas_settings(w3)
         return self
-    
+
+    def inp_sel_abi_bin(self, _lst_abi_bin=[], str_input='Select abi|bin file path:'):
+        print('\n', str_input)
+        for i, v in enumerate(_lst_abi_bin): print(' ',i,'=',v) # parse through tuple
+        idx = input('  > ')
+        assert 0 <= int(idx) < len(_lst_abi_bin), 'Invalid input, aborting...\n'
+        abi_bin = str(_lst_abi_bin[int(idx)]) # get selected index
+        print(f'  selected abi|bin: {abi_bin}')
+        return abi_bin+'.abi', abi_bin+'.bin'
+
     def add_contract_deploy(self, _abi_file, _bin_file):
         assert self.W3 != None, 'err: web3 not initialzed'
         contr_abi, contr_bytes  = self.read_abi_bytecode(_abi_file, _bin_file)

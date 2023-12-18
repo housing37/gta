@@ -146,7 +146,6 @@ if __name__ == "__main__":
 
         # choose alt tokens for event logs
         _w3.add_contract(_constants.DICT_CONTR_ABI_BIN)
-        #_w3.add_contract(_constants.DICT_CONTR_ABI_BIN) 
 
         # choose GTA contract to work with
         _w3.add_contract_GTA(_constants.DICT_CONTR_ABI_BIN)

@@ -18,12 +18,13 @@ import pprint
 from attributedict.collections import AttributeDict # tx_receipt requirement
 import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 
+# init _w3, user select abi to deploy, generate contract & deploy
 _w3 = _web3.WEB3().init_inp()
-balancer_flr = _w3.add_contract_deploy(_constants.abi_file, _constants.bin_file)
+abi_file, bin_file = _w3.inp_sel_abi_bin(_constants.LST_CONTR_ABI_BIN)
+_CONTRACT = _w3.add_contract_deploy(abi_file, bin_file)
 
-
-print(f'\nDEPLOYING bytecode: {_constants.bin_file}')
-print(f'DEPLOYING abi: {_constants.abi_file}')
+print(f'\nDEPLOYING bytecode: {bin_file}')
+print(f'DEPLOYING abi: {abi_file}')
 
 assert input('\n (1) procced? [y/n]\n > ') == 'y', "aborted...\n"
 
@@ -82,7 +83,7 @@ def get_gas_params_lst(rpc_url, min_params=False, max_params=False, def_params=T
     else:
         return [{'gas':gas_limit}]
         
-proceed = estimate_gas(balancer_flr)
+proceed = estimate_gas(_CONTRACT)
 assert proceed, "\ndeployment canceled after gas estimate\n"
 
 print('calculating gas ...')
@@ -95,7 +96,7 @@ lst_gas_params = get_gas_params_lst(_w3.RPC_URL, min_params=False, max_params=Tr
 for d in lst_gas_params: tx_params.update(d) # append gas params
 
 print(f'building tx w/ NONCE: {tx_nonce} ...')
-constructor_tx = balancer_flr.constructor().build_transaction(tx_params)
+constructor_tx = _CONTRACT.constructor().build_transaction(tx_params)
 
 print('signing and sending tx ...')
 # Sign and send the transaction # Deploy the contract

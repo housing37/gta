@@ -57,6 +57,22 @@ abi_file_plsx = "../contracts/plsx.json"
 bin_file_plsx = "../contracts/plsx.bin"
 abi_file_gta = "../contracts/plsx.json"
 bin_file_gta = "../contracts/plsx.bin"
+LST_CONTR_ABI_BIN = [
+    "../bin/contracts/GamerTokenAward",
+    "../bin/contracts/GTADelegate",
+    # "../bin/contracts/BalancerFLR_pc.bin",
+    # "../bin/contracts/BalancerFLR_pc.json",
+    # "../bin/contracts/BalancerFLR_pc.bin",
+    # "../bin/contracts/atropa.json",
+    # "../bin/contracts/atropa.bin",
+    # "../bin/contracts/wpls.json",
+    # "../bin/contracts/wpls.bin",
+    # "../bin/contracts/plsx.json",
+    # "../bin/contracts/plsx.bin",
+    # "../bin/contracts/plsx.json",
+    # "../bin/contracts/plsx.bin"
+]
+
 DICT_CONTR_ABI_BIN = {
     "0xA1077a294dDE1B09bB078844df40758a5D0f9a27":{'symb':'WPLS','abi_file':abi_file_wpls,'bin_file':bin_file_wpls},
     "0x95B303987A60C71504D99Aa1b13B4DA07b0790ab":{'symb':'PLSX','abi_file':abi_file_plsx,'bin_file':bin_file_plsx},
