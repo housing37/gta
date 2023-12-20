@@ -254,6 +254,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return creditsAddrArray;
     }
     function getCredits(address _player) public view onlyKeeper returns (uint32) {
+        require(_player != address(0), 'err: no zero address :{=}');
         return creditsUSD[_player];
     }
     function setGameExpSec(uint32 _sec) public onlyKeeper {
@@ -306,7 +307,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     // get this user credits ('creditsUSD' are not available for withdrawel)
     function myCredits() public view returns (uint32) {
-        return getCredits(msg.sender);
+        return creditsUSD[msg.sender];
     }
 
     // gameCode = hash(_host, _gameName)
@@ -390,7 +391,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(!game.event_1.players[msg.sender], 'err: already registered for this gameCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < getCredits(msg.sender), 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
         // debit entry fee from msg.sender credits (player)
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
@@ -423,7 +424,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(!game.event_1.players[_player], 'err: player already registered for this gameCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < getCredits(msg.sender), 'err: not enough credits :(, send whitelistAlts or whitelistStables');
+        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
         // debit entry fee from msg.sender credits (host)
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
