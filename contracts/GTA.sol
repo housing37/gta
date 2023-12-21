@@ -18,7 +18,39 @@ import "./GTADelegate.sol";
         payout -> winnings, earnings, rewards, recipients 
 */
 interface IGTADelegate {
+    // LEFT OFF HERE ... need external gettings for these public variables
+    // uint32 public minEventEntryFeeUSD;
+    // uint8 public maxHostFeePerc;
+    // uint8 public minDepositUSD;
+    // address public TOK_WPLS;
+    // uint256 public depositFeePerc; // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
+    // uint8 public keeperFeePerc; // 1% of event total entryFeeUSD
+    // uint8 public serviceFeePerc; // 10% of event total entryFeeUSD
+    // uint8 public supportFeePerc; // 0% of event total entryFeeUSD
 
+    // public access
+    function _generateAddressHash(address host, string memory uid) external view returns (address);
+    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool);
+    function _getTotalsOfArray(uint8[] calldata _arr) external view returns (uint8);
+    function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
+    function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
+    function getWhitelistStables() external view returns (address[] memory);
+    function getWhitelistAlts() external view returns (address[] memory);
+    function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
+
+    // onlyKeeper access
+    function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
+    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external returns (uint256);
+    function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
+    function _sanityCheck(address token, uint256 amount) external returns (bool);
+    function getNextStableTokDeposit() external returns (address);
+    function best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) external view returns (uint8, uint256);
+    function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
+    function getAccruedGFRL() external view returns (uint256);
+    function getSwapRouters() external view returns (address[] memory);
+    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn) external returns (uint256);
+
+    // LEFT OFF HERE ... finish creating this interface
 }
 contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
@@ -47,6 +79,12 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
     address[] private creditsAddrArray; 
+
+    // enable/disable refunds for less than min deposit (keeper controlled)
+    bool public enableMinDepositRefunds = true;
+    function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {
+        enableMinDepositRefunds = _enable;
+    }
 
     // // game experation time (keeper control)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
@@ -301,7 +339,6 @@ contract GamerTokeAward is ERC20, Ownable {
         // }
         // return new address[](0);
     }
-
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
@@ -364,7 +401,7 @@ contract GamerTokeAward is ERC20, Ownable {
         newGame.expTime = _expTime;
 
         // increment support
-        activeGameCodes = GTAD._addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
+        activeGameCodes = GTAD.addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
         // return gameCode to caller
@@ -604,19 +641,19 @@ contract GamerTokeAward is ERC20, Ownable {
             if (!is_wl_stab) {
 
                 // get stable coin to use & create swap path to it
-                address stable_addr = GTAD._getNextStableTokDeposit();
+                address stable_addr = GTAD.getNextStableTokDeposit();
 
                 // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
                 address[] memory alt_stab_path = new address[](2);
                 alt_stab_path[0] = tok_addr;
                 alt_stab_path[1] = stable_addr;
-                (uint8 rtrIdx, uint256 stableAmnt) = GTAD._best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
+                (uint8 rtrIdx, uint256 stableAmnt) = GTAD.best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
 
                 // if stable amount quote is below min deposit required
                 if (stableAmnt < GTAD.minDepositUSD()) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (GTAD.enableMinDepositRefunds()) {
+                    if (enableMinDepositRefunds) {
                         // log gas used for refund
                         uint256 start_trans = gasleft();
 
@@ -628,11 +665,11 @@ contract GamerTokeAward is ERC20, Ownable {
                         GTAD.addAccruedGFRL(gas_trans_loss);
 
                         // notify client listeners that refund was processed
-                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, GTAD.accruedGasFeeRefundLoss());
+                        emit MinimumDepositRefund(src_addr, tok_addr, tok_amnt, gas_trans_loss, GTAD.getAccruedGFRL());
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds());
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), enableMinDepositRefunds);
 
                     // skip to next transfer in 'dataArray'
                     continue;
@@ -640,14 +677,14 @@ contract GamerTokeAward is ERC20, Ownable {
 
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = GTAD._swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt);
+                stable_credit_amnt = GTAD.swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt);
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
                 address[] memory wpls_stab_path = new address[](2);
                 wpls_stab_path[0] = GTAD.TOK_WPLS();
                 wpls_stab_path[1] = stable_addr;
-                (uint8 idx, uint256 amountOut) = GTAD._best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
+                (uint8 idx, uint256 amountOut) = GTAD.best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
                 stable_swap_fee = amountOut;
 
@@ -690,11 +727,11 @@ contract GamerTokeAward is ERC20, Ownable {
             // if balance is now 0, remove _player from balance tracking
             if (creditsUSD[_player] == 0) {
                 delete creditsUSD[_player];
-                creditsAddrArray = GTAD._remAddressFromArray(_player, creditsAddrArray);
+                creditsAddrArray = GTAD.remAddressFromArray(_player, creditsAddrArray);
             }
         } else { 
             creditsUSD[_player] += _amountUSD; 
-            creditsAddrArray = GTAD._addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
+            creditsAddrArray = GTAD.addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
         }
     }
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
@@ -725,7 +762,7 @@ contract GamerTokeAward is ERC20, Ownable {
         delete activeGames[_evtCode];
 
         // decrement support
-        activeGameCodes = GTAD._remAddressFromArray(_evtCode, activeGameCodes);
+        activeGameCodes = GTAD.remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
     }
 

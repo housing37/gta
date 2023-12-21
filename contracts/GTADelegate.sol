@@ -28,7 +28,7 @@ contract GTADelegate {
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
-    function getSwapRouters() public view onlyKeeper returns (address[] memory) {
+    function getSwapRouters() external view onlyKeeper returns (address[] memory) {
         return routersUniswapV2;
     }
     address public constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
@@ -69,11 +69,11 @@ contract GTADelegate {
     uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
     uint8 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
 
-    // enable/disable refunds for less than min deposit (keeper controlled)
-    bool public enableMinDepositRefunds = true;
+    // // enable/disable refunds for less than min deposit (keeper controlled)
+    // bool public enableMinDepositRefunds = true;
 
     // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
-    uint256 public accruedGasFeeRefundLoss = 0; 
+    uint256 private accruedGasFeeRefundLoss = 0; 
 
     // min entryFeeUSD host can create event with (keeper control)
     uint32 public minEventEntryFeeUSD = 0;
@@ -98,7 +98,15 @@ contract GTADelegate {
     uint8 public keeperFeePerc = 1; // 1% of event total entryFeeUSD
     uint8 public serviceFeePerc = 10; // 10% of event total entryFeeUSD
     uint8 public supportFeePerc = 0; // 0% of event total entryFeeUSD
-
+    function setEntryFeePercs(uint8 _keeperPerc, uint8 _servicePerc, uint8 _supportPerc) public onlyKeeper {
+        require(keeperFeePerc <= 100 && _servicePerc <= 100 && _supportPerc <= 100, 'err: max 100%');
+        keeperFeePerc = _keeperPerc;
+        serviceFeePerc = _servicePerc;
+        supportFeePerc = _supportPerc;
+    }
+    function setKeeperFeePerc(uint8 _perc) public onlyKeeper {
+        keeperFeePerc = _perc;
+    }
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -112,6 +120,16 @@ contract GTADelegate {
     modifier onlyKeeper() {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
+    }
+
+    /* -------------------------------------------------------- */
+    /* PUBLIC ACCESSORS                                         */
+    /* -------------------------------------------------------- */
+    function getWhitelistStables() external view returns (address[] memory) {
+        return whitelistStables;
+    }
+    function getWhitelistAlts() external view returns (address[] memory) {
+        return whitelistAlts;
     }
 
     /* -------------------------------------------------------- */
@@ -148,11 +166,11 @@ contract GTADelegate {
         require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
         minEventEntryFeeUSD = _amount;
     }
-    function addAccruedGFRL(uint256 _gasAmnt) public onlyKeeper returns (uint256) {
+    function addAccruedGFRL(uint256 _gasAmnt) external onlyKeeper returns (uint256) {
         accruedGasFeeRefundLoss += _gasAmnt;
         return accruedGasFeeRefundLoss;
     }
-    function getAccruedGFRL() public view onlyKeeper returns (uint256) {
+    function getAccruedGFRL() external view onlyKeeper returns (uint256) {
         return accruedGasFeeRefundLoss;
     }
     function resetAccruedGFRL() public onlyKeeper returns (bool) {
@@ -169,12 +187,6 @@ contract GTADelegate {
     function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
         require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
         minDepositUSD = _amount;
-    }
-    function getWhitelistStables() public view onlyKeeper returns (address[] memory) {
-        return whitelistStables;
-    }
-    function getWhitelistAlts() public view onlyKeeper returns (address[] memory) {
-        return whitelistAlts;
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
@@ -213,9 +225,35 @@ contract GTADelegate {
     }
 
     /* -------------------------------------------------------- */
+    /* KEEPER - ACCESSORS TO PRIVATES                           */
+    /* -------------------------------------------------------- */
+    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn) external onlyKeeper returns (uint256) {
+        require(path.length > 1, 'err: bad path, need >= 2 addies :)');
+        require(router != address(0), 'err: zero address? :0');
+        require(amntIn > 0, 'err: no amount? :{}' );
+        return _swap_v2_wrap(path, router, amntIn);
+    }
+    function best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) external view onlyKeeper returns (uint8, uint256) {
+        require(path.length > 1, 'err: bad path, need >= 2 addies :)');
+        require(amount > 0, 'err: no amount? :{}' );
+        return _best_swap_v2_router_idx_quote(path, amount);
+    }
+    function getNextStableTokDeposit() external onlyKeeper returns (address) {
+        return _getNextStableTokDeposit();
+    }
+    function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory) {
+        // NOTE: no require checks needed
+        return _addAddressToArraySafe(_addr, _arr, _safe);
+    }
+    function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory) {
+        // NOTE: no require checks needed
+        return _remAddressFromArray(_addr, _arr);
+    }
+
+    /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) public view onlyKeeper returns (address[] memory) {
+    function _addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) private pure returns (address[] memory) {
         if (_addr == address(0)) { return _arr; }
 
         // safe = remove first (no duplicates)
@@ -227,7 +265,7 @@ contract GTADelegate {
         _ret[_ret.length] = _addr;
         return _ret;
     }
-    function _remAddressFromArray(address _addr, address[] memory _arr) public view onlyKeeper returns (address[] memory) {
+    function _remAddressFromArray(address _addr, address[] memory _arr) private pure returns (address[] memory) {
         if (_addr == address(0) || _arr.length == 0) { return _arr; }
         
         // NOTE: remove algorithm does NOT maintain order & only removes first occurance
@@ -243,14 +281,14 @@ contract GTADelegate {
         return _arr;
     }
 
-    function _isTokenInArray(address _addr, address[] memory _arr) public view onlyKeeper returns (bool) {
+    function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool) {
         if (_addr == address(0) || _arr.length == 0) { return false; }
         for (uint i=0; i < _arr.length; i++) {
             if (_addr == _arr[i]) { return true; }
         }
         return false;
     }
-    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) public returns (bool) {
+    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool) {
         // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
         uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
         address[] memory gta_stab_path = new address[](2);
@@ -260,14 +298,14 @@ contract GTADelegate {
         return stable_quote >= ((_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100));
     }
 
-    function _getTotalsOfArray(uint8[] calldata _arr) public view onlyKeeper returns (uint8) {
+    function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8) {
         uint8 t = 0;
         for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
         return t;
     }
 
     // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'routersUniswapV2')
-    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) public onlyKeeper returns (uint256) {
+    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external onlyKeeper returns (uint256) {
         address[] memory stab_gta_path = new address[](2);
         stab_gta_path[0] = stable;
         stab_gta_path[1] = address(this);
@@ -276,7 +314,7 @@ contract GTADelegate {
         return gta_amnt_out;
     }
 
-    function _getBestDebitStableUSD(uint32 _amountUSD) public view onlyKeeper returns (address) {
+    function _getBestDebitStableUSD(uint32 _amountUSD) external view onlyKeeper returns (address) {
         // loop through 'whitelistStables', generate stables available (bals ok for debit)
         address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
 
@@ -286,7 +324,7 @@ contract GTADelegate {
         return stable;
     }
 
-    function _generateAddressHash(address host, string memory uid) public view onlyKeeper returns (address) {
+    function _generateAddressHash(address host, string memory uid) external pure returns (address) {
         // Concatenate the address and the string, and then hash the result
         bytes32 hash = keccak256(abi.encodePacked(host, uid));
         address generatedAddress = address(uint160(uint256(hash)));
@@ -297,7 +335,7 @@ contract GTADelegate {
     /* PRIVATE - BOOK KEEPING                                   */
     /* -------------------------------------------------------- */
     // traverse 'whitelistStables' using 'whitelistStablesUseIdx'
-    function _getNextStableTokDeposit() public onlyKeeper returns (address) {
+    function _getNextStableTokDeposit() private returns (address) {
         address stable_addr = whitelistStables[whitelistStablesUseIdx];
         whitelistStablesUseIdx++;
         if (whitelistStablesUseIdx >= whitelistStables.length) { whitelistStablesUseIdx=0; }
@@ -305,7 +343,7 @@ contract GTADelegate {
     }
 
     // keeper 'SANITY CHECK' for 'settleBalances'
-    function _sanityCheck(address token, uint256 amount) public onlyKeeper returns (bool) {
+    function _sanityCheck(address token, uint256 amount) external onlyKeeper returns (bool) {
         // SANITY CHECK: 
         //  settles whitelist debits accrued during 'hostEndEventWithWinners'
         //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
@@ -331,7 +369,7 @@ contract GTADelegate {
     }
 
     // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
-    function _increaseWhitelistPendingDebit(address token, uint256 amount) public onlyKeeper {
+    function _increaseWhitelistPendingDebit(address token, uint256 amount) external onlyKeeper {
         whitelistPendingDebits[token] += amount;
     }
 
@@ -411,7 +449,7 @@ contract GTADelegate {
     }
 
     // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
-    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) public view onlyKeeper returns (uint8, uint256) {
+    function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
         for (uint8 i = 0; i < routersUniswapV2.length; i++) {
@@ -426,7 +464,7 @@ contract GTADelegate {
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
-    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) public onlyKeeper returns (uint256) {
+    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) private returns (uint256) {
         //address[] memory path = [weth, wpls];
         uint256[] memory amountsOut = IUniswapV2Router02(router).getAmountsOut(amntIn, path); // quote swap
         uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
