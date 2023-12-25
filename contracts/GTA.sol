@@ -13,9 +13,9 @@ import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";
 import "./GTADelegate.sol";
 
 /* terminology...
-        join -> game, event, activity
-    register -> player, delegates, users, participants, entrants
-        payout -> winnings, earnings, rewards, recipients 
+                 join -> room, game, event, activity
+             register -> seat, player, delegates, users, participants, entrants
+    payout/distribute -> rewards, winnings, earnings, recipients 
 */
 interface IGTADelegate {
     // LEFT OFF HERE ... need external gettings for these public variables
@@ -287,6 +287,9 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
+    function getGameCodes() public view onlyKeeper returns (address[] memory) {
+        return activeGameCodes;
+    }
     function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
         return creditsAddrArray;

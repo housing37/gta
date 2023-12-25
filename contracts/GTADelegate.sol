@@ -15,9 +15,9 @@ import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Rout
 // import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/ERC20.sol";
 
 /* terminology...
-        join -> game, event, activity
-    register -> player, delegates, users, participants, entrants
-        payout -> winnings, earnings, rewards, recipients 
+                 join -> room, game, event, activity
+             register -> seat, player, delegates, users, participants, entrants
+    payout/distribute -> rewards, winnings, earnings, recipients 
 */
 contract GTADelegate {
     /* -------------------------------------------------------- */
@@ -37,12 +37,11 @@ contract GTADelegate {
     // map generated gameCode address to Game struct
     // mapping(address => Event_0) private activeGames;
     
-    // track activeGameCount using 'createGame' & '_endEvent'
-    uint64 public activeGameCount = 0; 
+    // // track activeGameCount using 'createGame' & '_endEvent'
+    // uint64 public activeGameCount = 0; 
 
-    // track activeGameCodes array for keeper 'getGameCodes'
-    address[] private activeGameCodes;
-    // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
+    // // track activeGameCodes array for keeper 'getGameCodes'
+    // address[] private activeGameCodes;
 
     // arrays of accepted usd stable & alts for player deposits
     address[] public whitelistAlts;
@@ -104,9 +103,7 @@ contract GTADelegate {
         serviceFeePerc = _servicePerc;
         supportFeePerc = _supportPerc;
     }
-    function setKeeperFeePerc(uint8 _perc) public onlyKeeper {
-        keeperFeePerc = _perc;
-    }
+
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -139,9 +136,9 @@ contract GTADelegate {
     function getKeeper() public view onlyKeeper returns (address) {
         return keeper;
     }
-    function getGameCodes() public view onlyKeeper returns (address[] memory) {
-        return activeGameCodes;
-    }
+    // function getGameCodes() public view onlyKeeper returns (address[] memory) {
+    //     return activeGameCodes;
+    // }
     function setKeeper(address _newKeeper) public onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
