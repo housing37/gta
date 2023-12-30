@@ -18,7 +18,7 @@ import "./GTADelegate.sol";
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
 interface IGTADelegate {
-    // LEFT OFF HERE ... need external gettings for these public variables
+    // LEFT OFF HERE ... need external getters for these public variables
     // uint32 public minEventEntryFeeUSD;
     // uint8 public maxHostFeePerc;
     // uint8 public minDepositUSD;
@@ -68,31 +68,25 @@ contract GamerTokeAward is ERC20, Ownable {
     mapping(address => Event_0) private activeGames;
     
     // track activeGameCount using 'createGame' & '_endEvent'
-    uint64 public activeGameCount = 0; 
+    uint64 private activeGameCount = 0; 
 
     // track activeGameCodes array for keeper 'getGameCodes'
     address[] private activeGameCodes;
-    // LEFT OFF HERE ... should be sourced in GTADelegate? (is this even needed anymore)
 
+    // game experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
+    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
+
+    /* _ CREDIT SUPPORT _ */
     // usd credits used to process player deposits, registers, refunds
-    mapping(address => uint32) public creditsUSD;
+    mapping(address => uint32) private creditsUSD;
 
     // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
-    address[] private creditsAddrArray; 
-
-    // enable/disable refunds for less than min deposit (keeper controlled)
-    bool public enableMinDepositRefunds = true;
-    function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {
-        enableMinDepositRefunds = _enable;
-    }
-
-    // // game experation time (keeper control)
-    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds; max 4,294,967,295
+    address[] private creditsAddrArray;
     
-    /** _ DEFI SUPPORT _ */
-    // track last block # used to update 'creditsUSD' in 'settleBalances'
+    // track last block# used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
+    /* _ BUY & BURN & MINT SUPPORT _ */
     // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
     //  and % of buy & burn GTA to mint for winners
     // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
@@ -287,8 +281,8 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
-    function getGameCodes() public view onlyKeeper returns (address[] memory) {
-        return activeGameCodes;
+    function getGameCodes() public view onlyKeeper returns (address[] memory, uint64) {
+        return (activeGameCodes, activeGameCount);
     }
     function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
@@ -342,10 +336,11 @@ contract GamerTokeAward is ERC20, Ownable {
         // }
         // return new address[](0);
     }
+
     /* -------------------------------------------------------- */
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
-    // get this user credits ('creditsUSD' are not available for withdrawel)
+    // view your own credits ('creditsUSD' are not available for withdrawel)
     function myCredits() public view returns (uint32) {
         return creditsUSD[msg.sender];
     }
@@ -656,7 +651,7 @@ contract GamerTokeAward is ERC20, Ownable {
                 if (stableAmnt < GTAD.minDepositUSD()) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (enableMinDepositRefunds) {
+                    if (GTAD.enableMinDepositRefunds) {
                         // log gas used for refund
                         uint256 start_trans = gasleft();
 
@@ -672,7 +667,7 @@ contract GamerTokeAward is ERC20, Ownable {
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), enableMinDepositRefunds);
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds);
 
                     // skip to next transfer in 'dataArray'
                     continue;

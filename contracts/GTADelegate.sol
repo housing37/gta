@@ -33,22 +33,13 @@ contract GTADelegate {
     }
     address public constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
         
-    /* _ GAME SUPPORT _ */
-    // map generated gameCode address to Game struct
-    // mapping(address => Event_0) private activeGames;
-    
-    // // track activeGameCount using 'createGame' & '_endEvent'
-    // uint64 public activeGameCount = 0; 
-
-    // // track activeGameCodes array for keeper 'getGameCodes'
-    // address[] private activeGameCodes;
-
+    /* _ TOKEN SUPPORT _ */
     // arrays of accepted usd stable & alts for player deposits
     address[] public whitelistAlts;
     address[] public whitelistStables;
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()
 
-    // track all stables & alts that this contract has whitelisted
+    // track history of all stables & alts that this contract has ever whitelisted
     address[] private contractStables;
     address[] private contractAlts;
 
@@ -56,36 +47,23 @@ contract GTADelegate {
     mapping(address => uint256) private contractBalances;
     mapping(address => uint256) private whitelistPendingDebits;
 
-    // // usd credits used to process player deposits, registers, refunds
-    // mapping(address => uint32) public creditsUSD;
-
-    // // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
-    // address[] private creditsAddrArray; 
-
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
     uint8 public constant minDepositUSD_floor = 1; // 1 USD 
     uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
     uint8 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
 
-    // // enable/disable refunds for less than min deposit (keeper controlled)
-    // bool public enableMinDepositRefunds = true;
+    // enable/disable refunds for less than min deposit (keeper controlled)
+    bool public enableMinDepositRefunds = true;
 
     // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
     uint256 private accruedGasFeeRefundLoss = 0; 
 
     // min entryFeeUSD host can create event with (keeper control)
-    uint32 public minEventEntryFeeUSD = 0;
+    uint32 public minEventEntryFeeUSD = 0; // uint32 max = 4,294,967,295
 
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
-
-    // LEFT OFF HERE ... should there be a lower max than 65,535 ?
-    //      (that keeper should be limited to send)
-    function setHostGtaBalReqPerc(uint16 _perc) public onlyKeeper {
-        require(_perc <= type(uint16).max, 'err: required balance too high :/');
-        hostGtaBalReqPerc = _perc;
-    }
+    uint8 public hostGtaBalReqPerc = 100; // uint8 max = 255
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -97,12 +75,6 @@ contract GTADelegate {
     uint8 public keeperFeePerc = 1; // 1% of event total entryFeeUSD
     uint8 public serviceFeePerc = 10; // 10% of event total entryFeeUSD
     uint8 public supportFeePerc = 0; // 0% of event total entryFeeUSD
-    function setEntryFeePercs(uint8 _keeperPerc, uint8 _servicePerc, uint8 _supportPerc) public onlyKeeper {
-        require(keeperFeePerc <= 100 && _servicePerc <= 100 && _supportPerc <= 100, 'err: max 100%');
-        keeperFeePerc = _keeperPerc;
-        serviceFeePerc = _servicePerc;
-        supportFeePerc = _supportPerc;
-    }
 
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
@@ -136,12 +108,25 @@ contract GTADelegate {
     function getKeeper() public view onlyKeeper returns (address) {
         return keeper;
     }
-    // function getGameCodes() public view onlyKeeper returns (address[] memory) {
-    //     return activeGameCodes;
-    // }
     function setKeeper(address _newKeeper) public onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
+    }
+    // enable/disable refunds for less than min deposit (keeper controlled)
+    function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {
+        enableMinDepositRefunds = _enable;
+    }
+    // LEFT OFF HERE ... should there be a lower max than 65,535 ?
+    //      (that keeper should be limited to send)
+    function setHostGtaBalReqPerc(uint8 _perc) public onlyKeeper {
+        require(_perc <= 100, 'err: required balance too high :/');
+        hostGtaBalReqPerc = _perc;
+    }
+    function setEntryFeePercs(uint8 _keeperPerc, uint8 _servicePerc, uint8 _supportPerc) public onlyKeeper {
+        require(_keeperPerc <= 100 && _servicePerc <= 100 && _supportPerc <= 100, 'err: max 100%');
+        keeperFeePerc = _keeperPerc;
+        serviceFeePerc = _servicePerc;
+        supportFeePerc = _supportPerc;
     }
     function setDepositFeePerc(uint8 _perc) public onlyKeeper {
         require(_perc <= 100, 'err: max 100%');
@@ -152,13 +137,6 @@ contract GTADelegate {
         maxHostFeePerc = _perc;
         return true;
     }
-    // function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
-    //     require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
-    //     return creditsAddrArray;
-    // }
-    // function getCredits(address _player) public view onlyKeeper returns (uint32) {
-    //     return creditsUSD[_player];
-    // }
     function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
         require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
         minEventEntryFeeUSD = _amount;
@@ -324,6 +302,8 @@ contract GTADelegate {
     function _generateAddressHash(address host, string memory uid) external pure returns (address) {
         // Concatenate the address and the string, and then hash the result
         bytes32 hash = keccak256(abi.encodePacked(host, uid));
+        
+        // LEFT OFF HERE ... is this a bug? 'uint160' ? shoudl be uint16? 
         address generatedAddress = address(uint160(uint256(hash)));
         return generatedAddress;
     }
@@ -369,24 +349,6 @@ contract GTADelegate {
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external onlyKeeper {
         whitelistPendingDebits[token] += amount;
     }
-
-    // // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    // function _updateCredit(address _player, uint32 _amountUSD, bool _debit) public onlyKeeper {
-    //     if (_debit) { 
-    //         // ensure there is enough credit before debit
-    //         require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
-    //         creditsUSD[_player] -= _amountUSD;
-
-    //         // if balance is now 0, remove _player from balance tracking
-    //         if (creditsUSD[_player] == 0) {
-    //             delete creditsUSD[_player];
-    //             creditsAddrArray = _remAddressFromArray(_player, creditsAddrArray);
-    //         }
-    //     } else { 
-    //         creditsUSD[_player] += _amountUSD; 
-    //         creditsAddrArray = _addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
-    //     }
-    // }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
