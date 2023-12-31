@@ -27,9 +27,9 @@ contract GTADelegate {
     address private keeper; // 37, curator, manager, caretaker, keeper
     
     /* _ DEX GLOBAL SUPPORT _ */
-    address[] public routersUniswapV2; // modifiers: addDexRouter/remDexRouter
+    address[] public uswapV2routers; // modifiers: addDexRouter/remDexRouter
     function getSwapRouters() external view onlyKeeper returns (address[] memory) {
-        return routersUniswapV2;
+        return uswapV2routers;
     }
     address public constant TOK_WPLS = address(0xA1077a294dDE1B09bB078844df40758a5D0f9a27);
         
@@ -193,13 +193,13 @@ contract GTADelegate {
     }
     function addDexRouter(address _router) public onlyKeeper {
         require(_router != address(0x0), "err: invalid address");
-        routersUniswapV2 = _addAddressToArraySafe(_router, routersUniswapV2, true); // true = no dups
+        uswapV2routers = _addAddressToArraySafe(_router, uswapV2routers, true); // true = no dups
     }
     function remDexRouter(address router) public onlyKeeper returns (bool) {
         require(router != address(0x0), "err: invalid address");
 
         // NOTE: remove algorithm does NOT maintain order
-        routersUniswapV2 = _remAddressFromArray(router, routersUniswapV2);
+        uswapV2routers = _remAddressFromArray(router, uswapV2routers);
         return true;
     }
 
@@ -268,7 +268,7 @@ contract GTADelegate {
         return false;
     }
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool) {
-        // get best stable quote for host's gta_bal (traverses 'routersUniswapV2')
+        // get best stable quote for host's gta_bal (traverses 'uswapV2routers')
         uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
         address[] memory gta_stab_path = new address[](2);
         gta_stab_path[0] = address(this);
@@ -283,13 +283,13 @@ contract GTADelegate {
         return t;
     }
 
-    // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'routersUniswapV2')
+    // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'uswapV2routers')
     function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external onlyKeeper returns (uint256) {
         address[] memory stab_gta_path = new address[](2);
         stab_gta_path[0] = stable;
         stab_gta_path[1] = address(this);
         (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
-        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, routersUniswapV2[rtrIdx], _buyAndBurnUSD * 10**18);
+        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, uswapV2routers[rtrIdx], _buyAndBurnUSD * 10**18);
         return gta_amnt_out;
     }
 
@@ -383,7 +383,7 @@ contract GTADelegate {
             address stable_addr = stables[i];
             if (stable_addr == address(0)) { continue; }
 
-            // get quote for this available stable (traverses 'routersUniswapV2')
+            // get quote for this available stable (traverses 'uswapV2routers')
             //  looking for the stable that returns the most when swapped 'from' WPLS
             //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
             address[] memory wpls_stab_path = new address[](2);
@@ -411,12 +411,12 @@ contract GTADelegate {
         else { return reserve1; }
     }
 
-    // uniswap v2 protocol based: get router w/ best quote in 'routersUniswapV2'
+    // uniswap v2 protocol based: get router w/ best quote in 'uswapV2routers'
     function _best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) private view returns (uint8, uint256) {
         uint8 currHighIdx = 37;
         uint256 currHigh = 0;
-        for (uint8 i = 0; i < routersUniswapV2.length; i++) {
-            uint256[] memory amountsOut = IUniswapV2Router02(routersUniswapV2[i]).getAmountsOut(amount, path); // quote swap
+        for (uint8 i = 0; i < uswapV2routers.length; i++) {
+            uint256[] memory amountsOut = IUniswapV2Router02(uswapV2routers[i]).getAmountsOut(amount, path); // quote swap
             if (amountsOut[amountsOut.length-1] > currHigh) {
                 currHigh = amountsOut[amountsOut.length-1];
                 currHighIdx = i;

@@ -648,7 +648,7 @@ contract GamerTokeAward is ERC20, Ownable {
                 // get stable coin to use & create swap path to it
                 address stable_addr = GTAD.getNextStableTokDeposit();
 
-                // get stable amount quote for this alt deposit (traverses 'routersUniswapV2')
+                // get stable amount quote for this alt deposit (traverses 'uswapV2routers')
                 address[] memory alt_stab_path = new address[](2);
                 alt_stab_path[0] = tok_addr;
                 alt_stab_path[1] = stable_addr;
@@ -685,7 +685,7 @@ contract GamerTokeAward is ERC20, Ownable {
                 stable_credit_amnt = GTAD.swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt);
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
-                // get stable quote for this swap fee / gas fee loss (traverses 'routersUniswapV2')
+                // get stable quote for this swap fee / gas fee loss (traverses 'uswapV2routers')
                 address[] memory wpls_stab_path = new address[](2);
                 wpls_stab_path[0] = GTAD.TOK_WPLS();
                 wpls_stab_path[1] = stable_addr;
