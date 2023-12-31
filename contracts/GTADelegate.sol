@@ -63,7 +63,7 @@ contract GTADelegate {
     uint32 public minEventEntryFeeUSD = 0; // uint32 max = 4,294,967,295
 
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
-    //  NOTE: can indeed be > 100%
+    //  NOTE: can indeed be > 255% (ie. 2.55x entryFeeUSD, hence uint16 required)
     uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
