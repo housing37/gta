@@ -29,6 +29,7 @@ interface IGTADelegate {
     // uint8 public supportFeePerc; // 0% of event total entryFeeUSD
 
     // public access
+    function minEventEntryFeeUSD() external; // note: auto-generated getter
     function _generateAddressHash(address host, string memory uid) external view returns (address);
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool);
     function _getTotalsOfArray(uint8[] calldata _arr) external view returns (uint8);
@@ -71,7 +72,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 private activeGameCount = 0; 
 
-    // track activeGameCodes array for keeper 'getGameCodes'
+    // track activeGameCodes array for keeper 'keeperGetGameCodes'
     address[] private activeGameCodes;
 
     // game experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
@@ -81,7 +82,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // usd credits used to process player deposits, registers, refunds
     mapping(address => uint32) private creditsUSD;
 
-    // set by '_updateCredit'; get by 'getCreditAddress|getCredits'
+    // set by '_updateCredit'; get by 'keeperGetCreditAddresses|keeperGetCredits'
     address[] private creditsAddrArray;
     
     // track last block# used to update 'creditsUSD' in 'settleBalances'
@@ -219,6 +220,9 @@ contract GamerTokeAward is ERC20, Ownable {
         GTAD = IGTADelegate(_gtad);
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
+
+    // NOTE: call from contructor not required
+    //      call from 'keeper' not required
     function setGTAD(address _gtad) public onlyKeeper {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
@@ -285,48 +289,46 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
-    
-    // LEFT OFF HERE ... refactor all 'onlyKeeper' function names w/ preceiding 'keeper'
-
-    function getGameCodes() public view onlyKeeper returns (address[] memory, uint64) {
+    function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
         return (activeGameCodes, activeGameCount);
     }
-    function getCreditAddresses() public view onlyKeeper returns (address[] memory) {
+    function keeperGetCreditAddresses() external view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
         return creditsAddrArray;
     }
-    function getCredits(address _player) public view onlyKeeper returns (uint32) {
+    function keeperGetCredits(address _player) external view onlyKeeper returns (uint32) {
         require(_player != address(0), 'err: no zero address :{=}');
         return creditsUSD[_player];
     }
-    function setGameExpSec(uint32 _sec) public onlyKeeper {
+    function keeperSetGameExpSec(uint32 _sec) external onlyKeeper {
         require(_sec > 0, 'err: no zero :{}');
         gameExpSec = _sec;
     }
     // code required for 'burnGTA'
-    function resetBurnCodeEasy(uint16 bc) public onlyKeeper {
+    function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
         require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
         BURN_CODE_EASY = bc;
         USE_BURN_CODE_HARD = false;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function resetBurnCodeHard(uint32 bc) public onlyKeeper {
+    function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
         require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
         BURN_CODE_HARD = bc;
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function setBurnCodeHard(bool _hard) public onlyKeeper {
+    function keeperSetBurnCodeHard(bool _hard) external onlyKeeper {
         USE_BURN_CODE_HARD = _hard;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
-    function getBurnCodes() public view onlyKeeper returns (uint32[2] memory) {
+    function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    function getLastBlockNumUpdate() public view onlyKeeper returns (uint32) {
+    function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
     }
-    function getPlayersForGame(address _host, string memory _gameName) public view returns (address[] memory) {
+
+    function getPlayersForGame(address _host, string memory _gameName) external view returns (address[] memory) {
         require(_host != address(0), "err: invalid host :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
         address _gameCode = getGameCode(_host, _gameName); // generate hash
@@ -335,13 +337,6 @@ contract GamerTokeAward is ERC20, Ownable {
     function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
         require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
         return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
-
-        // for (uint i=0; i < activeGameCodes.length; i++) {
-        //     if (_gameCode == activeGameCodes[i]) {
-        //         return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
-        //     }
-        // }
-        // return new address[](0);
     }
 
     /* -------------------------------------------------------- */
