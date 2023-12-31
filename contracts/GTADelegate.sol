@@ -64,7 +64,10 @@ contract GTADelegate {
 
     // required GTA balance ratio to host game (ratio of entryFeeUSD desired)
     //  NOTE: can indeed be > 255% (ie. 2.55x entryFeeUSD, hence uint16 required)
+    //   but, 65,535% max = host 'gta_bal' req of ~655x entryFeeUSD (in '_hostCanCreateEvent')
+    //   hence, keeper needs to be limited to a lower max (for security)
     uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
+    uint16 public constant hostGtaBalReqPercMax = 3000; // max ratio = 30:1 entryFeeUSD
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -119,11 +122,8 @@ contract GTADelegate {
     function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {
         enableMinDepositRefunds = _enable;
     }
-    // LEFT OFF HERE ... hostGtaBalReqPerc can indeed be > 100% 
-    //  should keeper be limited to set lower perc than 65,535 (uint16 max)
-    //  NOTE: setting perc to 65,535 = host 'gta_bal' req of ~655 x '_entryFeeUSD' (in '_hostCanCreateEvent')
     function setHostGtaBalReqPerc(uint16 _perc) public onlyKeeper {
-        require(_perc <= type(uint16).max, 'err: required balance too high :/');
+        require(_perc <= hostGtaBalReqPercMax, 'err: required balance too high, check hostGtaBalReqPercMax :/');
         hostGtaBalReqPerc = _perc;
     }
     function setEntryFeePercs(uint8 _keeperPerc, uint8 _servicePerc, uint8 _supportPerc) public onlyKeeper {
