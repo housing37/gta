@@ -39,6 +39,7 @@ interface IGTADelegate {
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
+    function getKeeper() external view returns (address);
     function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external returns (uint256);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
@@ -57,7 +58,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
-    address private keeper; // 37, curator, manager, caretaker, keeper
+    IGTADelegate private GTAD; // 'keeper' maintained within
     
     /* _ TOKEN INIT SUPPORT _ */
     string private constant tok_name = "_TEST GTA IERC20";
@@ -211,11 +212,11 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
-    IGTADelegate private GTAD;
+    // NOTE: pre-initialized 'GTADelegate' address required
+    //      initializer w/ 'keeper' not required ('GTADelegate' maintained)
+    //      sets msg.sender to '_owner' ('Ownable' maintained)
     constructor(uint256 _initSupply, address _gtad) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
-        // Set sender to keeper ('Ownable' maintains '_owner')
-        keeper = msg.sender;
-        setGTAD(_gtad); // onlyKeeper
+        GTAD = IGTADelegate(_gtad);
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
     function setGTAD(address _gtad) public onlyKeeper {
@@ -229,13 +230,16 @@ contract GamerTokeAward is ERC20, Ownable {
     modifier onlyAdmins(address gameCode) {
         require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         bool isHost = msg.sender == activeGames[gameCode].host;
-        bool isKeeper = msg.sender == keeper;
+        bool isKeeper = msg.sender == GTAD.getKeeper();
         bool isOwner = msg.sender == owner(); // from 'Ownable'
         require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
+
+        // LEFT OFF HERE ... not sure check for owner() is valid here
+        //     onlyAdmins is only used in 'getPlayers'
     }
     modifier onlyKeeper() {
-        require(msg.sender == keeper, "Only the keeper :p");
+        require(msg.sender == GTAD.getKeeper(), "Only the keeper :p");
         _;
     }
 
@@ -281,6 +285,9 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
+    
+    // LEFT OFF HERE ... refactor all 'onlyKeeper' function names w/ preceiding 'keeper'
+
     function getGameCodes() public view onlyKeeper returns (address[] memory, uint64) {
         return (activeGameCodes, activeGameCount);
     }
@@ -476,7 +483,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // cancel event and process refunds (host, players, keeper)
     //  host|keeper can cancel if event not 'launched' yet
     //  players can cancel if event not 'launched' & 'expTime' has passed
-    function cancelEventProcessRefunds(address _eventCode) public {
+    function cancelEventProcessRefunds(address _eventCode) external {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
@@ -484,7 +491,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == keeper;
+        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.getKeeper();
         require(isValidSender, 'err: only players or host :<>');
 
         // for host|player|keeper cancel, verify event not launched
@@ -589,7 +596,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // pay host & keeper
         address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
-        address stable_keep = _transferBestDebitStableUSD(keeper, game.event_1.keeperFeeUSD);
+        address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), game.event_1.keeperFeeUSD);
 
         // set event params to end state
         _endEvent(_gameCode);
@@ -716,7 +723,7 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PRIVATE - SUPPORTING                                     */
     /* -------------------------------------------------------- */
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) public onlyKeeper {
+    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
             // ensure there is enough credit before debit
             require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');

@@ -79,6 +79,8 @@ contract GTADelegate {
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
+    // NOTE: initialize before GTA.sol required
+    //      sets keeper to msg.sender
     constructor() {
         keeper = msg.sender;
     }
@@ -105,10 +107,10 @@ contract GTADelegate {
     /* KEEPER - PUBLIC GETTERS / SETTERS                        */
     /* -------------------------------------------------------- */
     // GETTERS / SETTERS (keeper)
-    function getKeeper() public view onlyKeeper returns (address) {
+    function getKeeper() external view returns (address) {
         return keeper;
     }
-    function setKeeper(address _newKeeper) public onlyKeeper {
+    function setKeeper(address _newKeeper) external onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
     }
@@ -214,7 +216,7 @@ contract GTADelegate {
         return _best_swap_v2_router_idx_quote(path, amount);
     }
     function getNextStableTokDeposit() external onlyKeeper returns (address) {
-        return _getNextStableTokDeposit();
+        return _getNextStableTokDeposit(); // increments 'whitelistStablesUseIdx'
     }
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory) {
         // NOTE: no require checks needed
@@ -302,7 +304,7 @@ contract GTADelegate {
     function _generateAddressHash(address host, string memory uid) external pure returns (address) {
         // Concatenate the address and the string, and then hash the result
         bytes32 hash = keccak256(abi.encodePacked(host, uid));
-        
+
         // LEFT OFF HERE ... is this a bug? 'uint160' ? shoudl be uint16? 
         address generatedAddress = address(uint160(uint256(hash)));
         return generatedAddress;
