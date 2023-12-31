@@ -121,7 +121,7 @@ contract GTADelegate {
     }
     // LEFT OFF HERE ... hostGtaBalReqPerc can indeed be > 100% 
     //  should keeper be limited to set lower perc than 65,535 (uint16 max)
-    //  NOTE: setting perc to 65,535 = host bal req of ~655 x '_entryFeeUSD'
+    //  NOTE: setting perc to 65,535 = host 'gta_bal' req of ~655 x '_entryFeeUSD' (in '_hostCanCreateEvent')
     function setHostGtaBalReqPerc(uint16 _perc) public onlyKeeper {
         require(_perc <= type(uint16).max, 'err: required balance too high :/');
         hostGtaBalReqPerc = _perc;
