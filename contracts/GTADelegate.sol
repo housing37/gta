@@ -69,6 +69,9 @@ contract GTADelegate {
     uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
     uint16 public constant hostGtaBalReqPercMax = 3000; // max ratio = 30:1 entryFeeUSD
 
+    // GTA balance required in order to call public info functions
+    uint256 public infoGtaBalanceRequired = 10 * 10**18;
+
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
 
@@ -117,6 +120,9 @@ contract GTADelegate {
     function setKeeper(address _newKeeper) external onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
+    }
+    function setInfoGtaBalRequired(uint256 _gtaBalReq) external onlyKeeper {
+        infoGtaBalanceRequired = _gtaBalReq;
     }
     // enable/disable refunds for less than min deposit (keeper controlled)
     function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {

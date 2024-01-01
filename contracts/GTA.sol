@@ -29,7 +29,8 @@ interface IGTADelegate {
     // uint8 public supportFeePerc; // 0% of event total entryFeeUSD
 
     // public access
-    function minEventEntryFeeUSD() external; // note: auto-generated getter
+    function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
+    function minEventEntryFeeUSD() external view returns (uint32); // auto-generated getter
     function _generateAddressHash(address host, string memory uid) external view returns (address);
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool);
     function _getTotalsOfArray(uint8[] calldata _arr) external view returns (uint8);
@@ -226,6 +227,8 @@ contract GamerTokeAward is ERC20, Ownable {
     function setGTAD(address _gtad) public onlyKeeper {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
+
+        // LEFT OFF HERE ... mint GTA to msg.sender whenever this function is called
     }
 
     /* -------------------------------------------------------- */
@@ -244,6 +247,10 @@ contract GamerTokeAward is ERC20, Ownable {
     }
     modifier onlyKeeper() {
         require(msg.sender == GTAD.getKeeper(), "Only the keeper :p");
+        _;
+    }
+    modifier onlyHolder(uint256 _requiredAmount) {
+        require(balanceOf(msg.sender) >= _requiredAmount, 'err: need more GTA');
         _;
     }
 
@@ -328,15 +335,16 @@ contract GamerTokeAward is ERC20, Ownable {
         return lastBlockNumUpdate;
     }
 
-    function getPlayersForGame(address _host, string memory _gameName) external view returns (address[] memory) {
+    // NOTE: allows players to confirm they have registered for an event
+    function infoGetPlayersForGame(address _host, string memory _gameName) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_host != address(0), "err: invalid host :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
-        address _gameCode = getGameCode(_host, _gameName); // generate hash
-        return getPlayers(_gameCode);
+        address _gameCode = _getGameCode(_host, _gameName);
+        return _getPlayers(_gameCode);
     }
-    function getPlayers(address _gameCode) public view onlyAdmins(_gameCode) returns (address[] memory) {
+    function infoGetPlayersForGameCode(address _gameCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
-        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+        return _getPlayers(_gameCode);
     }
 
     /* -------------------------------------------------------- */
@@ -352,12 +360,17 @@ contract GamerTokeAward is ERC20, Ownable {
         require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
+        return _getGameCode(_host, _gameName);
+    }
 
+    function _getGameCode(address _host, string memory _gameName) private view returns (address) {
         // generate gameCode from host address and game name
         address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}"); // verify gameCode exists
-        
+        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}");
         return gameCode;
+    }
+    function _getPlayers(address _gameCode) private view returns (address[] memory) {
+        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
     }
 
     // public accessor
@@ -593,6 +606,11 @@ contract GamerTokeAward is ERC20, Ownable {
         address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
         address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), game.event_1.keeperFeeUSD);
 
+        // LEFT OFF HERE ... need to pay support staff somewhere (supportFeeUSD)
+        //  also, maybe we should pay keeper and support in 'hostStartEvent'
+        //  also, 'serviceFeeUSD' is simply maintained in contract, 
+        //    but should we do something else with it? perhaps track it in global? perhaps send it to some service fee wallet address?
+        
         // set event params to end state
         _endEvent(_gameCode);
 
