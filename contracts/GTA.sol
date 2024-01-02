@@ -258,45 +258,6 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     /* -------------------------------------------------------- */
-    /* SIDE QUEST... CRACK THE BURN CODE                        */
-    /* -------------------------------------------------------- */
-    // public can try to guess the burn code (burn buyGtaPerc of the balance, earn the rest)
-    // code required for 'burnGTA'
-    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    function burnGTA_HARD(uint32 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
-        require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
-        return _burnGTA();
-    }
-    function burnGTA_EASY(uint16 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
-        require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
-        return _burnGTA();
-    }
-    function _burnGTA() private returns (bool) {
-        uint256 bal = balanceOf(address(this));
-        require(bal > 0, 'err: no GTA to burn :p');
-
-        // burn it.. burn it real good...
-        //  burn 'burnGtaPerc' of 'bal', send rest to cracker
-        uint256 bal_burn = bal * (burnGtaPerc/100);
-        uint256 bal_earn = bal - bal_burn;
-        transferFrom(address(this), address(0), bal_burn);
-        transferFrom(address(this), msg.sender, bal_earn);
-
-        // notify the world that shit was burned
-        emit BurnedGTA(bal, bal_burn, bal_earn, msg.sender, BURN_CODE_GUESS_CNT);
-
-        // reset guess count
-        BURN_CODE_GUESS_CNT = 0;
-
-        return true;
-    }
-
-    /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
     function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
@@ -350,6 +311,24 @@ contract GamerTokeAward is ERC20, Ownable {
     function infoGetPlayersForGameCode(address _gameCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
         return _getPlayers(_gameCode);
+    }
+
+    /* SIDE QUEST... CRACK THE BURN CODE                        */
+    // public can try to guess the burn code (burn buyGtaPerc of the balance, earn the rest)
+    // code required for 'burnGTA'
+    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    function burnGTA_HARD(uint32 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
+        BURN_CODE_GUESS_CNT++; // keep track of guess count
+        require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
+        require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
+        return _burnGTA();
+    }
+    function burnGTA_EASY(uint16 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
+        BURN_CODE_GUESS_CNT++; // keep track of guess count
+        require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
+        require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
+        return _burnGTA();
     }
 
     /* -------------------------------------------------------- */
@@ -749,6 +728,25 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - SUPPORTING                                     */
     /* -------------------------------------------------------- */
+    function _burnGTA() private returns (bool) {
+        uint256 bal = balanceOf(address(this));
+        require(bal > 0, 'err: no GTA to burn :p');
+
+        // burn it.. burn it real good...
+        //  burn 'burnGtaPerc' of 'bal', send rest to cracker
+        uint256 bal_burn = bal * (burnGtaPerc/100);
+        uint256 bal_earn = bal - bal_burn;
+        transferFrom(address(this), address(0), bal_burn);
+        transferFrom(address(this), msg.sender, bal_earn);
+
+        // notify the world that shit was burned
+        emit BurnedGTA(bal, bal_burn, bal_earn, msg.sender, BURN_CODE_GUESS_CNT);
+
+        // reset guess count
+        BURN_CODE_GUESS_CNT = 0;
+
+        return true;
+    }
     function _getGameCode(address _host, string memory _gameName) private view returns (address) {
         // generate gameCode from host address and game name
         address gameCode = GTAD._generateAddressHash(_host, _gameName);
