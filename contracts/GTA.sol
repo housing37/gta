@@ -351,30 +351,18 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
     // view your own credits ('creditsUSD' are not available for withdrawel)
-    function myCredits() public view returns (uint32) {
+    function myCredits() external view returns (uint32) {
         return creditsUSD[msg.sender];
     }
 
     // gameCode = hash(_host, _gameName)
-    function getGameCode(address _host, string memory _gameName) public view returns (address) {
+    function getGameCode(address _host, string memory _gameName) external view returns (address) {
         require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
         return _getGameCode(_host, _gameName);
     }
-
-    function _getGameCode(address _host, string memory _gameName) private view returns (address) {
-        // generate gameCode from host address and game name
-        address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}");
-        return gameCode;
-    }
-    function _getPlayers(address _gameCode) private view returns (address[] memory) {
-        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
-    }
-
-    // public accessor
-    function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) public returns (bool) {
+    function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) external returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
@@ -443,7 +431,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
 
-        // debit entry fee from msg.sender credits (player)
+        // debit entry fee from msg.sender credits (ie. player credits)
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to game event
@@ -476,7 +464,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // check msg.sender for enough credits
         require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
 
-        // debit entry fee from msg.sender credits (host)
+        // debit entry fee from msg.sender credits (ie. host credits)
         _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
@@ -606,7 +594,7 @@ contract GamerTokeAward is ERC20, Ownable {
         address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
         address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), game.event_1.keeperFeeUSD);
 
-        // LEFT OFF HERE ... need to pay support staff somewhere (supportFeeUSD)
+        // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
         //  also, maybe we should pay keeper and support in 'hostStartEvent'
         //  also, 'serviceFeeUSD' is simply maintained in contract, 
         //    but should we do something else with it? perhaps track it in global? perhaps send it to some service fee wallet address?
@@ -735,6 +723,15 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PRIVATE - SUPPORTING                                     */
     /* -------------------------------------------------------- */
+    function _getGameCode(address _host, string memory _gameName) private view returns (address) {
+        // generate gameCode from host address and game name
+        address gameCode = GTAD._generateAddressHash(_host, _gameName);
+        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}");
+        return gameCode;
+    }
+    function _getPlayers(address _gameCode) private view returns (address[] memory) {
+        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+    }
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredit(address _player, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
