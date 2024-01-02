@@ -354,7 +354,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return evt.event_1.players[msg.sender];
     }
 
-    // verify your own GTA holding rquired to host
+    // verify your own GTA holding required to host
     function checkMyGtaBalanceRequiredToHost(uint32 _entryFeeUSD) external view returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
@@ -377,45 +377,43 @@ contract GamerTokeAward is ERC20, Ownable {
         return _getGameCode(_host, _gameName);
     }
 
-    // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
-    function createGame(string memory _gameName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
+    function createEvent(string memory _eventName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
         require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
-        require(_winPercs.length > 0, 'err: no winners? :O');
-        require(GTAD._getTotalsOfArray(_winPercs) == 100, 'err: invalid _winPercs values, requires 100 total :/');
-        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host :/");
+        require(GTAD._getTotalsOfArray(_winPercs) - _hostFeePerc <= 100, 'err: _winPercs + _hostFeePerc <= 100 required :/');
+        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
-        uint64 _expTime = _startTime + uint64(gameExpSec);
-        require(_expTime > _startTime, "err: stop f*ckin around :X");
+        uint64 expTime = _startTime + uint64(gameExpSec);
+        require(expTime > _startTime, "err: stop f*ckin around :X");
 
-        // verify active game name/code doesn't exist yet
-        address gameCode = GTAD._generateAddressHash(msg.sender, _gameName);
-        require(activeGames[gameCode].host == address(0), 'err: game name already exists :/');
+        // verify name/code doesn't yet exist in 'activeGames'
+        address eventCode = GTAD._generateAddressHash(msg.sender, _eventName);
+        require(activeGames[eventCode].host == address(0), 'err: game name already exists :/');
 
-        // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
+        // Creates a default empty 'Event_0' struct for 'eventCode' (doesn't exist yet)
         //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
-        //    Modifying the newGame will indeed directly affect the state stored in activeGames[gameCode].
-        Event_0 storage newGame = activeGames[gameCode];
+        //    ie. modifying the newEvent will indeed directly affect the state stored in activeGames[eventCode].
+        Event_0 storage newEvent = activeGames[eventCode];
     
         // set properties for default empty 'Game' struct
-        newGame.host = msg.sender;
-        newGame.gameName = _gameName;
-        newGame.entryFeeUSD = _entryFeeUSD;
-        newGame.event_2.winPercs = _winPercs; // %'s of prizePoolUSD - (serviceFeeUSD + hostFeeUSD)
-        newGame.event_1.hostFeePerc = _hostFeePerc; // % of prizePoolUSD
-        newGame.createTime = block.timestamp;
-        newGame.createBlockNum = block.number;
-        newGame.startTime = _startTime;
-        newGame.expTime = _expTime;
+        newEvent.host = msg.sender;
+        newEvent.gameName = _eventName;
+        newEvent.entryFeeUSD = _entryFeeUSD;
+        newEvent.event_2.winPercs = _winPercs; // [%_1st_place, %_2nd_place, ...] = prizePoolUSD - hostFeePerc
+        newEvent.event_1.hostFeePerc = _hostFeePerc; // hostFeePerc = prizePoolUSD - winPercs
+        newEvent.createTime = block.timestamp;
+        newEvent.createBlockNum = block.number;
+        newEvent.startTime = _startTime;
+        newEvent.expTime = expTime;
 
         // increment support
-        activeGameCodes = GTAD.addAddressToArraySafe(gameCode, activeGameCodes, true); // true = no dups
+        activeGameCodes = GTAD.addAddressToArraySafe(eventCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
-        // return gameCode to caller
-        return gameCode;
+        // return eventCode to caller
+        return eventCode;
     }
 
     // msg.sender can add themself to any game; debits from 'creditsUSD[msg.sender]'
@@ -881,7 +879,7 @@ contract GamerTokeAward is ERC20, Ownable {
         
         // calc payoutsUSD (finally, AFTER all deductions )
         for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
-            _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * _evt.event_2.winPercs[i]);
+            _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * (_evt.event_2.winPercs[i]/100));
         }
 
         return _evt;
