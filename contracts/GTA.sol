@@ -86,7 +86,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // usd credits used to process player deposits, registers, refunds
     mapping(address => uint32) private creditsUSD;
 
-    // set by '_updateCredit'; get by 'keeperGetCreditAddresses|keeperGetCredits'
+    // set by '_updateCredits'; get by 'keeperGetCreditAddresses|keeperGetCredits'
     address[] private creditsAddrArray;
     
     // track last block# used to update 'creditsUSD' in 'settleBalances'
@@ -343,7 +343,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // verify your registration for event 
-    function checkMyRegistration(address _eventCode) external view returns (bool) {
+    function checkMySeatRegistration(address _eventCode) external view returns (bool) {
         require(_eventCode != address(0), 'err: no event code ;o');
 
         // validate _eventCode exists
@@ -416,69 +416,69 @@ contract GamerTokeAward is ERC20, Ownable {
         return eventCode;
     }
 
-    // msg.sender can add themself to any game; debits from 'creditsUSD[msg.sender]'
+    // msg.sender can add themself to any event; debits from 'creditsUSD[msg.sender]'
     // UPDATE_120223: make deposit then tweet to register
     //              1) send stable|alt deposit to gta contract
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
     //                  OR ... for free play w/ host register
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
-    function registerEvent(address gameCode) public returns (bool) {
-        require(gameCode != address(0), 'err: no game code ;o');
+    function registerSeatForEvent(address _eventCode) public returns (bool) {
+        require(_eventCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        Event_0 storage game = activeGames[gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if game launched
-        require(!game.event_1.launched, "err: event launched :(");
+        require(!evt.event_1.launched, "err: event already launched :(");
 
         // check msg.sender already registered
-        require(!game.event_1.players[msg.sender], 'err: already registered for this gameCode :p');
+        require(!evt.event_1.players[msg.sender], 'err: already registered for this _eventCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, send whitelistAlts or whitelistStables to this contract :P');
+        require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :P');
 
-        // debit entry fee from msg.sender credits (ie. player credits)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        // debit guest entry fee from creditsUSD[msg.sender] (ie. guest credits)
+        _updateCredits(msg.sender, evt.entryFeeUSD, true); // true = debit
 
-        // -1) add msg.sender to game event
-        _addPlayerToEvent(msg.sender, gameCode);
+        // -1) add msg.sender to event
+        _addGuestToEvent(msg.sender, _eventCode);
         
         // notify client side that a player was registerd for event
-        emit RegisteredForEvent(gameCode, game.entryFeeUSD, msg.sender, game.event_1.playerCnt);
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, msg.sender, evt.event_1.playerCnt);
         
         return true;
     }
 
-    // hosts can pay to add players to their own games (debits from host credits)
-    function hostRegisterEvent(address _player, address _gameCode) public returns (bool) {
-        require(_player != address(0), 'err: no player ;l');
-        require(_gameCode != address(0), 'err: no game code ;l');
+    // hosts can pay to add guests to their own events (debits from host credits)
+    function hostRegisterSeatForEvent(address _guest, address _eventCode) public returns (bool) {
+        require(_guest != address(0), 'err: no _guest ;l');
+        require(_eventCode != address(0), 'err: no _eventCode ;l');
 
         // get/validate active game
-        Event_0 storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid _eventCode :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+        // check if msg.sender is _eventCode host
+        require(evt.host == msg.sender, 'err: only event host :/');
 
-        // check if game launched
-        require(!game.event_1.launched, 'err: event launched :(');
+        // check if event launched
+        require(!evt.event_1.launched, 'err: event already launched :(');
 
-        // check _player already registered
-        require(!game.event_1.players[_player], 'err: player already registered for this gameCode :p');
+        // check _guest already registered
+        require(!evt.event_1.players[_guest], 'err: _guest already registered for this _eventCode :p');
 
         // check msg.sender for enough credits
-        require(game.entryFeeUSD < creditsUSD[msg.sender], 'err: not enough credits :(, send whitelistAlts or whitelistStables');
+        require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits :(, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :p');
 
-        // debit entry fee from msg.sender credits (ie. host credits)
-        _updateCredit(msg.sender, game.entryFeeUSD, true); // true = debit
+        // debit guest entry fee from creditsUSD[msg.sender] (ie. host credits)
+        _updateCredits(msg.sender, evt.entryFeeUSD, true); // true = debit
 
         // -1) add player to game event
-        _addPlayerToEvent(_player, _gameCode);
+        _addGuestToEvent(_guest, _eventCode);
 
-        // notify client side that a player was registerd for event
-        emit RegisteredForEvent(_gameCode, game.entryFeeUSD, _player, game.event_1.playerCnt);
+        // notify client side that a _guest was registerd for event
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, _guest, evt.event_1.playerCnt);
 
         return true;
     }
@@ -522,7 +522,7 @@ contract GamerTokeAward is ERC20, Ownable {
             //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
 
             // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredit(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+            _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
@@ -715,7 +715,7 @@ contract GamerTokeAward is ERC20, Ownable {
             uint32 usd_net_amnt = uint32(stable_net_amnt / 1e18);
 
             // 2) add 'net_amnt' to 'src_addr' in 'creditsUSD'
-            _updateCredit(src_addr, usd_net_amnt, false); // false = credit
+            _updateCredits(src_addr, usd_net_amnt, false); // false = credit
 
             // notify client side, deposit successful
             emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
@@ -761,7 +761,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
     }
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredit(address _player, uint32 _amountUSD, bool _debit) private {
+    function _updateCredits(address _player, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
             // ensure there is enough credit before debit
             require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
@@ -786,7 +786,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return stable;
     }
 
-    function _addPlayerToEvent(address _player, address _evtCode) private {
+    function _addGuestToEvent(address _player, address _evtCode) private {
         Event_0 storage _evt = activeGames[_evtCode];
         _evt.event_1.players[_player] = true;
         _evt.event_1.playerAddresses.push(_player);
