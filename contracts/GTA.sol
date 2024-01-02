@@ -312,6 +312,9 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
         return _getPlayers(_gameCode);
     }
+    function infoGetBurnGtaBalanceRequired() external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (uint256) {
+        return GTAD.burnGtaBalanceRequired();
+    }
 
     /* SIDE QUEST... CRACK THE BURN CODE                        */
     // public can try to guess the burn code (burn buyGtaPerc of the balance, earn the rest)
@@ -352,12 +355,19 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // verify your own GTA holding rquired to host
-    function checkMyGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external view returns (bool) {
+    function checkMyGtaBalanceRequiredToHost(uint32 _entryFeeUSD) external view returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
     }
 
+    function getGtaBalanceRequiredToHost(uint32 _entryFeeUSD) external view returns (uint256) {
+        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
+        return GTAD.gtaHoldingRequiredToHost(address(this), _entryFeeUSD);
+    }
+    function getGtaBalanceRequiredForInfo() external view returns (uint256) {
+        return GTAD.infoGtaBalanceRequired();
+    }
     function getGameCode(address _host, string memory _gameName) external view returns (address) {
         require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
@@ -365,10 +375,6 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // gameCode = hash(_host, _gameName)
         return _getGameCode(_host, _gameName);
-    }
-    function getGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external returns (uint256) {
-        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
-        return GTAD.gtaHoldingRequiredToHost(address(this), _entryFeeUSD);
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
