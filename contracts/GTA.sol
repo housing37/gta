@@ -432,6 +432,9 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if game launched
         require(!evt.event_1.launched, "err: event already launched :(");
 
+        // check if host trying to register
+        require(evt.host != msg.sender, 'err: invalid guest, no host registration :{}');
+
         // check msg.sender already registered
         require(!evt.event_1.players[msg.sender], 'err: already registered for this _eventCode :p');
 
@@ -461,6 +464,9 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // check if msg.sender is _eventCode host
         require(evt.host == msg.sender, 'err: only event host :/');
+
+        // check if host trying to register host
+        require(evt.host != _guest, 'err: invalid guest, no host registration :{}');
 
         // check if event launched
         require(!evt.event_1.launched, 'err: event already launched :(');
