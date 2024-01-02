@@ -71,6 +71,7 @@ contract GTADelegate {
 
     // GTA balance required in order to call public info functions
     uint256 public infoGtaBalanceRequired = 10 * 10**18;
+    uint256 public burnGtaBalanceRequired = 20 * 10**18;
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -123,6 +124,9 @@ contract GTADelegate {
     }
     function setInfoGtaBalRequired(uint256 _gtaBalReq) external onlyKeeper {
         infoGtaBalanceRequired = _gtaBalReq;
+    }
+    function setBurnGtaBalRequired(uint256 _gtaBalReq) external onlyKeeper {
+        burnGtaBalanceRequired = _gtaBalReq;
     }
     // enable/disable refunds for less than min deposit (keeper controlled)
     function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {

@@ -30,6 +30,7 @@ interface IGTADelegate {
 
     // public access
     function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
+    function burnGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function minEventEntryFeeUSD() external view returns (uint32); // auto-generated getter
     function maxHostFeePerc() external view returns (uint8);
     function _generateAddressHash(address host, string memory uid) external view returns (address);
@@ -263,13 +264,13 @@ contract GamerTokeAward is ERC20, Ownable {
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
     //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    function burnGTA_HARD(uint32 burnCode) external returns (bool) {
+    function burnGTA_HARD(uint32 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
         require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
         require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
         return _burnGTA();
     }
-    function burnGTA_EASY(uint16 burnCode) external returns (bool) {
+    function burnGTA_EASY(uint16 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
         require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
         require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
