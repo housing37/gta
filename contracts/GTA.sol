@@ -31,8 +31,10 @@ interface IGTADelegate {
     // public access
     function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function minEventEntryFeeUSD() external view returns (uint32); // auto-generated getter
+    function maxHostFeePerc() external view returns (uint8);
     function _generateAddressHash(address host, string memory uid) external view returns (address);
-    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool);
+    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external view returns (bool);
+    function gtaHoldingRequiredToHost(address _tok_gta, uint32 _entryFeeUSD) external returns (uint256);
     function _getTotalsOfArray(uint8[] calldata _arr) external view returns (uint8);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
@@ -357,7 +359,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return creditsUSD[msg.sender];
     }
 
-    // verify your event registration
+    // verify your registration for event 
     function checkMyRegistration(address _eventCode) external view returns (bool) {
         require(_eventCode != address(0), 'err: no event code ;o');
 
@@ -369,22 +371,24 @@ contract GamerTokeAward is ERC20, Ownable {
         return evt.event_1.players[msg.sender];
     }
 
-    // gameCode = hash(_host, _gameName)
-    function getGameCode(address _host, string memory _gameName) external view returns (address) {
-        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
-        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
-        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
-        return _getGameCode(_host, _gameName);
-    }
-    function verifyHostRequirementsForEntryFee(uint32 _entryFeeUSD) external returns (bool) {
+    // verify your own GTA holding rquired to host
+    function checkMyGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external view returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
     }
 
-    // LEFT OFF HERE ... need function integration
-    function checkGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external returns () {
+    function getGameCode(address _host, string memory _gameName) external view returns (address) {
+        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
+        require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
+        require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
+        // gameCode = hash(_host, _gameName)
+        return _getGameCode(_host, _gameName);
+    }
+    function getGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external returns (uint256) {
+        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
+        return GTAD.gtaHoldingRequiredToHost(address(this), _entryFeeUSD);
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
@@ -402,7 +406,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // verify active game name/code doesn't exist yet
         address gameCode = GTAD._generateAddressHash(msg.sender, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length == 0, "err: game name already exists :/");
+        require(activeGames[gameCode].host == address(0), 'err: game name already exists :/');
 
         // Creates a default empty 'Game' struct for 'gameCode' (doesn't exist yet)
         //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
@@ -596,7 +600,7 @@ contract GamerTokeAward is ERC20, Ownable {
             address winner = _winners[i];
             uint32 win_usd = game.event_2.payoutsUSD[i];
 
-            // pay winner
+            // pay winner (w/ lowest market value stable)
             address stable = _transferBestDebitStableUSD(winner, win_usd);
 
             // syncs w/ 'settleBalances' algorithm
@@ -609,8 +613,10 @@ contract GamerTokeAward is ERC20, Ownable {
             emit EndEventDistribution(winner, i, game.event_2.winPercs[i], win_usd, game.event_2.prizePoolUSD, stable);
         }
 
-        // pay host & keeper
+        // pay host (w/ lowest market value stable)
         address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
+
+        // pay keeper (w/ lowest market value stable)
         address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), game.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
@@ -745,7 +751,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function _getGameCode(address _host, string memory _gameName) private view returns (address) {
         // generate gameCode from host address and game name
         address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(bytes(activeGames[gameCode].gameName).length > 0, "err: game code not found :{}");
+        require(activeGames[gameCode].host != address(0), 'err: game name for host not found :{}');
         return gameCode;
     }
     function _getPlayers(address _gameCode) private view returns (address[] memory) {

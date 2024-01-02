@@ -273,14 +273,23 @@ contract GTADelegate {
         }
         return false;
     }
-    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external returns (bool) {
+    function _hostCanCreateEvent(address _host, address _tok_gta, uint32 _entryFeeUSD) external view returns (bool) {
         // get best stable quote for host's gta_bal (traverses 'uswapV2routers')
         uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
         address[] memory gta_stab_path = new address[](2);
-        gta_stab_path[0] = address(this);
-        gta_stab_path[1] = _getNextStableTokDeposit();
+        gta_stab_path[0] = _tok_gta;
+        gta_stab_path[1] = _getStableTokenHighMarketValue(whitelistStables);
         (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal);
         return stable_quote >= ((_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100));
+    }
+    function gtaHoldingRequiredToHost(address _tok_gta, uint32 _entryFeeUSD) external view returns (uint256) {
+        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
+        require(_tok_gta != address(0), 'err: _tok_gta address is 0 :/');
+        address[] memory stab_gta_path = new address[](2);
+        stab_gta_path[0] = _getStableTokenHighMarketValue(whitelistStables);
+        stab_gta_path[1] = _tok_gta;
+        (uint8 rtrIdx, uint256 gta_quote) = _best_swap_v2_router_idx_quote(stab_gta_path, (_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100));
+        return gta_quote;
     }
 
     function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8) {
@@ -299,6 +308,7 @@ contract GTADelegate {
         return gta_amnt_out;
     }
 
+    // get lowest market value stable
     function _getBestDebitStableUSD(uint32 _amountUSD) external view onlyKeeper returns (address) {
         // loop through 'whitelistStables', generate stables available (bals ok for debit)
         address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
@@ -380,16 +390,16 @@ contract GTADelegate {
         return stables_avail;
     }
 
-    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
-    function _getStableTokenLowMarketValue(address[] memory stables) private view returns (address) {
-        // traverse stables available for debit, select stable w/ the lowest market value
+    // NOTE: *WARNING* _stables could have duplicates (from 'whitelistStables' set by keeper)
+    function _getStableTokenLowMarketValue(address[] memory _stables) private view returns (address) {
+        // traverse _stables & select stable w/ the lowest market value
         uint256 curr_high_tok_val = 0;
         address curr_low_val_stable = address(0x0);
-        for (uint i=0; i < stables.length; i++) {
-            address stable_addr = stables[i];
+        for (uint i=0; i < _stables.length; i++) {
+            address stable_addr = _stables[i];
             if (stable_addr == address(0)) { continue; }
 
-            // get quote for this available stable (traverses 'uswapV2routers')
+            // get quote for this stable (traverses 'uswapV2routers')
             //  looking for the stable that returns the most when swapped 'from' WPLS
             //  the more USD stable received for 1 WPLS ~= the less overall market value that stable has
             address[] memory wpls_stab_path = new address[](2);
@@ -402,6 +412,30 @@ contract GTADelegate {
             }
         }
         return curr_low_val_stable;
+    }
+
+    // NOTE: *WARNING* _stables could have duplicates (from 'whitelistStables' set by keeper)
+    function _getStableTokenHighMarketValue(address[] memory _stables) private view returns (address) {
+        // traverse _stables & select stable w/ the highest market value
+        uint256 curr_low_tok_val = 0;
+        address curr_high_val_stable = address(0x0);
+        for (uint i=0; i < _stables.length; i++) {
+            address stable_addr = _stables[i];
+            if (stable_addr == address(0)) { continue; }
+
+            // get quote for this stable (traverses 'uswapV2routers')
+            //  looking for the stable that returns the least when swapped 'from' WPLS
+            //  the less USD stable received for 1 WPLS ~= the more overall market value that stable has
+            address[] memory wpls_stab_path = new address[](2);
+            wpls_stab_path[0] = TOK_WPLS;
+            wpls_stab_path[1] = stable_addr;
+            (uint8 rtrIdx, uint256 tok_val) = _best_swap_v2_router_idx_quote(wpls_stab_path, 1 * 10**18);
+            if (tok_val >= curr_low_tok_val) {
+                curr_low_tok_val = tok_val;
+                curr_high_val_stable = stable_addr;
+            }
+        }
+        return curr_high_val_stable;
     }
 
     // support hostEndEventWithWinners
