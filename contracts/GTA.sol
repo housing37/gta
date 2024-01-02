@@ -261,13 +261,13 @@ contract GamerTokeAward is ERC20, Ownable {
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
     //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    function burnGTA_HARD(uint32 burnCode) public returns (bool) {
+    function burnGTA_HARD(uint32 burnCode) external returns (bool) {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
         require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
         require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
         return _burnGTA();
     }
-    function burnGTA_EASY(uint16 burnCode) public returns (bool) {
+    function burnGTA_EASY(uint16 burnCode) external returns (bool) {
         BURN_CODE_GUESS_CNT++; // keep track of guess count
         require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
         require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
@@ -311,7 +311,10 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_sec > 0, 'err: no zero :{}');
         gameExpSec = _sec;
     }
-    // code required for 'burnGTA'
+    function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
+        return lastBlockNumUpdate;
+    }
+    // '_burnGTA' support
     function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
         require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
         BURN_CODE_EASY = bc;
@@ -331,11 +334,10 @@ contract GamerTokeAward is ERC20, Ownable {
     function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
-        return lastBlockNumUpdate;
-    }
-
-    // NOTE: allows players to confirm they have registered for an event
+    
+    /* -------------------------------------------------------- */
+    /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
+    /* -------------------------------------------------------- */
     function infoGetPlayersForGame(address _host, string memory _gameName) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_host != address(0), "err: invalid host :/" );
         require(bytes(_gameName).length > 0, "err: no game name :/");
@@ -351,8 +353,20 @@ contract GamerTokeAward is ERC20, Ownable {
     /* PUBLIC - HOST / PLAYER SUPPORT                           */
     /* -------------------------------------------------------- */
     // view your own credits ('creditsUSD' are not available for withdrawel)
-    function myCredits() external view returns (uint32) {
+    function checkMyCredits() external view returns (uint32) {
         return creditsUSD[msg.sender];
+    }
+
+    // verify your event registration
+    function checkMyRegistration(address _eventCode) external view returns (bool) {
+        require(_eventCode != address(0), 'err: no event code ;o');
+
+        // validate _eventCode exists
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid event code :I');
+
+        // check msg.sender is registered
+        return evt.event_1.players[msg.sender];
     }
 
     // gameCode = hash(_host, _gameName)
@@ -366,6 +380,11 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
+    }
+
+    // LEFT OFF HERE ... need function integration
+    function checkGtaHoldingRequiredToHost(uint32 _entryFeeUSD) external returns () {
+
     }
 
     // _winPercs: [%_1st_place, %_2nd_place, ...] = total 100%
