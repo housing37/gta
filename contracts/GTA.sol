@@ -111,6 +111,9 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* STRUCTURES                                               */
     /* -------------------------------------------------------- */
+    // LEFT OFF HERE ... migrate event structs over to GTADelegate
+    //  maybe rename GTADelegate.sol to GTAEVent.sol ?
+
     /* _ GAME SUPPORT _ */
     struct Event_0 {
         /** cons */
@@ -302,12 +305,6 @@ contract GamerTokeAward is ERC20, Ownable {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
     /* -------------------------------------------------------- */
-    function infoGetPlayersForGame(address _host, string memory _gameName) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
-        require(_host != address(0), "err: invalid host :/" );
-        require(bytes(_gameName).length > 0, "err: no game name :/");
-        address _gameCode = _getGameCode(_host, _gameName);
-        return _getPlayers(_gameCode);
-    }
     function infoGetPlayersForGameCode(address _gameCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
         return _getPlayers(_gameCode);
@@ -315,8 +312,20 @@ contract GamerTokeAward is ERC20, Ownable {
     function infoGetBurnGtaBalanceRequired() external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (uint256) {
         return GTAD.burnGtaBalanceRequired();
     }
+    function infoGetDetailsForEventCode(address _eventCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
+        require(_eventCode != address(0) && activeGames[_eventCode].host != address(0), 'err: invalid event code :O');
+        return _getPublicEventDetails(_eventCode);
+    }
+    function _getPublicEventDetails(address _eventCode) private view returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
+        require(activeGames[_eventCode].host != address(0), 'err: invalid event');
+        Event_0 storage e = activeGames[_eventCode];
+        Event_1 storage e1 = e.event_1;
+        Event_2 memory e2 = e.event_2;
+        string memory eventName = e.gameName;
+        return (_eventCode, e.host, eventName, e.entryFeeUSD, e2.winPercs, e1.hostFeePerc, e.createBlockNum, e.createTime, e.startTime, e.expTime);
+    }
 
-    /* SIDE QUEST... CRACK THE BURN CODE                        */
+    /* SIDE QUEST... CRACK THE (BURN) CODE                        */
     // public can try to guess the burn code (burn buyGtaPerc of the balance, earn the rest)
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
@@ -343,7 +352,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // verify your registration for event 
-    function checkMySeatRegistration(address _eventCode) external view returns (bool) {
+    function checkMyRegistrationForEvent(address _eventCode) external view returns (bool) {
         require(_eventCode != address(0), 'err: no event code ;o');
 
         // validate _eventCode exists
@@ -412,6 +421,8 @@ contract GamerTokeAward is ERC20, Ownable {
         activeGameCodes = GTAD.addAddressToArraySafe(eventCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
+        // LEFT OFF HERE ... need emit notification for 'createEvent' event
+
         // return eventCode to caller
         return eventCode;
     }
@@ -422,7 +433,7 @@ contract GamerTokeAward is ERC20, Ownable {
     //              2) tweet: @GamerTokenAward register <wallet_address> <game_code>
     //                  OR ... for free play w/ host register
     //              3) tweet: @GamerTokenAward play <wallet_address> <game_code>
-    function registerSeatForEvent(address _eventCode) public returns (bool) {
+    function registerForEvent(address _eventCode) public returns (bool) {
         require(_eventCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
@@ -489,10 +500,10 @@ contract GamerTokeAward is ERC20, Ownable {
         return true;
     }
 
-    // cancel event and process refunds (host, players, keeper)
+    // cancel event and process refunds (host, guests, keeper)
     //  host|keeper can cancel if event not 'launched' yet
-    //  players can cancel if event not 'launched' & 'expTime' has passed
-    function cancelEventProcessRefunds(address _eventCode) external {
+    //  guests can cancel if event not 'launched' & 'expTime' has passed
+    function cancelEventAndProcessRefunds(address _eventCode) external {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
@@ -501,39 +512,39 @@ contract GamerTokeAward is ERC20, Ownable {
         
         // check for valid sender to cancel (only registered players, host, or keeper)
         bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.getKeeper();
-        require(isValidSender, 'err: only players or host :<>');
+        require(isValidSender, 'err: only registerd guests or host :<>');
 
-        // for host|player|keeper cancel, verify event not launched
-        require(!evt.event_1.launched, 'err: event started :<>'); 
+        // for host|guest|keeper cancel, verify event not launched
+        require(!evt.event_1.launched, 'err: event already started :<>'); 
 
-        // for player cancel, also verify event expTime must be passed 
+        // for guest cancel, also verify event expTime must be passed 
         if (evt.event_1.players[msg.sender]) {
             require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
         } 
 
-        //  loop through players, choose stable for refund, transfer from IERC20
+        // loop through guests & process refunds via '_updateCredits'
         for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
-            // (OPTION_0) _ REFUND ENTRY FEE (via ON-CHAIN STABLE) ... to player wallet
-            // send 'refundUSD_ind' back to player on chain (using lowest market value whitelist stable)
-            // address stable = _transferBestDebitStableUSD(evt.event_1.players[i], evt.event_2.refundUSD_ind);
-
-            // (OPTION_1) _ REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
-            //  service fees: calc/set in 'hostStartEvent' (AFTER 'registerEvent|hostRegisterEvent')
-            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerEvent|hostRegisterEvent')
-            //   this allows 'registerEvent|hostRegisterEvent' & 'cancelEventProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+            // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
+            //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_generatePrizePool' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
+            //   this allows 'registerForEvent|hostRegisterSeatForEvent' & 'cancelEventAndProcessRefunds' to sync w/ regard to 'entryFeeUSD'
             //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
-            //      - 'registerEvent|hostRegisterEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
-            //      - 'hostStartEvent' calcs 'prizePoolUSD' & 'payoutsUSD'
-            //      - 'hostStartEvent' sets remaining fees -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
-            //      - 'cancelEventProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (w/o regard for any fees)
+            //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithWinners' adds to them
+            //      - 'registerForEvent|hostRegisterSeatForEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
+            //      - 'hostStartEvent' calcs/sets 'totalFeesUSD' -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
+            //      - 'hostStartEvent' calcs/sets 'prizePoolUSD' & 'payoutsUSD' & 'refundUSD_ind' (from total 'entryFeeUSD' collected - 'totalFeesUSD')
+            //      - 'hostEndEventWithWinners' processes buy & burn, pays winners w/ 'payoutsUSD', mints GTA to winners
+            //      - 'hostEndEventWithWinners' adds to 'whitelistPendingDebits' as 'settleBalances' deletes them
+            //      - 'hostEndEventWithWinners' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
+            //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
 
-            // credit player in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+            // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
             _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
-
+        
         // set event params to end state
         _endEvent(_eventCode);
 
@@ -764,6 +775,7 @@ contract GamerTokeAward is ERC20, Ownable {
         return gameCode;
     }
     function _getPlayers(address _gameCode) private view returns (address[] memory) {
+        require(activeGames[_gameCode].host != address(0), 'err: _gameCode not found :{}');
         return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
     }
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
