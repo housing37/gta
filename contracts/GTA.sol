@@ -79,6 +79,11 @@ contract GamerTokeAward is ERC20, Ownable {
     // track activeGameCodes array for keeper 'keeperGetGameCodes'
     address[] private activeGameCodes;
 
+    // track transfer of active events to dead events
+    mapping(address => Event_0) private deadEvents;
+    uint64 private deadEventCount = 0; 
+    address[] private deadEventCodes;
+
     // game experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
 
@@ -301,7 +306,12 @@ contract GamerTokeAward is ERC20, Ownable {
     function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    
+    function keeperDeleteDeadEvents() external onlyKeeper {
+        for (uint i; i < deadEventCodes.length; i++) {
+            // NOTE: no error check for address(0), want to clean regardless
+            _deleteDeadEvent(deadEventCodes[i]);
+        }
+    }
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
     /* -------------------------------------------------------- */
@@ -813,18 +823,27 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // set event param to end state
     function _endEvent(address _evtCode) private {
+        require(_evtCode != address(0) && activeGames[_evtCode].host != address(0), 'err: invalid event code :P');
         Event_0 storage _evt = activeGames[_evtCode];
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
         _evt.endBlockNum = block.number;
         _evt.event_1.ended = true;
 
-        // delete game mapping
-        delete activeGames[_evtCode];
+        // transfer active events to dead events
+        deadEvents[_evtCode] = activeGames[_evtCode];
+        deadEventCodes = GTAD.addAddressToArraySafe(_evtCode, deadEventCodes, true);
+        deadEventCount++;
 
-        // decrement support
+        // remove active event
+        delete activeGames[_evtCode]; // delete event mapping
         activeGameCodes = GTAD.remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
+    }
+    function _deleteDeadEvent(address _evtCode) private {
+        // NOTE: no error check for address(0), want to clean regardless
+        delete deadEvents[_evtCode]; // delete event mapping
+        deadEventCount--;
     }
 
     // set event params to launched state
