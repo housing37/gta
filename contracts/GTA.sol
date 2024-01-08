@@ -77,12 +77,12 @@ contract GamerTokeAward is ERC20, Ownable {
     uint64 private activeGameCount = 0; 
 
     // track activeGameCodes array for keeper 'keeperGetGameCodes'
-    address[] private activeGameCodes;
+    address[] private activeGameCodes = new address[](0);
 
     // track transfer of active events to dead events
     mapping(address => Event_0) private deadEvents;
     uint64 private deadEventCount = 0; 
-    address[] private deadEventCodes;
+    address[] private deadEventCodes = new address[](0);
 
     // game experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
     uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
@@ -135,7 +135,7 @@ contract GamerTokeAward is ERC20, Ownable {
         uint256 endTime;        // 'hostEndGameWithWinners'
         uint256 endBlockNum;    // 'hostEndGameWithWinners'
         uint256 expTime;        // expires if not launched by this time
-        uint256 expBlockNum;    // 'cancelEventProcessRefunds'
+        uint256 expBlockNum;    // 'cancelEventAndProcessRefunds'
 
         Event_1 event_1;
         Event_2 event_2;
@@ -144,7 +144,7 @@ contract GamerTokeAward is ERC20, Ownable {
         // ------------------------------------------
         bool launched;  // 'hostStartEvent'
         bool ended;     // 'hostEndEventWithWinners'
-        // bool expired;   // 'cancelEventProcessRefunds'
+        // bool expired;   // 'cancelEventAndProcessRefunds'
         // LEFT OFF HERE ... 'expired' is never used
 
         // ------------------------------------------
@@ -157,7 +157,7 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // uint8 mintDistrPerc;    // % of ?
         
-        /** _generatePrizePool */
+        /** _calcFeesAndPayouts */
         uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
         uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
         uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
@@ -171,7 +171,7 @@ contract GamerTokeAward is ERC20, Ownable {
         uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
         uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
         
-        /** _generatePrizePool */
+        /** _calcFeesAndPayouts */
         uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
         uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
         uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
@@ -306,11 +306,17 @@ contract GamerTokeAward is ERC20, Ownable {
     function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    function keeperDeleteDeadEvents() external onlyKeeper {
+    function keeperDeleteDeadEvent(address _evtCode) external onlyKeeper {
+        require(_evtCode != address(0) && deadEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+        _deleteDeadEvent(_evtCode);
+    }
+    function keeperCleanOutDeadEvents() external onlyKeeper {
         for (uint i; i < deadEventCodes.length; i++) {
-            // NOTE: no error check for address(0), want to clean regardless
-            _deleteDeadEvent(deadEventCodes[i]);
+            // NOTE: no error check for address(0), want to clean regardless            
+            delete deadEvents[deadEventCodes[i]]; // delete event mapping
         }
+        deadEventCodes = new address[](0);
+        deadEventCount = 0;
     }
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
@@ -336,7 +342,7 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     /* SIDE QUEST... CRACK THE (BURN) CODE                        */
-    // public can try to guess the burn code (burn buyGtaPerc of the balance, earn the rest)
+    // public can try to guess the burn code (to burn buyGtaPerc of the balance, earn the rest)
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
     //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
@@ -536,7 +542,7 @@ contract GamerTokeAward is ERC20, Ownable {
         for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
             // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
-            //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_generatePrizePool' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
+            //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
             //   this allows 'registerForEvent|hostRegisterSeatForEvent' & 'cancelEventAndProcessRefunds' to sync w/ regard to 'entryFeeUSD'
             //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
             //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithWinners' adds to them
@@ -562,21 +568,21 @@ contract GamerTokeAward is ERC20, Ownable {
         emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
     }
 
-    // host can start event w/ players pre-registerd for gameCode
-    function hostStartEvent(address _gameCode) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
+    // host can start event w/ guests pre-registerd for _eventCode
+    function hostStartEvent(address _eventCode) public returns (bool) {
+        require(_eventCode != address(0), 'err: no event code :p');
 
         // get/validate active game
-        Event_0 storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+        require(evt.host == msg.sender, 'err: only host :/');
 
         // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
         //  calc/deduct all fees & generate 'buyGtaUSD' from 'serviceFeeUSD'
-        game = _generatePrizePool(game); // ? Event_0 storage game = _generatePrizePool(game); ?
-        game = _launchEvent(game); // set event state to 'launched = true'
+        evt = _calcFeesAndPayouts(evt); // ? Event_0 storage evt = _calcFeesAndPayouts(evt); ?
+        evt = _launchEvent(evt); // set event state to 'launched = true'
 
         return true;
     }
@@ -841,8 +847,9 @@ contract GamerTokeAward is ERC20, Ownable {
         activeGameCount--;
     }
     function _deleteDeadEvent(address _evtCode) private {
-        // NOTE: no error check for address(0), want to clean regardless
+        require(_evtCode != address(0) && deadEvents[_evtCode].host != address(0), 'err: invalid event code :/');
         delete deadEvents[_evtCode]; // delete event mapping
+        deadEventCodes = GTAD.remAddressFromArray(_evtCode, deadEventCodes);
         deadEventCount--;
     }
 
@@ -856,8 +863,8 @@ contract GamerTokeAward is ERC20, Ownable {
         return _evt;
     }
 
-    // calculate prize pool, payoutsUSD, fees, refunds, totals
-    function _generatePrizePool(Event_0 storage _evt) private returns (Event_0 storage) {
+    // calc prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD
+    function _calcFeesAndPayouts(Event_0 storage _evt) private returns (Event_0 storage) {
         /* DEDUCTING FEES
             current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
              - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
@@ -871,13 +878,13 @@ contract GamerTokeAward is ERC20, Ownable {
                 supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
 
                 GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
-                    hostFeeUSD = prizePoolUSD * hostFeePerc
-                NET prizePoolUSD -= hostFeeUSD
-                    payoutsUSD[i] = prizePoolUSD * 'winPercs[i]'
+                    hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
+                NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
+                    payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
         */
 
         // calc individual player fees (BEFORE generating 'prizePoolUSD') 
-        //  '_ind' used for refunds in 'cancelEventProcessRefunds' (excludes 'hostFeeUSD_ind')
+        //  '_ind' used for refunds in 'cancelEventAndProcessRefunds' (excludes 'hostFeeUSD_ind')
         _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (GTAD.keeperFeePerc()/100);
         _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (GTAD.serviceFeePerc()/100);
         _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (GTAD.supportFeePerc()/100);
@@ -896,12 +903,22 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyGtaPerc'?
         //                      or do we want to let the host choose?
+        //  potential model...
+        //      1) remove GTA from the market: 
+        //          - host can choose to pay service fee in GTA for a discount (we buy and burn)
+        //          - host required to hold some GTA in order to host 
+        //      2) add GTA to the market: 
+        //          - host gets minted some amount for hosting games
+        //          - player gets minted some amount for winning games 
+        //      #2 always has to be less than #1 for every hosted event 
+        //          - the value of amounts minted must always be less than the service fee
+
         // calc: tot 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
         //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
         _evt.event_2.buyGtaUSD = _evt.event_1.serviceFeeUSD * (buyGtaPerc/100);
         _evt.event_1.serviceFeeUSD -= _evt.event_2.buyGtaUSD; // NET
 
-        // calc idividual & total refunds (for 'cancelEventProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
+        // calc idividual & total refunds (for 'cancelEventAndProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
         _evt.event_2.refundUSD_ind = _evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind; 
         _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.playerCnt;
 
