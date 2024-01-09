@@ -105,6 +105,7 @@ contract GamerTokeAward is ERC20, Ownable {
     uint8 public buyGtaPerc = 50; // % of total 'serviceFeeUSD' collected (set to buyGtaUSD)
     uint8 public burnGtaPerc = 50; // % of total GTA token held by this contract (to burn)
     uint8 public mintGtaPerc = 50; // % of GTA allocated from 'serviceFeeUSD' (minted/divided to winners)
+    bool public mintGtaToHost = true; // host included in mintGtaPerc (calc in 'hostEndEventWithGuestRecipients')
 
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
@@ -144,7 +145,7 @@ contract GamerTokeAward is ERC20, Ownable {
     struct Event_1 { 
         // ------------------------------------------
         bool launched;  // 'hostStartEvent'
-        bool ended;     // 'hostEndEventWithWinners'
+        bool ended;     // 'hostEndEventWithGuestRecipients'
         // bool expired;   // 'cancelEventAndProcessRefunds'
         // LEFT OFF HERE ... 'expired' is never used
 
@@ -319,6 +320,10 @@ contract GamerTokeAward is ERC20, Ownable {
         deadEventCodes = new address[](0);
         deadEventCount = 0;
     }
+    function keeperSetMintGtaToHost(bool _mintToHost) external onlyKeeper {
+        mintGtaToHost = _mintToHost;
+    }
+    
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
     /* -------------------------------------------------------- */
@@ -407,7 +412,8 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
         require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
-        require(GTAD._getTotalsOfArray(_winPercs) - _hostFeePerc <= 100, 'err: _winPercs + _hostFeePerc <= 100 required :/');
+        require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
+        require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc <= 100, 'err: _winPercs + _hostFeePerc <= 100 required :/');
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
@@ -458,7 +464,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if game launched
-        require(!evt.event_1.launched, "err: event already launched :(");
+        require(!evt.event_1.launched, "err: event already started :(");
 
         // check if host trying to register
         require(evt.host != msg.sender, 'err: invalid guest, no host registration :{}');
@@ -497,7 +503,7 @@ contract GamerTokeAward is ERC20, Ownable {
         require(evt.host != _guest, 'err: invalid guest, no host registration :{}');
 
         // check if event launched
-        require(!evt.event_1.launched, 'err: event already launched :(');
+        require(!evt.event_1.launched, 'err: event already started :(');
 
         // check _guest already registered
         require(!evt.event_1.players[_guest], 'err: _guest already registered for this _eventCode :p');
@@ -546,13 +552,13 @@ contract GamerTokeAward is ERC20, Ownable {
             //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
             //   this allows 'registerForEvent|hostRegisterSeatForEvent' & 'cancelEventAndProcessRefunds' to sync w/ regard to 'entryFeeUSD'
             //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
-            //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithWinners' adds to them
+            //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithGuestRecipients' adds to them
             //      - 'registerForEvent|hostRegisterSeatForEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
             //      - 'hostStartEvent' calcs/sets 'totalFeesUSD' -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
             //      - 'hostStartEvent' calcs/sets 'prizePoolUSD' & 'payoutsUSD' & 'refundUSD_ind' (from total 'entryFeeUSD' collected - 'totalFeesUSD')
-            //      - 'hostEndEventWithWinners' processes buy & burn, pays winners w/ 'payoutsUSD', mints GTA to winners
-            //      - 'hostEndEventWithWinners' adds to 'whitelistPendingDebits' as 'settleBalances' deletes them
-            //      - 'hostEndEventWithWinners' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
+            //      - 'hostEndEventWithGuestRecipients' processes buy & burn, pays winners w/ 'payoutsUSD', mints GTA to winners
+            //      - 'hostEndEventWithGuestRecipients' adds to 'whitelistPendingDebits' as 'settleBalances' deletes them
+            //      - 'hostEndEventWithGuestRecipients' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
             //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
 
             // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
@@ -580,6 +586,9 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if msg.sender is game host
         require(evt.host == msg.sender, 'err: only host :/');
 
+        // check if event not started yet
+        require(!evt.event_1.launched, 'err: event already started');
+
         // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
         //  calc/deduct all fees & generate 'buyGtaUSD' from 'serviceFeeUSD'
         evt = _calcFeesAndPayouts(evt); // ? Event_0 storage evt = _calcFeesAndPayouts(evt); ?
@@ -589,41 +598,48 @@ contract GamerTokeAward is ERC20, Ownable {
     }
 
     // _winners: [0x1st_place, 0x2nd_place, ...]
-    function hostEndEventWithWinners(address _gameCode, address[] memory _winners) public returns (bool) {
-        require(_gameCode != address(0), 'err: no game code :p');
-        require(_winners.length > 0, 'err: no winners :p');
+    // earners, gainers, recipients, receivers, achievers, Leaders, Victors, PaidGuests
+    function hostEndEventWithGuestRecipients(address _eventCode, address[] memory _guests) public returns (bool) {
+        require(_eventCode != address(0), 'err: no event code :p');
+
+        // NOTE: _guests.lengh = 0, means no winners paid
+        require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
-        Event_0 storage game = activeGames[_gameCode];
-        require(game.host != address(0), 'err: invalid game code :I');
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
-        require(game.host == msg.sender, 'err: only host :/');
+        // check if msg.sender is event host
+        require(evt.host == msg.sender, 'err: only host :/');
 
-        // check if # of _winners == .event_2.winPercs array length (set during eventCreate)
-        require(game.event_2.winPercs.length == _winners.length, 'err: number of winners =(');
+        // check if event started
+        require(evt.event_1.launched, 'err: event not started yet');
+
+        // check if # of _guests.length == winPercs.length == payoutsUSD.length (set during createEvent & hostStartEvent)
+        require(evt.event_2.winPercs.length == _guests.length && _guests.length == evt.event_2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
         // LEFT OFF HERE ... currently '_processBuyAndBurnStableSwap' swaps from GTADelegate.sol
         //  but GTA.sol contract address needs to provide the stable and receive the GTA (during swap)
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
-        uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(game.event_2.buyGtaUSD), game.event_2.buyGtaUSD);
+        uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
 
-        // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy', divided equally to all '_winners'
-        //  NOTE: remaining 'gta_amnt_buy' is simply held by this GTA contract
-        uint256 gta_amnt_mint = (gta_amnt_buy * (mintGtaPerc/100)) / _winners.length;
+        // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
+        //  gta_amnt_mint gets divided equally to all '_winners' + host (if 'mintGtaToHost'; keeper controlled)
+        // NOTE: remaining 'gta_amnt_buy' is simply held by this GTA contract
+        uint256 gta_amnt_mint_ind = (gta_amnt_buy * (mintGtaPerc/100)) / (_guests.length + (mintGtaToHost ? 1 : 0)); // +1 = host
 
-        // LEFT OFF HERE ... should host be minted some amount for hosting the game as well?
-        //      maybe divide by _winners.length + 1 ?
+        // mint GTA to host (if applicable; keeper controlled)
+        if (mintGtaToHost) { _mint(evt.host, gta_amnt_mint_ind); }
 
-        // loop through _winners: distribute 'game.event_2.winPercs'
-        for (uint16 i=0; i < _winners.length; i++) {
-            // verify winner address was registered in the game
-            require(game.event_1.players[_winners[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
+        // loop through _winners: distribute 'evt.event_2.winPercs'
+        for (uint16 i=0; i < _guests.length; i++) {
+            // verify winner address was registered in the event
+            require(evt.event_1.players[_guests[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
             // calc win_usd
-            address winner = _winners[i];
-            uint32 win_usd = game.event_2.payoutsUSD[i];
+            address winner = _guests[i];
+            uint32 win_usd = evt.event_2.payoutsUSD[i];
 
             // pay winner (w/ lowest market value stable)
             address stable = _transferBestDebitStableUSD(winner, win_usd);
@@ -632,28 +648,34 @@ contract GamerTokeAward is ERC20, Ownable {
             GTAD._increaseWhitelistPendingDebit(stable, win_usd);
 
             // mint GTA to this winner (amount is same for all winners)
-            _mint(winner, gta_amnt_mint);
+            _mint(winner, gta_amnt_mint_ind);
 
             // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, i, game.event_2.winPercs[i], win_usd, game.event_2.prizePoolUSD, stable);
+            emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // pay host (w/ lowest market value stable)
-        address stable_host = _transferBestDebitStableUSD(game.host, game.event_2.hostFeeUSD);
+        // LEFT OFF HERE ... need to distribute all of 'prizePoolUSD' to host if no winners set
+        //  should be in 2 different 'transfers'
+        //  NOTE: do not want GTA contract to take responsibility for withholding funds or refunding credits, etc.
+        //      do not want responsibility for any assumptions or errors w/ no winners declared
+        //      ie. full 'prizePoolUSD' should always be distributed 
 
-        // pay keeper (w/ lowest market value stable)
-        address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), game.event_1.keeperFeeUSD);
+        // pay host (w/ lowest market value stable)
+        address stable_host = _transferBestDebitStableUSD(evt.host, evt.event_2.hostFeeUSD);
+
+        // pay keeper (w/ lowest market value stable) .. LEFT OFF HERE ... should be stable w/ highest market value?
+        address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), evt.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
         //  also, maybe we should pay keeper and support in 'hostStartEvent'
         //  also, 'serviceFeeUSD' is simply maintained in contract, 
         //    but should we do something else with it? perhaps track it in global? perhaps send it to some service fee wallet address?
         
-        // set event params to end state
-        _endEvent(_gameCode);
+        // set event params to end state & transfer to deadEvents array
+        _endEvent(_eventCode);
 
         // notify client side that an end event occurred successfully
-        emit EndEventActivity(_gameCode, game.host, _winners, game.event_2.prizePoolUSD, game.event_2.hostFeeUSD, game.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
+        emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
     }
@@ -838,6 +860,8 @@ contract GamerTokeAward is ERC20, Ownable {
     // set event param to end state
     function _endEvent(address _evtCode) private {
         require(_evtCode != address(0) && activeGames[_evtCode].host != address(0), 'err: invalid event code :P');
+        require(activeGames[_evtCode].event_1.launched, 'err: event not launched');
+
         Event_0 storage _evt = activeGames[_evtCode];
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
@@ -863,6 +887,8 @@ contract GamerTokeAward is ERC20, Ownable {
 
     // set event params to launched state
     function _launchEvent(Event_0 storage _evt) private returns (Event_0 storage ) {
+        require(!_evt.event_1.launched, 'err: event already launched');
+
         // set event fee calculations & prizePoolUSD
         // set event launched state
         _evt.launchTime = block.timestamp;
@@ -894,7 +920,7 @@ contract GamerTokeAward is ERC20, Ownable {
                 GROSS serviceFeeUSD = GROSS entryFeeUSD * serviceFeePerc
                   NET serviceFeeUSD = GROSS serviceFeeUSD - buyGtaUSD
                 
-                NOTE: buyGtaUSD used to buy GTA from market (in 'hostEndEventWithWinners'),
+                NOTE: buyGtaUSD used to buy GTA from market (in 'hostEndEventWithGuestRecipients'),
                        which is then held by GTA contract address (until '_burnGTA' invoked)
                       then '_burnGTA' burns 'burnGtaPerc' of all GTA held
                        w/ remaining GTA held being sent to msg.sender
@@ -931,13 +957,13 @@ contract GamerTokeAward is ERC20, Ownable {
         //     - host choice: to pay service fee in GTA for a discount (and then we buy and burn)
         //    NEW MODEL
         //     - keeper set: buyGtaPerc of serviceFeeUSD = buyGtaUSD (for every event)
-        //     - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithWinners')
+        //     - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithGuestRecipients')
         //     - host required to hold some GTA in order to host (handled in 'createEvent')
         //     - 'info|burn|cancel' public functions require holding GTA
         // 
         // 2) add GTA to the market: 
-        //     - host gets minted some amount for hosting games (handled in 'hostEndEventWithWinners')
-        //     - player gets minted some amount for winning games (handled in 'hostEndEventWithWinners')
+        //     - host gets minted some amount for hosting games (handled in 'hostEndEventWithGuestRecipients')
+        //     - player gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
         //
         // #2 always has to be less than #1 for every hosted event 
         //     - the value of amounts minted must always be less than the service fee
@@ -962,7 +988,12 @@ contract GamerTokeAward is ERC20, Ownable {
         // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
         _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
         
-        // calc payoutsUSD (finally, AFTER all deductions )
+        // calc payoutsUSD (finally, AFTER all deductions)
+        // NOTE: if 'winPercs.length' == 0, then 'payoutsUSD' == 0 (empty array)
+        //  hence, only 'hostFeePerc' of 'prizePoolUSD' will paid out for this event in 'hostEndEventWithGuestRecipients'
+        //      remaining 'prizePoolUSD' will simply be held in stable by GTA contract address
+
+        // LEFT OFF HERE ... need to distribute all of 'prizePoolUSD' to host
         for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
             _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * (_evt.event_2.winPercs[i]/100));
         }
