@@ -31,6 +31,7 @@ interface IGTADelegate {
     // public access
     function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function burnGtaBalanceRequired() external view returns (uint256); // auto-generated getter
+    function cancelGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function minEventEntryFeeUSD() external view returns (uint32); // auto-generated getter
     function maxHostFeePerc() external view returns (uint8);
     function _generateAddressHash(address host, string memory uid) external view returns (address);
@@ -519,7 +520,7 @@ contract GamerTokeAward is ERC20, Ownable {
     // cancel event and process refunds (host, guests, keeper)
     //  host|keeper can cancel if event not 'launched' yet
     //  guests can cancel if event not 'launched' & 'expTime' has passed
-    function cancelEventAndProcessRefunds(address _eventCode) external {
+    function cancelEventAndProcessRefunds(address _eventCode) external onlyHolder(GTAD.cancelGtaBalanceRequired()){
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
@@ -602,11 +603,18 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if # of _winners == .event_2.winPercs array length (set during eventCreate)
         require(game.event_2.winPercs.length == _winners.length, 'err: number of winners =(');
 
-        // buy GTA from open market (using 'buyGtaUSD')
+        // LEFT OFF HERE ... currently '_processBuyAndBurnStableSwap' swaps from GTADelegate.sol
+        //  but GTA.sol contract address needs to provide the stable and receive the GTA (during swap)
+
+        // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
         uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(game.event_2.buyGtaUSD), game.event_2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy', divided equally to all '_winners'
+        //  NOTE: remaining 'gta_amnt_buy' is simply held by this GTA contract
         uint256 gta_amnt_mint = (gta_amnt_buy * (mintGtaPerc/100)) / _winners.length;
+
+        // LEFT OFF HERE ... should host be minted some amount for hosting the game as well?
+        //      maybe divide by _winners.length + 1 ?
 
         // loop through _winners: distribute 'game.event_2.winPercs'
         for (uint16 i=0; i < _winners.length; i++) {
@@ -872,15 +880,29 @@ contract GamerTokeAward is ERC20, Ownable {
              - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
              - win payouts -> taken from net 'prizePoolUSD' generated below
 
-            Formula ...
+            Formulas ...
                 keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
                 serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
                 supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
+                totalFeesUSD = keeperFeeUSD + serviceFeeUSD + supportFeeUSD
+
+                buyGtaUSD = serviceFeeUSD * buyGtaPerc
+
+                GROSS entryFeeUSD = entryFeeUSD * playerCnt
+                  NET entryFeeUSD = GROSS entryFeeUSD - totalFeesUSD
+
+                GROSS serviceFeeUSD = GROSS entryFeeUSD * serviceFeePerc
+                  NET serviceFeeUSD = GROSS serviceFeeUSD - buyGtaUSD
+                
+                NOTE: buyGtaUSD used to buy GTA from market (in 'hostEndEventWithWinners'),
+                       which is then held by GTA contract address (until '_burnGTA' invoked)
+                      then '_burnGTA' burns 'burnGtaPerc' of all GTA held
+                       w/ remaining GTA held being sent to msg.sender
 
                 GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
-                    hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
-                NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
-                    payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
+                        hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
+                  NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
+                     payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
         */
 
         // calc individual player fees (BEFORE generating 'prizePoolUSD') 
@@ -903,18 +925,27 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyGtaPerc'?
         //                      or do we want to let the host choose?
-        //  potential model...
-        //      1) remove GTA from the market: 
-        //          - host can choose to pay service fee in GTA for a discount (we buy and burn)
-        //          - host required to hold some GTA in order to host 
-        //      2) add GTA to the market: 
-        //          - host gets minted some amount for hosting games
-        //          - player gets minted some amount for winning games 
-        //      #2 always has to be less than #1 for every hosted event 
-        //          - the value of amounts minted must always be less than the service fee
+        // potential model...
+        // 1) remove GTA from the market: 
+        //    LEGACY MODEL (N/A)
+        //     - host choice: to pay service fee in GTA for a discount (and then we buy and burn)
+        //    NEW MODEL
+        //     - keeper set: buyGtaPerc of serviceFeeUSD = buyGtaUSD (for every event)
+        //     - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithWinners')
+        //     - host required to hold some GTA in order to host (handled in 'createEvent')
+        //     - 'info|burn|cancel' public functions require holding GTA
+        // 
+        // 2) add GTA to the market: 
+        //     - host gets minted some amount for hosting games (handled in 'hostEndEventWithWinners')
+        //     - player gets minted some amount for winning games (handled in 'hostEndEventWithWinners')
+        //
+        // #2 always has to be less than #1 for every hosted event 
+        //     - the value of amounts minted must always be less than the service fee
+        //     NOTE: total amount minted to winners + host = 'mintGtaPerc' of GTA amount recieved from 'buyGtaUSD' from market
 
-        // calc: tot 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
-        //       net 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
+        // calc: TOT 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
+        //       NET 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
+        //  NOTE: remaining NET 'serviceFeeUSD' is simply held by GTA contract address
         _evt.event_2.buyGtaUSD = _evt.event_1.serviceFeeUSD * (buyGtaPerc/100);
         _evt.event_1.serviceFeeUSD -= _evt.event_2.buyGtaUSD; // NET
 

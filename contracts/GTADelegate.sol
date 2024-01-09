@@ -69,9 +69,10 @@ contract GTADelegate {
     uint16 public hostGtaBalReqPerc = 100; // uint16 max = 65,535
     uint16 public constant hostGtaBalReqPercMax = 3000; // max ratio = 30:1 entryFeeUSD
 
-    // GTA balance required in order to call public info functions
+    // GTA balance required in order to call public functions
     uint256 public infoGtaBalanceRequired = 10 * 10**18;
     uint256 public burnGtaBalanceRequired = 20 * 10**18;
+    uint256 public cancelGtaBalanceRequired = 30 * 10**18;
 
     // max % of prizePoolUSD the host may charge (keeper controlled)
     uint8 public maxHostFeePerc = 100;
@@ -310,6 +311,11 @@ contract GTADelegate {
         (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
         uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, uswapV2routers[rtrIdx], _buyAndBurnUSD * 10**18);
         return gta_amnt_out;
+
+        // LEFT OFF HERE ... can't use address(this) here, or inside '_swap_v2_wrap'
+        //      'this' is GTADelegate, not GTA token contract
+        //      need to pass GTA contract address and use for swap, or something like that
+        //      GTA contract address needs to end up with 'gta_amnt_out'
     }
 
     // get lowest market value stable
