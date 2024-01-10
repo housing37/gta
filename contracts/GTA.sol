@@ -37,7 +37,8 @@ interface IGTADelegate {
     function _generateAddressHash(address host, string memory uid) external view returns (address);
     function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external view returns (bool);
     function gtaHoldingRequiredToHost(address _tok_gta, uint32 _entryFeeUSD) external returns (uint256);
-    function _getTotalsOfArray(uint8[] calldata _arr) external view returns (uint8);
+    function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8);
+    function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
     function getWhitelistStables() external view returns (address[] memory);
@@ -413,7 +414,9 @@ contract GamerTokeAward is ERC20, Ownable {
         require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
         require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
-        require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc <= 100, 'err: _winPercs + _hostFeePerc <= 100 required :/');
+        require(GTAD._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
+        require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
+        
         require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
@@ -632,7 +635,10 @@ contract GamerTokeAward is ERC20, Ownable {
         // mint GTA to host (if applicable; keeper controlled)
         if (mintGtaToHost) { _mint(evt.host, gta_amnt_mint_ind); }
 
-        // loop through _winners: distribute 'evt.event_2.winPercs'
+        // check if any winners were set
+
+        // loop through _guests: distribute 'evt.event_2.winPercs'
+        //  NOTE: if _guests.length == 0, then winPercs & payoutsUSD are empty arrays
         for (uint16 i=0; i < _guests.length; i++) {
             // verify winner address was registered in the event
             require(evt.event_1.players[_guests[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
@@ -647,23 +653,20 @@ contract GamerTokeAward is ERC20, Ownable {
             // syncs w/ 'settleBalances' algorithm
             GTAD._increaseWhitelistPendingDebit(stable, win_usd);
 
-            // mint GTA to this winner (amount is same for all winners)
+            // mint GTA to this winner; amount is same for all winners & host (if applicable)
             _mint(winner, gta_amnt_mint_ind);
 
             // notify client side that an end event distribution occurred successfully
             emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // LEFT OFF HERE ... need to distribute all of 'prizePoolUSD' to host if no winners set
-        //  should be in 2 different 'transfers'
-        //  NOTE: do not want GTA contract to take responsibility for withholding funds or refunding credits, etc.
-        //      do not want responsibility for any assumptions or errors w/ no winners declared
-        //      ie. full 'prizePoolUSD' should always be distributed 
-
         // pay host (w/ lowest market value stable)
+        //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
+        //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
         address stable_host = _transferBestDebitStableUSD(evt.host, evt.event_2.hostFeeUSD);
 
-        // pay keeper (w/ lowest market value stable) .. LEFT OFF HERE ... should be stable w/ highest market value?
+        // pay keeper (w/ lowest market value stable)
+        // LEFT OFF HERE ... should this be stable w/ highest market value?
         address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), evt.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
@@ -903,8 +906,8 @@ contract GamerTokeAward is ERC20, Ownable {
             current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
              - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
              - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
-             - host fees -> taken from gross 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
-             - win payouts -> taken from net 'prizePoolUSD' generated below
+             - host fees -> taken from GROSS 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
+             - win payouts -> taken from GROSS 'prizePoolUSD' generated below
 
             Formulas ...
                 keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
@@ -929,6 +932,13 @@ contract GamerTokeAward is ERC20, Ownable {
                         hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
                   NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
                      payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
+
+                NOTE: if 'winPercs.length' == 0 (then 'hostFeePerc' == 100, set in 'createEvent'), results in empty 'payoutsUSD' array
+                 HENCE, this event will allow no _guests to be passed into 'hostEndEventWithGuestRecipients',
+                    resulting in host receiving 100% of 'prizePoolUSD'
+                
+                NOTE: contract won't take responsibility for any errors w/ no winners declared by withholding funds or refunding credits, etc.
+                 HENCE, full 'prizePoolUSD' will always be distributed (ie. to host)
         */
 
         // calc individual player fees (BEFORE generating 'prizePoolUSD') 
@@ -986,14 +996,10 @@ contract GamerTokeAward is ERC20, Ownable {
         _evt.event_2.hostFeeUSD = _evt.event_2.prizePoolUSD * (_evt.event_1.hostFeePerc/100);
 
         // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
-        _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
+        //  NOTE: not setting NET, allows for correct calc of payoutsUSD & correct emit logs
+        // _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
         
         // calc payoutsUSD (finally, AFTER all deductions)
-        // NOTE: if 'winPercs.length' == 0, then 'payoutsUSD' == 0 (empty array)
-        //  hence, only 'hostFeePerc' of 'prizePoolUSD' will paid out for this event in 'hostEndEventWithGuestRecipients'
-        //      remaining 'prizePoolUSD' will simply be held in stable by GTA contract address
-
-        // LEFT OFF HERE ... need to distribute all of 'prizePoolUSD' to host
         for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
             _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * (_evt.event_2.winPercs[i]/100));
         }

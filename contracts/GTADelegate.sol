@@ -297,12 +297,23 @@ contract GTADelegate {
         return gta_quote;
     }
 
+    // LEFT OFF HERE ... should review what functions in GTADelegate.sol, are only used in GTA.sol
+    //      ... and think about that organizational design 
     function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8) {
         uint8 t = 0;
         for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
         return t;
     }
-
+    function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool) {
+        for (uint i=0; i < _percs.length; i++) { 
+            if (!_validatePercent(_percs[i]))
+                return false;
+        } 
+        return true;
+    }
+    function _validatePercent(uint8 _perc) private pure returns (bool) {
+        return (0 < _perc && _perc <= 100);
+    }
     // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'uswapV2routers')
     function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external onlyKeeper returns (uint256) {
         address[] memory stab_gta_path = new address[](2);
