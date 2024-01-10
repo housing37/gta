@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;        
+import "./GTADelegate.sol"; // interface
+import "./GTASwapTools.sol"; // inheritance
 
 // deploy
 // import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -9,26 +11,14 @@ pragma solidity ^0.8.0;
 import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
 
-// iterface
-import "./GTADelegate.sol";
-
 /* terminology...
                  join -> room, game, event, activity
              register -> seat, player, delegates, users, participants, entrants
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
 interface IGTADelegate {
-    // LEFT OFF HERE ... need external getters for these public variables
-    // uint32 public minEventEntryFeeUSD;
-    // uint8 public maxHostFeePerc;
-    // uint8 public minDepositUSD;
-    // address public TOK_WPLS;
-    // uint256 public depositFeePerc; // % of all deposits taken from 'creditsUSD' in 'settleBalances' (keeper controlled)
-    // uint8 public keeperFeePerc; // 1% of event total entryFeeUSD
-    // uint8 public serviceFeePerc; // 10% of event total entryFeeUSD
-    // uint8 public supportFeePerc; // 0% of event total entryFeeUSD
-
     // public access
+    function uswapV2routers() external view returns (address[] memory);
     function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function burnGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function cancelGtaBalanceRequired() external view returns (uint256); // auto-generated getter
@@ -48,7 +38,6 @@ interface IGTADelegate {
     // onlyKeeper access
     function getKeeper() external view returns (address);
     function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
-    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external returns (uint256);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
     function _sanityCheck(address token, uint256 amount) external returns (bool);
     function getNextStableTokDeposit() external returns (address);
@@ -60,7 +49,7 @@ interface IGTADelegate {
 
     // LEFT OFF HERE ... finish creating this interface
 }
-contract GamerTokeAward is ERC20, Ownable {
+contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
@@ -621,14 +610,9 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if # of _guests.length == winPercs.length == payoutsUSD.length (set during createEvent & hostStartEvent)
         require(evt.event_2.winPercs.length == _guests.length && _guests.length == evt.event_2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
-        // LEFT OFF HERE ... currently '_processBuyAndBurnStableSwap' swaps through GTADelegate.sol
-        //  but GTA.sol contract address needs to provide the stable and receive the GTA (during swap)
-        //  NOTE: it appears that the only way to do this is to have GTA.sol directly call 'swapExactTokensForTokens'
-        //     ... maybe use GTADelegate as an abstract calls and have GTA.sol inherit from it as a child contract
-
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
         //  NOTE: invokes 'GTAD._swap_v2_wrap' & uses msg.sender as 'outReceiver'
-        uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
+        uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
         //  gta_amnt_mint gets divided equally to all '_winners' + host (if 'mintGtaToHost'; keeper controlled)
@@ -901,6 +885,16 @@ contract GamerTokeAward is ERC20, Ownable {
         _evt.launchBlockNum = block.number;
         _evt.event_1.launched = true;
         return _evt;
+    }
+
+    // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'uswapV2routers')
+    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) private returns (uint256) {
+        address[] memory stab_gta_path = new address[](2);
+        stab_gta_path[0] = stable;
+        stab_gta_path[1] = address(this);
+        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
+        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, GTAD.uswapV2routers()[rtrIdx], _buyAndBurnUSD * 10**18, address(this));
+        return gta_amnt_out;
     }
 
     // calc prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD
