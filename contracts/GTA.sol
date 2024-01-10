@@ -56,7 +56,7 @@ interface IGTADelegate {
     function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
     function getAccruedGFRL() external view returns (uint256);
     function getSwapRouters() external view returns (address[] memory);
-    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn) external returns (uint256);
+    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address gtaContract) external returns (uint256);
 
     // LEFT OFF HERE ... finish creating this interface
 }
@@ -605,7 +605,7 @@ contract GamerTokeAward is ERC20, Ownable {
     function hostEndEventWithGuestRecipients(address _eventCode, address[] memory _guests) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
 
-        // NOTE: _guests.lengh = 0, means no winners paid
+        // NOTE: _guests.lengh = 0, means no winners are paid
         require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
@@ -621,10 +621,13 @@ contract GamerTokeAward is ERC20, Ownable {
         // check if # of _guests.length == winPercs.length == payoutsUSD.length (set during createEvent & hostStartEvent)
         require(evt.event_2.winPercs.length == _guests.length && _guests.length == evt.event_2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
-        // LEFT OFF HERE ... currently '_processBuyAndBurnStableSwap' swaps from GTADelegate.sol
+        // LEFT OFF HERE ... currently '_processBuyAndBurnStableSwap' swaps through GTADelegate.sol
         //  but GTA.sol contract address needs to provide the stable and receive the GTA (during swap)
+        //  NOTE: it appears that the only way to do this is to have GTA.sol directly call 'swapExactTokensForTokens'
+        //     ... maybe use GTADelegate as an abstract calls and have GTA.sol inherit from it as a child contract
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
+        //  NOTE: invokes 'GTAD._swap_v2_wrap' & uses msg.sender as 'outReceiver'
         uint256 gta_amnt_buy = GTAD._processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
@@ -634,8 +637,6 @@ contract GamerTokeAward is ERC20, Ownable {
 
         // mint GTA to host (if applicable; keeper controlled)
         if (mintGtaToHost) { _mint(evt.host, gta_amnt_mint_ind); }
-
-        // check if any winners were set
 
         // loop through _guests: distribute 'evt.event_2.winPercs'
         //  NOTE: if _guests.length == 0, then winPercs & payoutsUSD are empty arrays
@@ -660,13 +661,10 @@ contract GamerTokeAward is ERC20, Ownable {
             emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // pay host (w/ lowest market value stable)
+        // pay host & keeper (w/ lowest market value stable; contract should maintain highest market value stables)
         //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
         address stable_host = _transferBestDebitStableUSD(evt.host, evt.event_2.hostFeeUSD);
-
-        // pay keeper (w/ lowest market value stable)
-        // LEFT OFF HERE ... should this be stable w/ highest market value?
         address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), evt.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
@@ -756,9 +754,14 @@ contract GamerTokeAward is ERC20, Ownable {
                     continue;
                 }
 
+                // LEFT OFF HERE ... currently 'GTAD.swap_v2_wrap' swaps through GTADelegate.sol
+                //  but GTA.sol contract address needs to provide the alt and receive the stable (during swap)
+                //  NOTE: it appears that the only way to do this is to have GTA.sol directly call 'swapExactTokensForTokens'
+                //     ... maybe use GTADelegate as an abstract calls and have GTA.sol inherit from it as a child contract
+
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = GTAD.swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt);
+                stable_credit_amnt = GTAD.swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt, address(this));
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'uswapV2routers')

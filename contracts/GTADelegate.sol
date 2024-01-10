@@ -217,11 +217,12 @@ contract GTADelegate {
     /* -------------------------------------------------------- */
     /* KEEPER - ACCESSORS TO PRIVATES                           */
     /* -------------------------------------------------------- */
+    // LEFT OFF HERE ... maybe this function just be a public tool, and not onlyKeeper
     function swap_v2_wrap(address[] memory path, address router, uint256 amntIn) external onlyKeeper returns (uint256) {
         require(path.length > 1, 'err: bad path, need >= 2 addies :)');
         require(router != address(0), 'err: zero address? :0');
         require(amntIn > 0, 'err: no amount? :{}' );
-        return _swap_v2_wrap(path, router, amntIn);
+        return _swap_v2_wrap(path, router, amntIn, msg.sender);
     }
     function best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) external view onlyKeeper returns (uint8, uint256) {
         require(path.length > 1, 'err: bad path, need >= 2 addies :)');
@@ -315,12 +316,12 @@ contract GTADelegate {
         return (0 < _perc && _perc <= 100);
     }
     // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'uswapV2routers')
-    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) external onlyKeeper returns (uint256) {
+    function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD, address _gtaContract) external onlyKeeper returns (uint256) {
         address[] memory stab_gta_path = new address[](2);
         stab_gta_path[0] = stable;
         stab_gta_path[1] = address(this);
         (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
-        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, uswapV2routers[rtrIdx], _buyAndBurnUSD * 10**18);
+        uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, uswapV2routers[rtrIdx], _buyAndBurnUSD * 10**18, _gtaContract);
         return gta_amnt_out;
 
         // LEFT OFF HERE ... can't use address(this) here, or inside '_swap_v2_wrap'
@@ -488,10 +489,10 @@ contract GTADelegate {
     }
 
     // uniwswap v2 protocol based: get quote and execute swap
-    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn) private returns (uint256) {
-        //address[] memory path = [weth, wpls];
+    function _swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address outReceiver) private returns (uint256) {
+        require(path.length >= 2, 'err: path.length :/');
         uint256[] memory amountsOut = IUniswapV2Router02(router).getAmountsOut(amntIn, path); // quote swap
-        uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], false); // execute swap
+        uint256 amntOut = _swap_v2(router, path, amntIn, amountsOut[amountsOut.length -1], outReceiver, false); // approve & execute swap
                 
         // verifiy new balance of token received
         uint256 new_bal = IERC20(path[path.length -1]).balanceOf(address(this));
@@ -501,7 +502,7 @@ contract GTADelegate {
     }
     
     // v2: solidlycom, kyberswap, pancakeswap, sushiswap, uniswap v2, pulsex v1|v2, 9inch
-    function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, bool fromETH) private returns (uint256) {
+    function _swap_v2(address router, address[] memory path, uint256 amntIn, uint256 amntOutMin, address outReceiver, bool fromETH) private returns (uint256) {
         // emit logRFL(address(this), msg.sender, "logRFL 6a");
         IUniswapV2Router02 swapRouter = IUniswapV2Router02(router);
         
@@ -514,7 +515,7 @@ contract GTADelegate {
             amntOut = swapRouter.swapExactETHForTokens{value: amntIn}(
                             amntOutMin,
                             path, //address[] calldata path,
-                            address(this), // to
+                            outReceiver, // to
                             deadline
                         );
         } else {
@@ -522,7 +523,7 @@ contract GTADelegate {
                             amntIn,
                             amntOutMin,
                             path, //address[] calldata path,
-                            address(this),
+                            outReceiver, //  The address that will receive the output tokens after the swap. 
                             deadline
                         );
         }
