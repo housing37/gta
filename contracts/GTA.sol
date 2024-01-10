@@ -515,6 +515,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return true;
     }
 
+    // LEFT OFF HERE ... should guests be able to cancel started events, if hosts never end them?
+
     // cancel event and process refunds (host, guests, keeper)
     //  host|keeper can cancel if event not 'launched' yet
     //  guests can cancel if event not 'launched' & 'expTime' has passed
@@ -556,6 +558,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
             _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
+            // LEFT OFF HERE ... keeper & support are not being paid if event canceled
+            //  NOTE: host should not be paid on cancel event (they can just create events and cancel to take the fees)
+
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
@@ -594,7 +599,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function hostEndEventWithGuestRecipients(address _eventCode, address[] memory _guests) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
 
-        // NOTE: _guests.lengh = 0, means no winners are paid
+        // NOTE: _guests.lengh = 0, means no winners set (ie. 100% of prizePoolUSD paid to host)
         require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
