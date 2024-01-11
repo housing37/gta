@@ -25,13 +25,10 @@ contract GTADelegate is GTASwapTools {
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
-    address private keeper; // 37, curator, manager, caretaker, keeper
+    address public keeper; // 37, curator, manager, caretaker, keeper
     
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public uswapV2routers; // modifiers: addDexRouter/remDexRouter
-    function getSwapRouters() external view onlyKeeper returns (address[] memory) {
-        return uswapV2routers;
-    }
         
     /* _ TOKEN SUPPORT _ */
     // arrays of accepted usd stable & alts for player deposits
@@ -116,9 +113,6 @@ contract GTADelegate is GTASwapTools {
     /* KEEPER - PUBLIC GETTERS / SETTERS                        */
     /* -------------------------------------------------------- */
     // GETTERS / SETTERS (keeper)
-    function getKeeper() external view returns (address) {
-        return keeper;
-    }
     function setKeeper(address _newKeeper) external onlyKeeper {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;

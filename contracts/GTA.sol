@@ -18,6 +18,7 @@ import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";
 */
 interface IGTADelegate {
     // public access
+    function setKeeper(address _newKeeper) external;
     function uswapV2routers() external view returns (address[] memory);
     function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
     function burnGtaBalanceRequired() external view returns (uint256); // auto-generated getter
@@ -36,7 +37,7 @@ interface IGTADelegate {
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
-    function getKeeper() external view returns (address);
+    function keeper() external view returns (address);
     function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
     function _sanityCheck(address token, uint256 amount) external returns (bool);
@@ -220,18 +221,19 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // NOTE: pre-initialized 'GTADelegate' address required
     //      initializer w/ 'keeper' not required ('GTADelegate' maintained)
     //      sets msg.sender to '_owner' ('Ownable' maintained)
-    constructor(uint256 _initSupply, address _gtad) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+    constructor(address _gtad, uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+        require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
-    // NOTE: call from contructor not required
-    //      call from 'keeper' not required
-    function setGTAD(address _gtad) public onlyKeeper {
+    // NOTE: call from contructor, not required
+    //      call from 'keeper' of new _gtad, not required
+    //      call from 'keeper' of old GTAD, indeed required
+    function setGTAD(address _gtad, uint256 _keeperSupply) external onlyKeeper {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
-
-        // LEFT OFF HERE ... mint GTA to msg.sender whenever this function is called
+        _mint(GTAD.keeper(), _keeperSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
     /* -------------------------------------------------------- */
@@ -240,7 +242,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     modifier onlyAdmins(address gameCode) {
         require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         bool isHost = msg.sender == activeGames[gameCode].host;
-        bool isKeeper = msg.sender == GTAD.getKeeper();
+        bool isKeeper = msg.sender == GTAD.keeper();
         bool isOwner = msg.sender == owner(); // from 'Ownable'
         require(isKeeper || isOwner || isHost, 'err: only admins :/*');
         _;
@@ -249,7 +251,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //     onlyAdmins is only used in 'getPlayers'
     }
     modifier onlyKeeper() {
-        require(msg.sender == GTAD.getKeeper(), "Only the keeper :p");
+        require(msg.sender == GTAD.keeper(), "Only the keeper :p");
         _;
     }
     modifier onlyHolder(uint256 _requiredAmount) {
@@ -528,7 +530,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.getKeeper();
+        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
         require(isValidSender, 'err: only registerd guests or host :<>');
 
         // for host|guest|keeper cancel, verify event not launched
@@ -654,7 +656,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
         address stable_host = _transferBestDebitStableUSD(evt.host, evt.event_2.hostFeeUSD);
-        address stable_keep = _transferBestDebitStableUSD(GTAD.getKeeper(), evt.event_1.keeperFeeUSD);
+        address stable_keep = _transferBestDebitStableUSD(GTAD.keeper(), evt.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
         //  also, maybe we should pay keeper and support in 'hostStartEvent'
