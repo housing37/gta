@@ -48,9 +48,9 @@ contract GTADelegate is GTASwapTools {
 
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
-    uint8 public constant minDepositUSD_floor = 1; // 1 USD 
-    uint8 public constant minDepositUSD_ceiling = 100; // 100 USD
-    uint8 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
+    uint32 public constant minDepositUSD_floor = 1; // 1 USD 
+    uint32 public constant minDepositUSD_ceiling = 100; // 100 USD
+    uint32 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
 
     // enable/disable refunds for less than min deposit (keeper controlled)
     bool public enableMinDepositRefunds = true;
@@ -175,9 +175,9 @@ contract GTADelegate is GTASwapTools {
         maxHostFeePerc = _perc;
         return true;
     }
-    function setMinimumEventEntryFeeUSD(uint8 _amount) public onlyKeeper {
-        require(_amount > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
-        minEventEntryFeeUSD = _amount;
+    function setMinimumEventEntryFeeUSD(uint32 _amountUSD) public onlyKeeper {
+        require(_amountUSD > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
+        minEventEntryFeeUSD = _amountUSD;
     }
     function addAccruedGFRL(uint256 _gasAmnt) external onlyKeeper returns (uint256) {
         accruedGasFeeRefundLoss += _gasAmnt;
@@ -197,9 +197,9 @@ contract GTADelegate is GTASwapTools {
     
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
-    function setMinimumUsdValueDeposit(uint8 _amount) public onlyKeeper {
-        require(minDepositUSD_floor <= _amount && _amount <= minDepositUSD_ceiling, 'err: invalid amount =)');
-        minDepositUSD = _amount;
+    function setMinimumUsdValueDeposit(uint32 _amountUSD) public onlyKeeper {
+        require(minDepositUSD_floor <= _amountUSD && _amountUSD <= minDepositUSD_ceiling, 'err: invalid amount =)');
+        minDepositUSD = _amountUSD;
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
@@ -290,24 +290,6 @@ contract GTADelegate is GTASwapTools {
         }
         return false;
     }
-    function _hostCanCreateEvent(address _host, address _tok_gta, uint32 _entryFeeUSD) external view returns (bool) {
-        // get best stable quote for host's gta_bal (traverses 'uswapV2routers')
-        uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
-        address[] memory gta_stab_path = new address[](2);
-        gta_stab_path[0] = _tok_gta;
-        gta_stab_path[1] = _getStableTokenHighMarketValue(whitelistStables, uswapV2routers);
-        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal, uswapV2routers);
-        return stable_quote >= ((_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100));
-    }
-    function gtaHoldingRequiredToHost(address _tok_gta, uint32 _entryFeeUSD) external view returns (uint256) {
-        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
-        require(_tok_gta != address(0), 'err: _tok_gta address is 0 :/');
-        address[] memory stab_gta_path = new address[](2);
-        stab_gta_path[0] = _getStableTokenHighMarketValue(whitelistStables, uswapV2routers);
-        stab_gta_path[1] = _tok_gta;
-        (uint8 rtrIdx, uint256 gta_quote) = _best_swap_v2_router_idx_quote(stab_gta_path, (_entryFeeUSD * 10**18) * (hostGtaBalReqPerc/100), uswapV2routers);
-        return gta_quote;
-    }
 
     // LEFT OFF HERE ... should review what functions in GTADelegate.sol, are only used in GTA.sol
     //      ... and think about that organizational design 
@@ -393,9 +375,9 @@ contract GTADelegate is GTASwapTools {
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
     // NOTE: *WARNING* 'whitelistStables' could have duplicates (hence, using '_addAddressToArraySafe')
-    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] calldata) {
+    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
-        address[] calldata stables_avail = new address[]();
+        address[] memory stables_avail;
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)

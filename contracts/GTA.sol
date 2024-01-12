@@ -17,17 +17,26 @@ import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
 interface IGTADelegate {
+    // public auto-generated getter
+    function keeper() external view returns (address);
+    function uswapV2routers() external view returns (address[] memory);
+    function infoGtaBalanceRequired() external view returns (uint256); 
+    function burnGtaBalanceRequired() external view returns (uint256);
+    function cancelGtaBalanceRequired() external view returns (uint256);
+    function minEventEntryFeeUSD() external view returns (uint32);
+    function minDepositUSD() external view returns (uint32);
+    function maxHostFeePerc() external view returns (uint8);
+    function hostGtaBalReqPerc() external view returns (uint8);
+    function depositFeePerc() external view returns (uint8);
+    function keeperFeePerc() external view returns (uint8);
+    function serviceFeePerc() external view returns (uint8);
+    function supportFeePerc() external view returns (uint8);
+    function whitelistStables() external view returns (address[] memory);
+    function enableMinDepositRefunds() external view returns(bool);
+    
     // public access
     function setKeeper(address _newKeeper) external;
-    function uswapV2routers() external view returns (address[] memory);
-    function infoGtaBalanceRequired() external view returns (uint256); // auto-generated getter
-    function burnGtaBalanceRequired() external view returns (uint256); // auto-generated getter
-    function cancelGtaBalanceRequired() external view returns (uint256); // auto-generated getter
-    function minEventEntryFeeUSD() external view returns (uint32); // auto-generated getter
-    function maxHostFeePerc() external view returns (uint8);
     function _generateAddressHash(address host, string memory uid) external view returns (address);
-    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) external view returns (bool);
-    function gtaHoldingRequiredToHost(address _tok_gta, uint32 _entryFeeUSD) external returns (uint256);
     function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8);
     function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
@@ -37,7 +46,6 @@ interface IGTADelegate {
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
-    function keeper() external view returns (address);
     function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
     function _sanityCheck(address token, uint256 amount) external returns (bool);
@@ -46,7 +54,6 @@ interface IGTADelegate {
     function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
     function getAccruedGFRL() external view returns (uint256);
     function getSwapRouters() external view returns (address[] memory);
-    function swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address gtaContract) external returns (uint256);
     function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
     function setContractGTA(address _gta) external;
 
@@ -384,13 +391,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // verify your own GTA holding required to host
     function checkMyGtaBalanceRequiredToHost(uint32 _entryFeeUSD) external view returns (bool) {
         require(_entryFeeUSD > 0, 'err: no entry fee :/');
-        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
+        require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), 'err: not enough GTA to host :/');
         return true;
     }
 
     function getGtaBalanceRequiredToHost(uint32 _entryFeeUSD) external view returns (uint256) {
         require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
-        return GTAD.gtaHoldingRequiredToHost(address(this), _entryFeeUSD);
+        return _gtaHoldingRequiredToHost(_entryFeeUSD);
     }
     function getGtaBalanceRequiredForInfo() external view returns (uint256) {
         return GTAD.infoGtaBalanceRequired();
@@ -412,7 +419,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(GTAD._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
         require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
         
-        require(GTAD._hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
+        require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
         uint64 expTime = _startTime + uint64(gameExpSec);
@@ -600,7 +607,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return true;
     }
 
-    // _winners: [0x1st_place, 0x2nd_place, ...]
+    // _guests[i] => payoutsUSD[i]
     // earners, gainers, recipients, receivers, achievers, Leaders, Victors, PaidGuests
     function hostEndEventWithGuestRecipients(address _eventCode, address[] memory _guests) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
@@ -622,7 +629,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.event_2.winPercs.length == _guests.length && _guests.length == evt.event_2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
-        //  NOTE: invokes 'GTAD._swap_v2_wrap' & uses msg.sender as 'outReceiver'
+        //  NOTE: invokes inherited '_swap_v2_wrap' & uses address(this) as 'outReceiver'
         uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
@@ -639,7 +646,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             // verify winner address was registered in the event
             require(evt.event_1.players[_guests[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
 
-            // calc win_usd
+            // calc win_usd = _guests[i] => payoutsUSD[i]
             address winner = _guests[i];
             uint32 win_usd = evt.event_2.payoutsUSD[i];
 
@@ -725,7 +732,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                 if (stableAmnt < GTAD.minDepositUSD()) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (GTAD.enableMinDepositRefunds) {
+                    if (GTAD.enableMinDepositRefunds()) {
                         // log gas used for refund
                         uint256 start_trans = gasleft();
 
@@ -741,25 +748,21 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds);
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds());
 
                     // skip to next transfer in 'dataArray'
                     continue;
                 }
 
-                // LEFT OFF HERE ... currently 'GTAD.swap_v2_wrap' swaps through GTADelegate.sol
-                //  but GTA.sol contract address needs to provide the alt and receive the stable (during swap)
-                //  NOTE: it appears that the only way to do this is to have GTA.sol directly call 'swapExactTokensForTokens'
-                //     ... maybe use GTADelegate as an abstract calls and have GTA.sol inherit from it as a child contract
-
                 // swap tok_amnt alt -> stable (log swap fee / gas loss)
+                //  NOTE: invokes inherited '_swap_v2_wrap' & uses address(this) as 'outReceiver'
                 uint256 start_swap = gasleft();
-                stable_credit_amnt = GTAD.swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt, address(this));
+                stable_credit_amnt = _swap_v2_wrap(alt_stab_path, GTAD.getSwapRouters()[rtrIdx], tok_amnt, address(this));
                 uint256 gas_swap_loss = (start_swap - gasleft()) * tx.gasprice;
 
                 // get stable quote for this swap fee / gas fee loss (traverses 'uswapV2routers')
                 address[] memory wpls_stab_path = new address[](2);
-                wpls_stab_path[0] = GTAD.TOK_WPLS();
+                wpls_stab_path[0] = TOK_WPLS;
                 wpls_stab_path[1] = stable_addr;
                 (uint8 idx, uint256 amountOut) = GTAD.best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
                 
@@ -901,9 +904,26 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         address[] memory stab_gta_path = new address[](2);
         stab_gta_path[0] = stable;
         stab_gta_path[1] = address(this);
-        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
+        (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18, GTAD.uswapV2routers());
         uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, GTAD.uswapV2routers()[rtrIdx], _buyAndBurnUSD * 10**18, address(this));
         return gta_amnt_out;
+    }
+    function _hostCanCreateEvent(address _host, uint32 _entryFeeUSD) private view returns (bool) {
+        // get best stable quote for host's gta_bal (traverses 'uswapV2routers')
+        uint256 gta_bal = IERC20(address(this)).balanceOf(_host); // returns x10**18
+        address[] memory gta_stab_path = new address[](2);
+        gta_stab_path[0] = address(this);
+        gta_stab_path[1] = _getStableTokenHighMarketValue(GTAD.whitelistStables(), GTAD.uswapV2routers());
+        (uint8 rtrIdx, uint256 stable_quote) = _best_swap_v2_router_idx_quote(gta_stab_path, gta_bal, GTAD.uswapV2routers());
+        return stable_quote >= ((_entryFeeUSD * 10**18) * (GTAD.hostGtaBalReqPerc()/100));
+    }
+    function _gtaHoldingRequiredToHost(uint32 _entryFeeUSD) private view returns (uint256) {
+        require(_entryFeeUSD > 0, 'err: _entryFeeUSD is 0 :/');
+        address[] memory stab_gta_path = new address[](2);
+        stab_gta_path[0] = _getStableTokenHighMarketValue(GTAD.whitelistStables(), GTAD.uswapV2routers());
+        stab_gta_path[1] = address(this);
+        (uint8 rtrIdx, uint256 gta_quote) = _best_swap_v2_router_idx_quote(stab_gta_path, (_entryFeeUSD * 10**18) * (GTAD.hostGtaBalReqPerc()/100), GTAD.uswapV2routers());
+        return gta_quote;
     }
 
     function _payHost(address _host, uint32 _amntUSD) private {
