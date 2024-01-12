@@ -26,7 +26,9 @@ contract GTADelegate is GTASwapTools {
     /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
     address public keeper; // 37, curator, manager, caretaker, keeper
-    
+    address public contractGTA;
+    address[] public supportStaff;
+
     /* _ DEX GLOBAL SUPPORT _ */
     address[] public uswapV2routers; // modifiers: addDexRouter/remDexRouter
         
@@ -98,6 +100,10 @@ contract GTADelegate is GTASwapTools {
         require(msg.sender == keeper, "Only the keeper :p");
         _;
     }
+    modifier onlyKeeperOrGTA() {
+        require(msg.sender == contractGTA || msg.sender == keeper, "Only the keeper OR GTA contract :p");
+        _;
+    }
 
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
@@ -117,6 +123,29 @@ contract GTADelegate is GTASwapTools {
         require(_newKeeper != address(0), 'err: zero address ::)');
         keeper = _newKeeper;
     }
+    function setContractGTA(address _gta) external onlyKeeper {
+        require(_gta != address(0), 'err: zero address ::)');
+        contractGTA = _gta;
+    }
+    function addSupportStaff(address _newStaff) external onlyKeeper {
+        require(_newStaff != address(0), 'err: zero address ::)');
+        supportStaff = _addAddressToArraySafe(_newStaff, supportStaff, true); // true = no dups
+    }
+    function remSupportStaff(address _remStaff) external onlyKeeper {
+        require(_remStaff != address(0), 'err: zero address ::)');
+        supportStaff = _remAddressFromArray(_remStaff, supportStaff);
+    }
+    function getSupportStaffWithIndFees(uint32 _totFee) external view onlyKeeperOrGTA returns (address[] memory, uint32[] memory) {
+        // NOTE v1: simply divide _totFee evenly
+        //  launch new GTADelegate.sol to change this
+        uint32 indFee = _totFee / uint32(supportStaff.length);
+        uint32[] memory indFees  = new uint32[](supportStaff.length);
+        for (uint i=0; i < supportStaff.length; i++) {
+            indFees[i] = indFee;
+        }
+        return (supportStaff, indFees);
+    }
+    
     function setInfoGtaBalRequired(uint256 _gtaBalReq) external onlyKeeper {
         infoGtaBalanceRequired = _gtaBalReq;
     }
@@ -363,18 +392,16 @@ contract GTADelegate is GTASwapTools {
     /* -------------------------------------------------------- */
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
-    // NOTE: *WARNING* stables_avail could have duplicates (from 'whitelistStables' set by keeper)
-    // NOTE: *WARNING* stables_avail could have random idx's w/ address(0) (default in static length memory array)
-    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
+    // NOTE: *WARNING* 'whitelistStables' could have duplicates (hence, using '_addAddressToArraySafe')
+    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] calldata) {
         // loop through white list stables, generate stables available (ok for debit)
-        address[] memory stables_avail = new address[](whitelistStables.length);
+        address[] calldata stables_avail = new address[]();
         for (uint i = 0; i < whitelistStables.length; i++) {
 
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
             uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
-            if (stableBal > _debitAmntUSD * 10**18) { 
-                stables_avail[i] = whitelistStables[i];
-
+            if (stableBal >= _debitAmntUSD * 10**18) { 
+                stables_avail = _addAddressToArraySafe(whitelistStables[i], stables_avail, true); // true = no dups
             }
         }
         return stables_avail;

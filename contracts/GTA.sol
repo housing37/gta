@@ -47,6 +47,8 @@ interface IGTADelegate {
     function getAccruedGFRL() external view returns (uint256);
     function getSwapRouters() external view returns (address[] memory);
     function swap_v2_wrap(address[] memory path, address router, uint256 amntIn, address gtaContract) external returns (uint256);
+    function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
+    function setContractGTA(address _gta) external;
 
     // LEFT OFF HERE ... finish creating this interface
 }
@@ -224,6 +226,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     constructor(address _gtad, uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
+        GTAD.setContractGTA(address(this));
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
@@ -233,6 +236,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function setGTAD(address _gtad, uint256 _keeperSupply) external onlyKeeper {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
+        GTAD.setContractGTA(address(this));
         _mint(GTAD.keeper(), _keeperSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
 
@@ -652,14 +656,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // pay host & keeper (w/ lowest market value stable; contract should maintain highest market value stables)
+        // pay host & keeper & support staff
+        //  w/ lowest market value stable; contract should maintain highest market value stables
         //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
-        address stable_host = _transferBestDebitStableUSD(evt.host, evt.event_2.hostFeeUSD);
-        address stable_keep = _transferBestDebitStableUSD(GTAD.keeper(), evt.event_1.keeperFeeUSD);
-
-        // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
-        
+        _payHost(evt.host, evt.event_2.hostFeeUSD);
+        _payKeeper(evt.event_1.keeperFeeUSD);
+        _paySupport(evt.event_1.supportFeeUSD);        
         // LEFT OFF HERE ... should we pay keeper and support in 'hostStartEvent'?
         
         // set event params to end state & transfer to deadEvents array
@@ -669,6 +672,22 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
+    }
+    function _payHost(address _host, uint32 _amntUSD) private {
+        address stable_host = _transferBestDebitStableUSD(_host, _amntUSD);
+    }
+    function _payKeeper(uint32 _amntUSD) private {
+        address stable_keeper = _transferBestDebitStableUSD(GTAD.keeper(), _amntUSD);
+    }
+    function _paySupport(uint32 _amntUSD) private {
+        (address[] memory staff, uint32[] memory indFees) = GTAD.getSupportStaffWithIndFees(_amntUSD);
+        if (staff.length != indFees.length ) {
+            // LEFT OFF HERE ... emit notification that _paySupport failed
+            return;
+        }
+        for (uint i=0; i < staff.length; i++) {
+            address stable_supp = _transferBestDebitStableUSD(staff[i], indFees[i]);
+        }
     }
 
     /* -------------------------------------------------------- */
