@@ -50,7 +50,6 @@ interface IGTADelegate {
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
     function _sanityCheck(address token, uint256 amount) external returns (bool);
     function getNextStableTokDeposit() external returns (address);
-    function best_swap_v2_router_idx_quote(address[] memory path, uint256 amount) external view returns (uint8, uint256);
     function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
     function getAccruedGFRL() external view returns (uint256);
     function getSwapRouters() external view returns (address[] memory);
@@ -572,7 +571,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // LEFT OFF HERE ... keeper & support are not being paid if event canceled
-            //  NOTE: host should not be paid on cancel event (ie. they can just create & cancel events to take the fees)
+            //  NOTE: host should not be paid on cancel event (ie. so they can't just create & cancel events to take the fees)
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
@@ -726,7 +725,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                 address[] memory alt_stab_path = new address[](2);
                 alt_stab_path[0] = tok_addr;
                 alt_stab_path[1] = stable_addr;
-                (uint8 rtrIdx, uint256 stableAmnt) = GTAD.best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt);
+                (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt, GTAD.uswapV2routers());
 
                 // if stable amount quote is below min deposit required
                 if (stableAmnt < GTAD.minDepositUSD()) {  
@@ -764,7 +763,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                 address[] memory wpls_stab_path = new address[](2);
                 wpls_stab_path[0] = TOK_WPLS;
                 wpls_stab_path[1] = stable_addr;
-                (uint8 idx, uint256 amountOut) = GTAD.best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss);
+                (uint8 idx, uint256 amountOut) = _best_swap_v2_router_idx_quote(wpls_stab_path, gas_swap_loss, GTAD.uswapV2routers());
                 
                 stable_swap_fee = amountOut;
 
