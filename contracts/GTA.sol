@@ -561,7 +561,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // LEFT OFF HERE ... keeper & support are not being paid if event canceled
-            //  NOTE: host should not be paid on cancel event (they can just create events and cancel to take the fees)
+            //  NOTE: host should not be paid on cancel event (ie. they can just create & cancel events to take the fees)
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
@@ -659,9 +659,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         address stable_keep = _transferBestDebitStableUSD(GTAD.keeper(), evt.event_1.keeperFeeUSD);
 
         // LEFT OFF HERE ... need to pay 'supportFeeUSD' to support staff somewhere
-        //  also, maybe we should pay keeper and support in 'hostStartEvent'
-        //  also, 'serviceFeeUSD' is simply maintained in contract, 
-        //    but should we do something else with it? perhaps track it in global? perhaps send it to some service fee wallet address?
+        
+        // LEFT OFF HERE ... should we pay keeper and support in 'hostStartEvent'?
         
         // set event params to end state & transfer to deadEvents array
         _endEvent(_eventCode);
@@ -986,6 +985,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // calc: TOT 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
         //       NET 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
         //  NOTE: remaining NET 'serviceFeeUSD' is simply held by GTA contract address
+        //   LEFT OF HERE ... should we do something with it? track it in global? perhaps send it to some 'serviceFeeAddress'?
         _evt.event_2.buyGtaUSD = _evt.event_1.serviceFeeUSD * (buyGtaPerc/100);
         _evt.event_1.serviceFeeUSD -= _evt.event_2.buyGtaUSD; // NET
 
