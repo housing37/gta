@@ -673,22 +673,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         
         return true;
     }
-    function _payHost(address _host, uint32 _amntUSD) private {
-        address stable_host = _transferBestDebitStableUSD(_host, _amntUSD);
-    }
-    function _payKeeper(uint32 _amntUSD) private {
-        address stable_keeper = _transferBestDebitStableUSD(GTAD.keeper(), _amntUSD);
-    }
-    function _paySupport(uint32 _amntUSD) private {
-        (address[] memory staff, uint32[] memory indFees) = GTAD.getSupportStaffWithIndFees(_amntUSD);
-        if (staff.length != indFees.length ) {
-            // LEFT OFF HERE ... emit notification that _paySupport failed
-            return;
-        }
-        for (uint i=0; i < staff.length; i++) {
-            address stable_supp = _transferBestDebitStableUSD(staff[i], indFees[i]);
-        }
-    }
 
     /* -------------------------------------------------------- */
     /* KEEPER CALL-BACK                                         */
@@ -920,6 +904,23 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         (uint8 rtrIdx, uint256 gta_amnt) = _best_swap_v2_router_idx_quote(stab_gta_path, _buyAndBurnUSD * 10**18);
         uint256 gta_amnt_out = _swap_v2_wrap(stab_gta_path, GTAD.uswapV2routers()[rtrIdx], _buyAndBurnUSD * 10**18, address(this));
         return gta_amnt_out;
+    }
+
+    function _payHost(address _host, uint32 _amntUSD) private {
+        address stable_host = _transferBestDebitStableUSD(_host, _amntUSD);
+    }
+    function _payKeeper(uint32 _amntUSD) private {
+        address stable_keeper = _transferBestDebitStableUSD(GTAD.keeper(), _amntUSD);
+    }
+    function _paySupport(uint32 _amntUSD) private {
+        (address[] memory staff, uint32[] memory indFees) = GTAD.getSupportStaffWithIndFees(_amntUSD);
+        if (staff.length != indFees.length ) {
+            // LEFT OFF HERE ... emit notification that _paySupport failed
+            return;
+        }
+        for (uint i=0; i < staff.length; i++) {
+            address stable_supp = _transferBestDebitStableUSD(staff[i], indFees[i]);
+        }
     }
 
     // calc prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD
