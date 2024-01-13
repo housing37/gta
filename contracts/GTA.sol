@@ -70,7 +70,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
-    mapping(address => Event_0) private activeGames;
+    mapping(address => Event_0) private activeEvents;
     
     // track activeGameCount using 'createGame' & '_endEvent'
     uint64 private activeGameCount = 0; 
@@ -79,9 +79,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     address[] private activeGameCodes = new address[](0);
 
     // track transfer of active events to dead events
-    mapping(address => Event_0) private deadEvents;
-    uint64 private deadEventCount = 0; 
-    address[] private deadEventCodes = new address[](0);
+    mapping(address => Event_0) private closedEvents;
+    uint64 private closedEventCount = 0; 
+    address[] private closedEventCodes = new address[](0);
 
     // event experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
     //  BUT, block.timestamp is express in seconds since 1970 as uint256
@@ -259,8 +259,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
     modifier onlyAdmins(address gameCode) {
-        require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
-        bool isHost = msg.sender == activeGames[gameCode].host;
+        require(activeEvents[gameCode].host != address(0), 'err: gameCode not found :(');
+        bool isHost = msg.sender == activeEvents[gameCode].host;
         bool isKeeper = msg.sender == GTAD.keeper();
         require(isKeeper || isHost, 'err: only admins :/*');
         
@@ -320,17 +320,17 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    function keeperDeleteDeadEvent(address _evtCode) external onlyKeeper {
-        require(_evtCode != address(0) && deadEvents[_evtCode].host != address(0), 'err: invalid event code :/');
-        _deleteDeadEvent(_evtCode);
+    function keeperDeleteClosedEvent(address _evtCode) external onlyKeeper {
+        require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+        _deleteClosedEvent(_evtCode);
     }
-    function keeperCleanOutDeadEvents() external onlyKeeper {
-        for (uint i; i < deadEventCodes.length; i++) {
+    function keeperCleanOutClosedEvents() external onlyKeeper {
+        for (uint i; i < closedEventCodes.length; i++) {
             // NOTE: no error check for address(0), want to clean regardless            
-            delete deadEvents[deadEventCodes[i]]; // delete event mapping
+            delete closedEvents[closedEventCodes[i]]; // delete event mapping
         }
-        deadEventCodes = new address[](0);
-        deadEventCount = 0;
+        closedEventCodes = new address[](0);
+        closedEventCount = 0;
     }
     function keeperSetMintGtaToHost(bool _mintToHost) external onlyKeeper {
         mintGtaToHost = _mintToHost;
@@ -340,19 +340,19 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
     /* -------------------------------------------------------- */
     function infoGetPlayersForGameCode(address _gameCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
-        require(_gameCode != address(0) && activeGames[_gameCode].host != address(0), 'err: invalid game code :O');
+        require(_gameCode != address(0) && activeEvents[_gameCode].host != address(0), 'err: invalid game code :O');
         return _getPlayers(_gameCode);
     }
     function infoGetBurnGtaBalanceRequired() external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (uint256) {
         return GTAD.burnGtaBalanceRequired();
     }
     function infoGetDetailsForEventCode(address _eventCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
-        require(_eventCode != address(0) && activeGames[_eventCode].host != address(0), 'err: invalid event code :O');
+        require(_eventCode != address(0) && activeEvents[_eventCode].host != address(0), 'err: invalid event code :O');
         return _getPublicEventDetails(_eventCode);
     }
     function _getPublicEventDetails(address _eventCode) private view returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
-        require(activeGames[_eventCode].host != address(0), 'err: invalid event');
-        Event_0 storage e = activeGames[_eventCode];
+        require(activeEvents[_eventCode].host != address(0), 'err: invalid event');
+        Event_0 storage e = activeEvents[_eventCode];
         Event_1 storage e1 = e.event_1;
         Event_2 memory e2 = e.event_2;
         string memory eventName = e.gameName;
@@ -390,7 +390,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code ;o');
 
         // validate _eventCode exists
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid event code :I');
 
         // check msg.sender is registered
@@ -412,7 +412,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return GTAD.infoGtaBalanceRequired();
     }
     function getGameCode(address _host, string memory _gameName) external view returns (address) {
-        require(activeGameCount > 0, "err: no activeGames :{}"); // verify there are active activeGames
+        require(activeGameCount > 0, "err: no activeEvents :{}"); // verify there are active activeEvents
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
@@ -434,14 +434,14 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         uint256 expTime = _startTime + eventExpSec;
         require(expTime > _startTime, "err: stop f*ckin around :X");
 
-        // verify name/code doesn't yet exist in 'activeGames'
+        // verify name/code doesn't yet exist in 'activeEvents'
         address eventCode = GTAD._generateAddressHash(msg.sender, _eventName);
-        require(activeGames[eventCode].host == address(0), 'err: game name already exists :/');
+        require(activeEvents[eventCode].host == address(0), 'err: game name already exists :/');
 
         // Creates a default empty 'Event_0' struct for 'eventCode' (doesn't exist yet)
         //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
-        //    ie. modifying the newEvent will indeed directly affect the state stored in activeGames[eventCode].
-        Event_0 storage newEvent = activeGames[eventCode];
+        //    ie. modifying the newEvent will indeed directly affect the state stored in activeEvents[eventCode].
+        Event_0 storage newEvent = activeEvents[eventCode];
     
         // set properties for default empty 'Game' struct
         newEvent.host = msg.sender;
@@ -475,7 +475,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if game launched
@@ -509,7 +509,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no _eventCode ;l');
 
         // get/validate active game
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if msg.sender is _eventCode host
@@ -546,7 +546,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :p');
 
         // get/validate active game
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
@@ -580,7 +580,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
@@ -634,7 +634,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // NOTE: keeper & support paid in 'hostStartEvent'
         _payHost(evt.host, evt.event_2.hostFeeUSD, _eventCode);
         
-        // set event params to end state & transfer to deadEvents array
+        // set event params to end state & transfer to closedEvents array
         _endEvent(_eventCode);
 
         // notify client side that an end event occurred successfully
@@ -651,7 +651,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
-        Event_0 storage evt = activeGames[_eventCode];
+        Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered players, host, or keeper)
@@ -733,7 +733,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             if (tok_amnt == 0) { continue; } // skip 0 amount
 
             // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
-            //   ie. force start over w/ new call & no gas refund; encourages keeper to not fuck up
+            //   ie. force start over w/ new call & no gas refund; encourages keeper to NOT fuck up
             require(GTAD._sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
 
             // default: if found in 'whitelistStables'
@@ -843,12 +843,12 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function _getGameCode(address _host, string memory _gameName) private view returns (address) {
         // generate gameCode from host address and game name
         address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(activeGames[gameCode].host != address(0), 'err: game name for host not found :{}');
+        require(activeEvents[gameCode].host != address(0), 'err: game name for host not found :{}');
         return gameCode;
     }
     function _getPlayers(address _gameCode) private view returns (address[] memory) {
-        require(activeGames[_gameCode].host != address(0), 'err: _gameCode not found :{}');
-        return activeGames[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+        require(activeEvents[_gameCode].host != address(0), 'err: _gameCode not found :{}');
+        return activeEvents[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
     }
     // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredits(address _player, uint32 _amountUSD, bool _debit) private {
@@ -877,7 +877,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
 
     function _addGuestToEvent(address _player, address _evtCode) private {
-        Event_0 storage _evt = activeGames[_evtCode];
+        Event_0 storage _evt = activeEvents[_evtCode];
         _evt.event_1.players[_player] = true;
         _evt.event_1.playerAddresses.push(_player);
         _evt.event_1.playerCnt = uint32(_evt.event_1.playerAddresses.length);
@@ -885,30 +885,81 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
     // set event param to end state
     function _endEvent(address _evtCode) private {
-        require(_evtCode != address(0) && activeGames[_evtCode].host != address(0), 'err: invalid event code :P');
-        require(activeGames[_evtCode].event_1.launched, 'err: event not launched');
+        require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :P');
+        require(activeEvents[_evtCode].event_1.launched, 'err: event not launched');
 
-        Event_0 storage _evt = activeGames[_evtCode];
+        Event_0 storage _evt = activeEvents[_evtCode];
         // set game end state (doesn't matter if its about to be deleted)
         _evt.endTime = block.timestamp;
         _evt.endBlockNum = block.number;
         _evt.event_1.ended = true;
 
         // transfer active events to dead events
-        deadEvents[_evtCode] = activeGames[_evtCode];
-        deadEventCodes = GTAD.addAddressToArraySafe(_evtCode, deadEventCodes, true);
-        deadEventCount++;
+        // closedEvents[_evtCode] = activeEvents[_evtCode];
+        _migrateClosedEventCode(_evtCode);
 
         // remove active event
-        delete activeGames[_evtCode]; // delete event mapping
+        delete activeEvents[_evtCode]; // delete event mapping
         activeGameCodes = GTAD.remAddressFromArray(_evtCode, activeGameCodes);
         activeGameCount--;
     }
-    function _deleteDeadEvent(address _evtCode) private {
-        require(_evtCode != address(0) && deadEvents[_evtCode].host != address(0), 'err: invalid event code :/');
-        delete deadEvents[_evtCode]; // delete event mapping
-        deadEventCodes = GTAD.remAddressFromArray(_evtCode, deadEventCodes);
-        deadEventCount--;
+    function _deleteClosedEvent(address _evtCode) private {
+        require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+        delete closedEvents[_evtCode]; // delete event mapping
+        closedEventCodes = GTAD.remAddressFromArray(_evtCode, closedEventCodes);
+        closedEventCount--;
+    }
+    function _migrateClosedEventCode(address _evtCode) private {
+        // Copy values to closedEvents
+        closedEvents[_evtCode].host = activeEvents[_evtCode].host;
+        closedEvents[_evtCode].gameName = activeEvents[_evtCode].gameName;
+        closedEvents[_evtCode].entryFeeUSD = activeEvents[_evtCode].entryFeeUSD;
+        closedEvents[_evtCode].createTime = activeEvents[_evtCode].createTime;
+        closedEvents[_evtCode].createBlockNum = activeEvents[_evtCode].createBlockNum;
+        closedEvents[_evtCode].startTime = activeEvents[_evtCode].startTime;
+        closedEvents[_evtCode].launchTime = activeEvents[_evtCode].launchTime;
+        closedEvents[_evtCode].launchBlockNum = activeEvents[_evtCode].launchBlockNum;
+        closedEvents[_evtCode].endTime = activeEvents[_evtCode].endTime;
+        closedEvents[_evtCode].endBlockNum = activeEvents[_evtCode].endBlockNum;
+        closedEvents[_evtCode].expTime = activeEvents[_evtCode].expTime;
+        closedEvents[_evtCode].expBlockNum = activeEvents[_evtCode].expBlockNum;
+        
+        // Explicitly copy event_1 values
+        closedEvents[_evtCode].event_1.launched = activeEvents[_evtCode].event_1.launched;
+        closedEvents[_evtCode].event_1.ended = activeEvents[_evtCode].event_1.ended;
+
+        // closedEvents[_evtCode].event_1.players = activeEvents[_evtCode].event_1.players;
+        // Manually copy players mapping
+        address[] memory playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
+        for (uint256 i = 0; i < playerAddresses.length; i++) {
+            address playerAddress = playerAddresses[i];
+            closedEvents[_evtCode].event_1.players[playerAddress] = true;
+        }
+
+        closedEvents[_evtCode].event_1.playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
+        closedEvents[_evtCode].event_1.playerCnt = activeEvents[_evtCode].event_1.playerCnt;
+        closedEvents[_evtCode].event_1.hostFeePerc = activeEvents[_evtCode].event_1.hostFeePerc;
+        closedEvents[_evtCode].event_1.keeperFeeUSD = activeEvents[_evtCode].event_1.keeperFeeUSD;
+        closedEvents[_evtCode].event_1.serviceFeeUSD = activeEvents[_evtCode].event_1.serviceFeeUSD;
+        closedEvents[_evtCode].event_1.supportFeeUSD = activeEvents[_evtCode].event_1.supportFeeUSD;
+
+        // Explicitly copy event_2 values
+        closedEvents[_evtCode].event_2.totalFeesUSD = activeEvents[_evtCode].event_2.totalFeesUSD;
+        closedEvents[_evtCode].event_2.hostFeeUSD = activeEvents[_evtCode].event_2.hostFeeUSD;
+        closedEvents[_evtCode].event_2.prizePoolUSD = activeEvents[_evtCode].event_2.prizePoolUSD;
+        closedEvents[_evtCode].event_2.winPercs = activeEvents[_evtCode].event_2.winPercs;
+        closedEvents[_evtCode].event_2.payoutsUSD = activeEvents[_evtCode].event_2.payoutsUSD;
+        closedEvents[_evtCode].event_2.keeperFeeUSD_ind = activeEvents[_evtCode].event_2.keeperFeeUSD_ind;
+        closedEvents[_evtCode].event_2.serviceFeeUSD_ind = activeEvents[_evtCode].event_2.serviceFeeUSD_ind;
+        closedEvents[_evtCode].event_2.supportFeeUSD_ind = activeEvents[_evtCode].event_2.supportFeeUSD_ind;
+        closedEvents[_evtCode].event_2.totalFeesUSD_ind = activeEvents[_evtCode].event_2.totalFeesUSD_ind;
+        closedEvents[_evtCode].event_2.refundUSD_ind = activeEvents[_evtCode].event_2.refundUSD_ind;
+        closedEvents[_evtCode].event_2.refundsUSD = activeEvents[_evtCode].event_2.refundsUSD;
+        closedEvents[_evtCode].event_2.hostFeeUSD_ind = activeEvents[_evtCode].event_2.hostFeeUSD_ind;
+        closedEvents[_evtCode].event_2.buyGtaUSD = activeEvents[_evtCode].event_2.buyGtaUSD;
+
+        closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
+        closedEventCount++;
     }
 
     // set event params to launched state
