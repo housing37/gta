@@ -72,11 +72,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // map generated gameCode address to Game struct
     mapping(address => Event_0) private activeEvents;
     
-    // track activeGameCount using 'createGame' & '_endEvent'
-    uint64 private activeGameCount = 0; 
+    // track activeEventCount using 'createGame' & '_endEvent'
+    uint64 private activeEventCount = 0; 
 
-    // track activeGameCodes array for keeper 'keeperGetGameCodes'
-    address[] private activeGameCodes = new address[](0);
+    // track activeEventCodes array for keeper 'keeperGetGameCodes'
+    address[] private activeEventCodes = new address[](0);
 
     // track transfer of active events to dead events
     mapping(address => Event_0) private closedEvents;
@@ -283,7 +283,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
     function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
-        return (activeGameCodes, activeGameCount);
+        return (activeEventCodes, activeEventCount);
     }
     function keeperGetCreditAddresses() external view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
@@ -412,7 +412,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return GTAD.infoGtaBalanceRequired();
     }
     function getGameCode(address _host, string memory _gameName) external view returns (address) {
-        require(activeGameCount > 0, "err: no activeEvents :{}"); // verify there are active activeEvents
+        require(activeEventCount > 0, "err: no activeEvents :{}"); // verify there are active activeEvents
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
@@ -455,8 +455,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         newEvent.expTime = expTime;
 
         // increment support
-        activeGameCodes = GTAD.addAddressToArraySafe(eventCode, activeGameCodes, true); // true = no dups
-        activeGameCount++;
+        activeEventCodes = GTAD.addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
+        activeEventCount++;
         
         // emit client side notification for 'createEvent' event
         emit GTAEventCreated(msg.sender, _eventName, eventCode, newEvent.createTime, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
@@ -638,7 +638,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _endEvent(_eventCode);
 
         // notify client side that an end event occurred successfully
-        emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
+        emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeEventCount, block.timestamp, block.number);
         
         return true;
     }
@@ -894,14 +894,19 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _evt.endBlockNum = block.number;
         _evt.event_1.ended = true;
 
-        // transfer active events to dead events
-        // closedEvents[_evtCode] = activeEvents[_evtCode];
-        _migrateClosedEventCode(_evtCode);
-
-        // remove active event
+        // transfer active events to closed events
+        //  copy to closedEvents; delete from activeEvents
+        _migrateToClosedEvents(_evtCode);
+    }
+    function _migrateToClosedEvents(address _evtCode) private {
+        _copyActiveEventToClosedEvent(_evtCode); // copy to closedEvents
+        _deleteActiveEvent(_evtCode); // remove from activeEvents
+    }
+    function _deleteActiveEvent(address _evtCode) private {
+        require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :/');
         delete activeEvents[_evtCode]; // delete event mapping
-        activeGameCodes = GTAD.remAddressFromArray(_evtCode, activeGameCodes);
-        activeGameCount--;
+        activeEventCodes = GTAD.remAddressFromArray(_evtCode, activeEventCodes);
+        activeEventCount--;
     }
     function _deleteClosedEvent(address _evtCode) private {
         require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
@@ -909,7 +914,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         closedEventCodes = GTAD.remAddressFromArray(_evtCode, closedEventCodes);
         closedEventCount--;
     }
-    function _migrateClosedEventCode(address _evtCode) private {
+    function _copyActiveEventToClosedEvent(address _evtCode) private {
         // Copy values to closedEvents
         closedEvents[_evtCode].host = activeEvents[_evtCode].host;
         closedEvents[_evtCode].gameName = activeEvents[_evtCode].gameName;
