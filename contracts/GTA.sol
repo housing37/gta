@@ -527,63 +527,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return true;
     }
 
-    // LEFT OFF HERE ... should guests be able to cancel started events, if hosts never end them?
-
-    // cancel event and process refunds (host, guests, keeper)
-    //  host|keeper can cancel if event not 'launched' yet
-    //  guests can cancel if event not 'launched' & 'expTime' has passed
-    function cancelEventAndProcessRefunds(address _eventCode) external onlyHolder(GTAD.cancelGtaBalanceRequired()){
-        require(_eventCode != address(0), 'err: no event code :<>');
-
-        // get/validate active event
-        Event_0 storage evt = activeGames[_eventCode];
-        require(evt.host != address(0), 'err: invalid event code :<>');
-        
-        // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
-        require(isValidSender, 'err: only registerd guests or host :<>');
-
-        // for host|guest|keeper cancel, verify event not launched
-        require(!evt.event_1.launched, 'err: event already started :<>'); 
-
-        // for guest cancel, also verify event expTime must be passed 
-        if (evt.event_1.players[msg.sender]) {
-            require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
-        } 
-
-        // loop through guests & process refunds via '_updateCredits'
-        for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
-            // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
-            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
-            //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
-            //   this allows 'registerForEvent|hostRegisterSeatForEvent' & 'cancelEventAndProcessRefunds' to sync w/ regard to 'entryFeeUSD'
-            //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
-            //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithGuestRecipients' adds to them
-            //      - 'registerForEvent|hostRegisterSeatForEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
-            //      - 'hostStartEvent' calcs/sets 'totalFeesUSD' -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
-            //      - 'hostStartEvent' calcs/sets 'prizePoolUSD' & 'payoutsUSD' & 'refundUSD_ind' (from total 'entryFeeUSD' collected - 'totalFeesUSD')
-            //      - 'hostEndEventWithGuestRecipients' processes buy & burn, pays winners w/ 'payoutsUSD', mints GTA to winners
-            //      - 'hostEndEventWithGuestRecipients' adds to 'whitelistPendingDebits' as 'settleBalances' deletes them
-            //      - 'hostEndEventWithGuestRecipients' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
-            //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
-
-            // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
-            _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
-
-            // LEFT OFF HERE ... keeper & support are not being paid if event canceled
-            //  NOTE: host should not be paid on cancel event (ie. so they can't just create & cancel events to take the fees)
-
-            // notify listeners of processed refund
-            emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
-        }
-        
-        // set event params to end state
-        _endEvent(_eventCode);
-
-        // notify listeners of canceled event
-        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
-    }
-
     // host can start event w/ guests pre-registerd for _eventCode
     function hostStartEvent(address _eventCode) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
@@ -663,7 +606,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         }
 
         // pay host & keeper & support staff
-        //  w/ lowest market value stable; contract should maintain highest market value stables
+        //  w/ lowest market value stable (contract maintains highest market value stables)
         //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
         _payHost(evt.host, evt.event_2.hostFeeUSD);
@@ -678,6 +621,63 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeGameCount, block.timestamp, block.number);
         
         return true;
+    }
+
+    // LEFT OFF HERE ... should guests be able to cancel started events, if hosts never end them?
+
+    // cancel event and process refunds (host, guests, keeper)
+    //  host|keeper can cancel if event not 'launched' yet
+    //  guests can cancel if event not 'launched' & 'expTime' has passed
+    function cancelEventAndProcessRefunds(address _eventCode) external onlyHolder(GTAD.cancelGtaBalanceRequired()){
+        require(_eventCode != address(0), 'err: no event code :<>');
+
+        // get/validate active event
+        Event_0 storage evt = activeGames[_eventCode];
+        require(evt.host != address(0), 'err: invalid event code :<>');
+        
+        // check for valid sender to cancel (only registered players, host, or keeper)
+        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
+        require(isValidSender, 'err: only registerd guests or host :<>');
+
+        // for host|guest|keeper cancel, verify event not launched
+        require(!evt.event_1.launched, 'err: event already started :<>'); 
+
+        // for guest cancel, also verify event expTime must be passed 
+        if (evt.event_1.players[msg.sender]) {
+            require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
+        } 
+
+        // loop through guests & process refunds via '_updateCredits'
+        for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
+            // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
+            //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
+            //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
+            //   this allows 'registerForEvent|hostRegisterSeatForEvent' & 'cancelEventAndProcessRefunds' to sync w/ regard to 'entryFeeUSD'
+            //      - 'settleBalances' credits 'creditsUSD' for Transfer.src_addr (AFTER 'depositFeePerc' removed)
+            //      - 'settleBalances' deletes 'whitelistPendingDebits' as 'hostEndEventWithGuestRecipients' adds to them
+            //      - 'registerForEvent|hostRegisterSeatForEvent' debits full 'entryFeeUSD' from 'creditsUSD' (BEFORE service fees removed)
+            //      - 'hostStartEvent' calcs/sets 'totalFeesUSD' -> hostFeeUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD
+            //      - 'hostStartEvent' calcs/sets 'prizePoolUSD' & 'payoutsUSD' & 'refundUSD_ind' (from total 'entryFeeUSD' collected - 'totalFeesUSD')
+            //      - 'hostEndEventWithGuestRecipients' processes buy & burn, pays winners w/ 'payoutsUSD', mints GTA to winners
+            //      - 'hostEndEventWithGuestRecipients' adds to 'whitelistPendingDebits' as 'settleBalances' deletes them
+            //      - 'hostEndEventWithGuestRecipients' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
+            //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
+
+            // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+            _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+
+            // LEFT OFF HERE ... keeper & support are not being paid if event canceled
+            //  NOTE: host should not be paid on cancel event (ie. so they can't just create & cancel events to take the fees)
+
+            // notify listeners of processed refund
+            emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
+        }
+        
+        // set event params to end state
+        _endEvent(_eventCode);
+
+        // notify listeners of canceled event
+        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
     }
 
     /* -------------------------------------------------------- */
