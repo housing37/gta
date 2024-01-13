@@ -55,9 +55,8 @@ interface IGTADelegate {
     function getSwapRouters() external view returns (address[] memory);
     function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
     function setContractGTA(address _gta) external;
-
-    // LEFT OFF HERE ... finish creating this interface
 }
+
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
@@ -558,6 +557,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         // pay keeper & support staff w/ lowest market value stable
         //  (contract maintains highest market value stables)
+        // NOTE: host paid in 'hostEndEventWithGuestRecipients'
         _payKeeper(evt.event_1.keeperFeeUSD);
         _paySupport(evt.event_1.supportFeeUSD);        
 
@@ -620,9 +620,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // pay host w/ lowest market value stable (contract maintains highest market value stables)
-        //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
+        // pay host w/ lowest market value stable 
+        //  (contract maintains highest market value stables)
+        // NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, hostFeeUSD is 100% of prizePoolUSD
+        // NOTE: keeper & support paid in 'hostStartEvent'
         _payHost(evt.host, evt.event_2.hostFeeUSD);
         
         // set event params to end state & transfer to deadEvents array
@@ -660,7 +662,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         // if event NOT launched yet: pay keeper & support staff accordingly
         //  else: keeper & support already paid in hostStartEvent
-        // NOTE: host does not get paid (ie. could create & cancel events for fees)
+        // NOTE: host does not get paid here (ie. security risk: could create & cancel events for fees)
         if (!evt.event_1.launched) {
             _payKeeper(evt.event_1.keeperFeeUSD);
             _paySupport(evt.event_1.supportFeeUSD);
@@ -1019,25 +1021,24 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.playerCnt;
         _evt.event_2.totalFeesUSD = _evt.event_1.keeperFeeUSD + _evt.event_1.serviceFeeUSD + _evt.event_1.supportFeeUSD;
 
-        // LEFT OFF HERE ... always divide up 'serviceFeeUSD' w/ 'buyGtaPerc'?
-        //                      or do we want to let the host choose?
-        // potential model...
-        // 1) remove GTA from the market: 
-        //    LEGACY MODEL (N/A)
-        //     - host choice: to pay service fee in GTA for a discount (and then we buy and burn)
-        //    NEW MODEL
-        //     - keeper set: buyGtaPerc of serviceFeeUSD = buyGtaUSD (for every event)
-        //     - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithGuestRecipients')
-        //     - host required to hold some GTA in order to host (handled in 'createEvent')
-        //     - 'info|burn|cancel' public functions require holding GTA
-        // 
-        // 2) add GTA to the market: 
-        //     - host gets minted some amount for hosting games (handled in 'hostEndEventWithGuestRecipients')
-        //     - player gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
-        //
-        // #2 always has to be less than #1 for every hosted event 
-        //     - the value of amounts minted must always be less than the service fee
-        //     NOTE: total amount minted to winners + host = 'mintGtaPerc' of GTA amount recieved from 'buyGtaUSD' from market
+        /** TOKENOMICS...
+            1) remove GTA from the market: 
+                LEGACY MODEL (N/A)
+                    - host choice: to pay service fee in GTA for a discount (and then we buy and burn)
+                NEW MODEL
+                    - keeper set: buyGtaPerc of serviceFeeUSD = buyGtaUSD (for every event)
+                    - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithGuestRecipients')
+                    - host required to hold some GTA in order to host (handled in 'createEvent')
+                    - 'info|burn|cancel' public functions require holding GTA
+                
+            2) add GTA to the market: 
+                - host gets minted some amount for hosting games (handled in 'hostEndEventWithGuestRecipients')
+                - player gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
+            
+            #2 always has to be less than #1 for every hosted event 
+                - the value of amounts minted must always be less than the service fee
+                NOTE: total amount minted to winners + host = 'mintGtaPerc' of GTA amount recieved from 'buyGtaUSD' from market
+        */
 
         // calc: TOT 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
         //       NET 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
