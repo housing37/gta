@@ -894,13 +894,15 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _evt.endBlockNum = block.number;
         _evt.event_1.ended = true;
 
-        // transfer active events to closed events
-        //  copy to closedEvents; delete from activeEvents
+        // transfer from activeEvents to closedEvents & delete from activeEvents
         _migrateToClosedEvents(_evtCode);
     }
     function _migrateToClosedEvents(address _evtCode) private {
-        _copyActiveEventToClosedEvent(_evtCode); // copy to closedEvents
-        _deleteActiveEvent(_evtCode); // remove from activeEvents
+        // copies to closedEvents, appends to closedEventCodes, increments closedEventCount
+        _copyActiveEventToClosedEvent(_evtCode); 
+
+        // delete from activeEvents, removes from activeEventCodes, decrements activeEventCount
+        _deleteActiveEvent(_evtCode); 
     }
     function _deleteActiveEvent(address _evtCode) private {
         require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :/');
@@ -915,6 +917,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         closedEventCount--;
     }
     function _copyActiveEventToClosedEvent(address _evtCode) private {
+        // append to closedEventCodes array & increment closedEventCount (traversal support)
+        closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
+        closedEventCount++;
+
         // Copy values to closedEvents
         closedEvents[_evtCode].host = activeEvents[_evtCode].host;
         closedEvents[_evtCode].gameName = activeEvents[_evtCode].gameName;
@@ -932,21 +938,18 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // Explicitly copy event_1 values
         closedEvents[_evtCode].event_1.launched = activeEvents[_evtCode].event_1.launched;
         closedEvents[_evtCode].event_1.ended = activeEvents[_evtCode].event_1.ended;
-
-        // closedEvents[_evtCode].event_1.players = activeEvents[_evtCode].event_1.players;
-        // Manually copy players mapping
-        address[] memory playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
-        for (uint256 i = 0; i < playerAddresses.length; i++) {
-            address playerAddress = playerAddresses[i];
-            closedEvents[_evtCode].event_1.players[playerAddress] = true;
-        }
-
-        closedEvents[_evtCode].event_1.playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
-        closedEvents[_evtCode].event_1.playerCnt = activeEvents[_evtCode].event_1.playerCnt;
         closedEvents[_evtCode].event_1.hostFeePerc = activeEvents[_evtCode].event_1.hostFeePerc;
         closedEvents[_evtCode].event_1.keeperFeeUSD = activeEvents[_evtCode].event_1.keeperFeeUSD;
         closedEvents[_evtCode].event_1.serviceFeeUSD = activeEvents[_evtCode].event_1.serviceFeeUSD;
         closedEvents[_evtCode].event_1.supportFeeUSD = activeEvents[_evtCode].event_1.supportFeeUSD;
+
+        // Manually copy player address array, player count, & players mapping (event registration & traversal support) 
+        closedEvents[_evtCode].event_1.playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
+        closedEvents[_evtCode].event_1.playerCnt = activeEvents[_evtCode].event_1.playerCnt;
+        address[] memory pAddies = activeEvents[_evtCode].event_1.playerAddresses;
+        for (uint256 i = 0; i < pAddies.length; i++) {
+            closedEvents[_evtCode].event_1.players[pAddies[i]] = true; // true = registerd 
+        }
 
         // Explicitly copy event_2 values
         closedEvents[_evtCode].event_2.totalFeesUSD = activeEvents[_evtCode].event_2.totalFeesUSD;
@@ -962,9 +965,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         closedEvents[_evtCode].event_2.refundsUSD = activeEvents[_evtCode].event_2.refundsUSD;
         closedEvents[_evtCode].event_2.hostFeeUSD_ind = activeEvents[_evtCode].event_2.hostFeeUSD_ind;
         closedEvents[_evtCode].event_2.buyGtaUSD = activeEvents[_evtCode].event_2.buyGtaUSD;
-
-        closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
-        closedEventCount++;
     }
 
     // set event params to launched state
