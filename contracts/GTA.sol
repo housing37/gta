@@ -145,8 +145,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // ------------------------------------------
         bool launched;  // 'hostStartEvent'
         bool ended;     // 'hostEndEventWithGuestRecipients'
-        // bool expired;   // 'cancelEventAndProcessRefunds'
-        // LEFT OFF HERE ... 'expired' is never used
 
         // ------------------------------------------
         mapping(address => bool) players; // true = registerd 
@@ -226,6 +224,14 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // notify client side that a player was registerd for event
     event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
 
+    // notify client side of event fee payouts (_payHost, _payKeepr, _paySupport)
+    event PaidHostFee(address _host, uint32 _amntUSD, address _eventCode);
+    event PaidKeeperFee(address _keeper, uint32 _amntUSD, address _eventCode);
+    event PaidSupportFee(address _supportStaff, uint32 _indAmntUSD, uint32 _totAmntUSD, address _eventCode);
+
+    // notiify client side that '_paySupport' failed for some reason
+    event FailedPaySupportFee(uint32 _amntUSD, address _eventCode, string _info);
+
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -256,12 +262,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(activeGames[gameCode].host != address(0), 'err: gameCode not found :(');
         bool isHost = msg.sender == activeGames[gameCode].host;
         bool isKeeper = msg.sender == GTAD.keeper();
-        bool isOwner = msg.sender == owner(); // from 'Ownable'
-        require(isKeeper || isOwner || isHost, 'err: only admins :/*');
-        _;
+        require(isKeeper || isHost, 'err: only admins :/*');
+        
+        // NOTE: onlyAdmins is only used in 'getPlayers' (no need for owner() check)
+        // bool isOwner = msg.sender == owner(); // from 'Ownable'
+        // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
 
-        // LEFT OFF HERE ... not sure check for owner() is valid here
-        //     onlyAdmins is only used in 'getPlayers'
+        _;
     }
     modifier onlyKeeper() {
         require(msg.sender == GTAD.keeper(), "Only the keeper :p");
@@ -558,8 +565,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // pay keeper & support staff w/ lowest market value stable
         //  (contract maintains highest market value stables)
         // NOTE: host paid in 'hostEndEventWithGuestRecipients'
-        _payKeeper(evt.event_1.keeperFeeUSD);
-        _paySupport(evt.event_1.supportFeeUSD);        
+        _payKeeper(evt.event_1.keeperFeeUSD, _eventCode);
+        _paySupport(evt.event_1.supportFeeUSD, _eventCode);        
 
         return true;
     }
@@ -625,7 +632,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, hostFeeUSD is 100% of prizePoolUSD
         // NOTE: keeper & support paid in 'hostStartEvent'
-        _payHost(evt.host, evt.event_2.hostFeeUSD);
+        _payHost(evt.host, evt.event_2.hostFeeUSD, _eventCode);
         
         // set event params to end state & transfer to deadEvents array
         _endEvent(_eventCode);
@@ -654,7 +661,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // if guest is canceling, verify event not launched & expTime indeed passed 
         //  NOTE: considers keeper's allowance to register for any events
         if (evt.event_1.players[msg.sender] && msg.sender != GTAD.keeper()) { 
-            require(!evt.event_1.launched && evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
+            require(!evt.event_1.launched && evt.expTime < block.timestamp, 'err: _eventCode not expTime yet :<>');
         } 
 
         // calc fees for keeperFeeUSD, supportFeeUSD, refundUSD_ind
@@ -664,8 +671,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  else: keeper & support already paid in hostStartEvent
         // NOTE: host does not get paid here (ie. security risk: could create & cancel events for fees)
         if (!evt.event_1.launched) {
-            _payKeeper(evt.event_1.keeperFeeUSD);
-            _paySupport(evt.event_1.supportFeeUSD);
+            _payKeeper(evt.event_1.keeperFeeUSD, _eventCode);
+            _paySupport(evt.event_1.supportFeeUSD, _eventCode);
         }
 
         // loop through guests & process refunds via '_updateCredits'
@@ -943,20 +950,24 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return gta_quote;
     }
 
-    function _payHost(address _host, uint32 _amntUSD) private {
+    function _payHost(address _host, uint32 _amntUSD, address _eventCode) private {
         address stable_host = _transferBestDebitStableUSD(_host, _amntUSD);
+        emit PaidHostFee(_host, _amntUSD, _eventCode);
     }
-    function _payKeeper(uint32 _amntUSD) private {
+    function _payKeeper(uint32 _amntUSD, address _eventCode) private {
         address stable_keeper = _transferBestDebitStableUSD(GTAD.keeper(), _amntUSD);
+        emit PaidHostFee(GTAD.keeper(), _amntUSD, _eventCode);
     }
-    function _paySupport(uint32 _amntUSD) private {
+    function _paySupport(uint32 _amntUSD, address _eventCode) private {
         (address[] memory staff, uint32[] memory indFees) = GTAD.getSupportStaffWithIndFees(_amntUSD);
         if (staff.length != indFees.length ) {
-            // LEFT OFF HERE ... emit notification that _paySupport failed
+            string memory err = 'staff and indFees length mismatch, from GTAD.getSupportStaffWithIndFees :/';
+            emit FailedPaySupportFee(_amntUSD, _eventCode, err);
             return;
         }
         for (uint i=0; i < staff.length; i++) {
             address stable_supp = _transferBestDebitStableUSD(staff[i], indFees[i]);
+            emit PaidSupportFee(staff[i], indFees[i], _amntUSD, _eventCode);
         }
     }
 
