@@ -84,8 +84,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     uint64 private deadEventCount = 0; 
     address[] private deadEventCodes = new address[](0);
 
-    // game experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
-    uint32 private gameExpSec = 86400 * 1; // 1 day = 86400 seconds
+    // event experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
+    //  BUT, block.timestamp is express in seconds since 1970 as uint256
+    uint256 private eventExpSec = 86400 * 1; // 1 day = 86400 seconds 
 
     /* _ CREDIT SUPPORT _ */
     // usd credits used to process player deposits, registers, refunds
@@ -195,6 +196,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* EVENTS                                                   */
     /* -------------------------------------------------------- */
+    // emit to client side that a new event was created
+    event GTAEventCreated(address _host, string _eventName, address _eventCode, uint256 _createTime, uint256 _startTime, uint256 _expTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[]  _winPercs);
+    
     // emit to client side when mnimium deposit refund is not met
     event MinimumDepositRefund(address sender, address token, uint256 amount, uint256 gasfee, uint256 accrued);
 
@@ -283,9 +287,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_player != address(0), 'err: no zero address :{=}');
         return creditsUSD[_player];
     }
-    function keeperSetGameExpSec(uint32 _sec) external onlyKeeper {
+    function keeperSetGameExpSec(uint256 _sec) external onlyKeeper {
         require(_sec > 0, 'err: no zero :{}');
-        gameExpSec = _sec;
+        eventExpSec = _sec;
     }
     function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
@@ -410,7 +414,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return _getGameCode(_host, _gameName);
     }
 
-    function createEvent(string memory _eventName, uint64 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
+    function createEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
         require(_startTime > block.timestamp, "err: start too soon :/");
         require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
         require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
@@ -421,7 +425,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
-        uint64 expTime = _startTime + uint64(gameExpSec);
+        uint256 expTime = _startTime + eventExpSec;
         require(expTime > _startTime, "err: stop f*ckin around :X");
 
         // verify name/code doesn't yet exist in 'activeGames'
@@ -448,7 +452,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         activeGameCodes = GTAD.addAddressToArraySafe(eventCode, activeGameCodes, true); // true = no dups
         activeGameCount++;
         
-        // LEFT OFF HERE ... need emit notification for 'createEvent' event
+        // emit client side notification for 'createEvent' event
+        emit GTAEventCreated(msg.sender, _eventName, eventCode, newEvent.createTime, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
 
         // return eventCode to caller
         return eventCode;
@@ -471,6 +476,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(!evt.event_1.launched, "err: event already started :(");
 
         // check if host trying to register
+        //  NOTE: keeper may indeed register for any event
         require(evt.host != msg.sender, 'err: invalid guest, no host registration :{}');
 
         // check msg.sender already registered
@@ -501,7 +507,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if msg.sender is _eventCode host
-        require(evt.host == msg.sender, 'err: only event host :/');
+        //  NOTE: keeper may register any guest for any event
+        require(evt.host == msg.sender || msg.sender == GTAD.keeper(), 'err: only event host :/');
 
         // check if host trying to register host
         require(evt.host != _guest, 'err: invalid guest, no host registration :{}');
@@ -528,6 +535,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
 
     // host can start event w/ guests pre-registerd for _eventCode
+    //  calc fees and payouts, pay keeper & support
     function hostStartEvent(address _eventCode) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
 
@@ -535,16 +543,23 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         Event_0 storage evt = activeGames[_eventCode];
         require(evt.host != address(0), 'err: invalid game code :I');
 
-        // check if msg.sender is game host
+        // check if msg.sender is event host
         require(evt.host == msg.sender, 'err: only host :/');
 
         // check if event not started yet
         require(!evt.event_1.launched, 'err: event already started');
 
-        // calc/set 'prizePoolUSD' & 'payoutsUSD' from 'entryFeeUSD' collected
-        //  calc/deduct all fees & generate 'buyGtaUSD' from 'serviceFeeUSD'
-        evt = _calcFeesAndPayouts(evt); // ? Event_0 storage evt = _calcFeesAndPayouts(evt); ?
-        evt = _launchEvent(evt); // set event state to 'launched = true'
+        // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD'
+        //  calc 'buyGtaUSD' from 'serviceFeeUSD'
+        evt = _calcFeesAndPayouts(evt);
+
+        // set event state to 'launched = true'
+        evt = _launchEvent(evt); 
+
+        // pay keeper & support staff w/ lowest market value stable
+        //  (contract maintains highest market value stables)
+        _payKeeper(evt.event_1.keeperFeeUSD);
+        _paySupport(evt.event_1.supportFeeUSD);        
 
         return true;
     }
@@ -605,14 +620,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
         }
 
-        // pay host & keeper & support staff
-        //  w/ lowest market value stable (contract maintains highest market value stables)
+        // pay host w/ lowest market value stable (contract maintains highest market value stables)
         //  NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
-        //    HENCE, evt.event_2.hostFeeUSD == 100% of prizePoolUSD
+        //    HENCE, hostFeeUSD is 100% of prizePoolUSD
         _payHost(evt.host, evt.event_2.hostFeeUSD);
-        _payKeeper(evt.event_1.keeperFeeUSD);
-        _paySupport(evt.event_1.supportFeeUSD);        
-        // LEFT OFF HERE ... should we pay keeper and support in 'hostStartEvent'?
         
         // set event params to end state & transfer to deadEvents array
         _endEvent(_eventCode);
@@ -623,11 +634,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return true;
     }
 
-    // LEFT OFF HERE ... should guests be able to cancel started events, if hosts never end them?
-
     // cancel event and process refunds (host, guests, keeper)
-    //  host|keeper can cancel if event not 'launched' yet
-    //  guests can cancel if event not 'launched' & 'expTime' has passed
+    //  host|keeper can cancel if event not 'launched' yet OR indeed launched (emergency use case)
+    //  guests can only cancel if event not 'launched' yet AND 'expTime' has passed
+    // NOTE: if event canceled: guests get refunds in 'creditsUSD' & host does NOT get paid
     function cancelEventAndProcessRefunds(address _eventCode) external onlyHolder(GTAD.cancelGtaBalanceRequired()){
         require(_eventCode != address(0), 'err: no event code :<>');
 
@@ -639,13 +649,22 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
         require(isValidSender, 'err: only registerd guests or host :<>');
 
-        // for host|guest|keeper cancel, verify event not launched
-        require(!evt.event_1.launched, 'err: event already started :<>'); 
-
-        // for guest cancel, also verify event expTime must be passed 
-        if (evt.event_1.players[msg.sender]) {
-            require(evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
+        // if guest is canceling, verify event not launched & expTime indeed passed 
+        //  NOTE: considers keeper's allowance to register for any events
+        if (evt.event_1.players[msg.sender] && msg.sender != GTAD.keeper()) { 
+            require(!evt.event_1.launched && evt.expTime < block.timestamp, 'err: event code not expired yet :<>');
         } 
+
+        // calc fees for keeperFeeUSD, supportFeeUSD, refundUSD_ind
+        evt = _calcFeesAndPayouts(evt);
+
+        // if event NOT launched yet: pay keeper & support staff accordingly
+        //  else: keeper & support already paid in hostStartEvent
+        // NOTE: host does not get paid (ie. could create & cancel events for fees)
+        if (!evt.event_1.launched) {
+            _payKeeper(evt.event_1.keeperFeeUSD);
+            _paySupport(evt.event_1.supportFeeUSD);
+        }
 
         // loop through guests & process refunds via '_updateCredits'
         for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
@@ -663,16 +682,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             //      - 'hostEndEventWithGuestRecipients' pay host; pay keeper & support here or pay them in 'hostStartEvent'?
             //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
 
-            // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (calc/set in 'hostStartEvent')
+            // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (NET of totalFeesUSD; set in '_calcFeesAndPayouts')
             _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
-
-            // LEFT OFF HERE ... keeper & support are not being paid if event canceled
-            //  NOTE: host should not be paid on cancel event (ie. so they can't just create & cancel events to take the fees)
 
             // notify listeners of processed refund
             emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
-        
+    
         // set event params to end state
         _endEvent(_eventCode);
 
@@ -942,7 +958,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         }
     }
 
-    // calc prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD
+    // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD' collected
+    //  calc 'buyGtaUSD' from 'serviceFeeUSD'
+    // calc: prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD, buyGtaUSD
     function _calcFeesAndPayouts(Event_0 storage _evt) private returns (Event_0 storage) {
         /* DEDUCTING FEES
             current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
