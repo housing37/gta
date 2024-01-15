@@ -17,7 +17,7 @@ import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Rout
 
 /* terminology...
                  join -> room, game, event, activity
-             register -> seat, player, delegates, users, participants, entrants
+             register -> guest, seat, player, delegates, users, participants, entrants
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
 contract GTADelegate is GTASwapTools {
@@ -33,7 +33,7 @@ contract GTADelegate is GTASwapTools {
     address[] public uswapV2routers; // modifiers: addDexRouter/remDexRouter
         
     /* _ TOKEN SUPPORT _ */
-    // arrays of accepted usd stable & alts for player deposits
+    // arrays of accepted usd stable & alts for guest deposits
     address[] public whitelistAlts;
     address[] public whitelistStables;
     uint8 private whitelistStablesUseIdx; // _getNextStableTokDeposit()

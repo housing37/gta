@@ -13,7 +13,7 @@ import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";
 
 /* terminology...
                  join -> room, game, event, activity
-             register -> seat, player, delegates, users, participants, entrants
+             register -> seat, guest, delegates, users, participants, entrants
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
 interface IGTADelegate {
@@ -88,7 +88,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     uint256 private eventExpSec = 86400 * 1; // 1 day = 86400 seconds 
 
     /* _ CREDIT SUPPORT _ */
-    // usd credits used to process player deposits, registers, refunds
+    // usd credits used to process guest deposits, registers, refunds
     mapping(address => uint32) private creditsUSD;
 
     // set by '_updateCredits'; get by 'keeperGetCreditAddresses|keeperGetCredits'
@@ -147,9 +147,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         bool ended;     // 'hostEndEventWithGuestRecipients'
 
         // ------------------------------------------
-        mapping(address => bool) players; // true = registerd 
-        address[] playerAddresses; // traversal access
-        uint32 playerCnt;       // length or players; max 4,294,967,295
+        mapping(address => bool) guests; // true = registered 
+        address[] guestAddresses; // traversal access
+        uint32 guestCnt;       // length or guests; max 4,294,967,295
 
         /** host set */
         uint8 hostFeePerc;      // x% of prizePoolUSD
@@ -157,14 +157,14 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // uint8 mintDistrPerc;    // % of ?
         
         /** _calcFeesAndPayouts */
-        uint32 keeperFeeUSD;    // (entryFeeUSD * playerCnt) * keeperFeePerc
-        uint32 serviceFeeUSD;   // (entryFeeUSD * playerCnt) * serviceFeePerc
-        uint32 supportFeeUSD;   // (entryFeeUSD * playerCnt) * supportFeePerc
+        uint32 keeperFeeUSD;    // (entryFeeUSD * guestCnt) * keeperFeePerc
+        uint32 serviceFeeUSD;   // (entryFeeUSD * guestCnt) * serviceFeePerc
+        uint32 supportFeeUSD;   // (entryFeeUSD * guestCnt) * supportFeePerc
     }
     struct Event_2 { 
         uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
         uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
-        uint32 prizePoolUSD;    // (entryFeeUSD * playerCnt) - totalFeesUSD - hostFeeUSD
+        uint32 prizePoolUSD;    // (entryFeeUSD * guestCnt) - totalFeesUSD - hostFeeUSD
 
         // ------------------------------------------
         uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
@@ -176,7 +176,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
         uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
         uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
-        uint32 refundsUSD;          // refundUSD_ind * evt.event_1.playerCnt
+        uint32 refundsUSD;          // refundUSD_ind * evt.event_1.guestCnt
         uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
 
         uint32 buyGtaUSD;   // serviceFeeUSD * buyGtaPerc
@@ -212,8 +212,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     event EndEventActivity(address evtCode, address host, address[] winners, uint32 prize_pool_usd, uint32 host_fee_usd, uint32 keeper_fee_usd, uint64 activeEvtCount, uint256 block_timestamp, uint256 block_number);
 
     // notify client side that an event has been canceled
-    event ProcessedRefund(address player, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
-    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 playerCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
+    event ProcessedRefund(address guest, uint32 refundAmountUSD, address evtCode, bool evtLaunched, uint256 evtExpTime);
+    event CanceledEvent(address canceledBy, address evtCode, bool evtLaunched, uint256 evtExpTime, uint32 guestCount, uint32 prize_pool_usd, uint32 totalFeesUSD, uint32 totalRefundsUSD, uint32 indRefundUSD);
 
     // notify client side that someoen cracked the burn code and burned all gta in this contract
     event BurnedGTA(uint256 bal_cleaned, uint256 bal_burned, uint256 bal_earned, address code_cracker, uint64 guess_count);
@@ -221,8 +221,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // notify clients a new burn code is set with type (easy, hard)
     event BurnCodeReset(bool setToHard);
 
-    // notify client side that a player was registerd for event
-    event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address player, uint32 playerCnt);
+    // notify client side that a guest was registered for event
+    event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address guest, uint32 guestCnt);
 
     // notify client side of event fee payouts (_payHost, _payKeepr, _paySupport)
     event PaidHostFee(address _host, uint32 _amntUSD, address _eventCode);
@@ -289,9 +289,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
         return creditsAddrArray;
     }
-    function keeperGetCredits(address _player) external view onlyKeeper returns (uint32) {
-        require(_player != address(0), 'err: no zero address :{=}');
-        return creditsUSD[_player];
+    function keeperGetCredits(address _guest) external view onlyKeeper returns (uint32) {
+        require(_guest != address(0), 'err: no zero address :{=}');
+        return creditsUSD[_guest];
     }
     function keeperSetGameExpSec(uint256 _sec) external onlyKeeper {
         require(_sec > 0, 'err: no zero :{}');
@@ -399,7 +399,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != address(0), 'err: invalid event code :I');
 
         // check msg.sender is registered
-        return evt.event_1.players[msg.sender];
+        return evt.event_1.guests[msg.sender];
     }
 
     // verify your own GTA holding required to host
@@ -491,7 +491,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != msg.sender, 'err: invalid guest, no host registration :{}');
 
         // check msg.sender already registered
-        require(!evt.event_1.players[msg.sender], 'err: already registered for this _eventCode :p');
+        require(!evt.event_1.guests[msg.sender], 'err: already registered for this _eventCode :p');
 
         // check msg.sender for enough credits
         require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :P');
@@ -502,8 +502,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // -1) add msg.sender to event
         _addGuestToEvent(msg.sender, _eventCode);
         
-        // notify client side that a player was registerd for event
-        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, msg.sender, evt.event_1.playerCnt);
+        // notify client side that a guest was registered for event
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, msg.sender, evt.event_1.guestCnt);
         
         return true;
     }
@@ -528,7 +528,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(!evt.event_1.launched, 'err: event already started :(');
 
         // check _guest already registered
-        require(!evt.event_1.players[_guest], 'err: _guest already registered for this _eventCode :p');
+        require(!evt.event_1.guests[_guest], 'err: _guest already registered for this _eventCode :p');
 
         // check msg.sender for enough credits
         require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits :(, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :p');
@@ -536,16 +536,16 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // debit guest entry fee from creditsUSD[msg.sender] (ie. host credits)
         _updateCredits(msg.sender, evt.entryFeeUSD, true); // true = debit
 
-        // -1) add player to game event
+        // -1) add guest to game event
         _addGuestToEvent(_guest, _eventCode);
 
-        // notify client side that a _guest was registerd for event
-        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, _guest, evt.event_1.playerCnt);
+        // notify client side that a _guest was registered for event
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, _guest, evt.event_1.guestCnt);
 
         return true;
     }
 
-    // host can start event w/ guests pre-registerd for _eventCode
+    // host can start event w/ guests pre-registered for _eventCode
     //  calc fees and payouts, pay keeper & support
     function hostStartEvent(address _eventCode) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
@@ -613,7 +613,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  NOTE: if _guests.length == 0, then winPercs & payoutsUSD are empty arrays
         for (uint16 i=0; i < _guests.length; i++) {
             // verify winner address was registered in the event
-            require(evt.event_1.players[_guests[i]], 'err: invalid player found :/, check getPlayers & retry w/ all valid players');
+            require(evt.event_1.guests[_guests[i]], 'err: invalid guest found :/, check getPlayers & retry w/ all valid guests');
 
             // calc win_usd = _guests[i] => payoutsUSD[i]
             address winner = _guests[i];
@@ -659,13 +659,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         Event_0 storage evt = activeEvents[_eventCode];
         require(evt.host != address(0), 'err: invalid event code :<>');
         
-        // check for valid sender to cancel (only registered players, host, or keeper)
-        bool isValidSender = evt.event_1.players[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
-        require(isValidSender, 'err: only registerd guests or host :<>');
+        // check for valid sender to cancel (only registered guests, host, or keeper)
+        bool isValidSender = evt.event_1.guests[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
+        require(isValidSender, 'err: only registered guests or host :<>');
 
         // if guest is canceling, verify event not launched & expTime indeed passed 
         //  NOTE: considers keeper's allowance to register for any events
-        if (evt.event_1.players[msg.sender] && msg.sender != GTAD.keeper()) { 
+        if (evt.event_1.guests[msg.sender] && msg.sender != GTAD.keeper()) { 
             require(!evt.event_1.launched && evt.expTime < block.timestamp, 'err: _eventCode not expTime yet :<>');
         } 
 
@@ -681,7 +681,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         }
 
         // loop through guests & process refunds via '_updateCredits'
-        for (uint i=0; i < evt.event_1.playerAddresses.length; i++) {
+        for (uint i=0; i < evt.event_1.guestAddresses.length; i++) {
             // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
             //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
@@ -697,17 +697,17 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
 
             // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (NET of totalFeesUSD; set in '_calcFeesAndPayouts')
-            _updateCredits(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+            _updateCredits(evt.event_1.guestAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
-            emit ProcessedRefund(evt.event_1.playerAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
+            emit ProcessedRefund(evt.event_1.guestAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
         }
     
         // set event params to end state
         _endEvent(_eventCode);
 
         // notify listeners of canceled event
-        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.playerCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
+        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.guestCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
     }
 
     /* -------------------------------------------------------- */
@@ -853,23 +853,23 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
     function _getPlayers(address _gameCode) private view returns (address[] memory) {
         require(activeEvents[_gameCode].host != address(0), 'err: _gameCode not found :{}');
-        return activeEvents[_gameCode].event_1.playerAddresses; // '.event_1.players' is mapping
+        return activeEvents[_gameCode].event_1.guestAddresses; // '.event_1.guests' is mapping
     }
-    // debits/credits for a _player in 'creditsUSD' (used during deposits and event registrations)
-    function _updateCredits(address _player, uint32 _amountUSD, bool _debit) private {
+    // debits/credits for a _guest in 'creditsUSD' (used during deposits and event registrations)
+    function _updateCredits(address _guest, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
             // ensure there is enough credit before debit
-            require(creditsUSD[_player] >= _amountUSD, 'err: invalid credits to debit :[');
-            creditsUSD[_player] -= _amountUSD;
+            require(creditsUSD[_guest] >= _amountUSD, 'err: invalid credits to debit :[');
+            creditsUSD[_guest] -= _amountUSD;
 
-            // if balance is now 0, remove _player from balance tracking
-            if (creditsUSD[_player] == 0) {
-                delete creditsUSD[_player];
-                creditsAddrArray = GTAD.remAddressFromArray(_player, creditsAddrArray);
+            // if balance is now 0, remove _guest from balance tracking
+            if (creditsUSD[_guest] == 0) {
+                delete creditsUSD[_guest];
+                creditsAddrArray = GTAD.remAddressFromArray(_guest, creditsAddrArray);
             }
         } else { 
-            creditsUSD[_player] += _amountUSD; 
-            creditsAddrArray = GTAD.addAddressToArraySafe(_player, creditsAddrArray, true); // true = no dups
+            creditsUSD[_guest] += _amountUSD; 
+            creditsAddrArray = GTAD.addAddressToArraySafe(_guest, creditsAddrArray, true); // true = no dups
         }
     }
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
@@ -885,11 +885,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  need to verify this conversion w/ stable contract integrations (could be 10**6 thats need, maybe)
     }
 
-    function _addGuestToEvent(address _player, address _evtCode) private {
+    function _addGuestToEvent(address _guest, address _evtCode) private {
         Event_0 storage _evt = activeEvents[_evtCode];
-        _evt.event_1.players[_player] = true;
-        _evt.event_1.playerAddresses.push(_player);
-        _evt.event_1.playerCnt = uint32(_evt.event_1.playerAddresses.length);
+        _evt.event_1.guests[_guest] = true;
+        _evt.event_1.guestAddresses.push(_guest);
+        _evt.event_1.guestCnt = uint32(_evt.event_1.guestAddresses.length);
     }
 
     // set event param to end state
@@ -952,12 +952,12 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         closedEvents[_evtCode].event_1.serviceFeeUSD = activeEvents[_evtCode].event_1.serviceFeeUSD;
         closedEvents[_evtCode].event_1.supportFeeUSD = activeEvents[_evtCode].event_1.supportFeeUSD;
 
-        // Manually copy player address array, player count, & players mapping (event registration & traversal support) 
-        closedEvents[_evtCode].event_1.playerAddresses = activeEvents[_evtCode].event_1.playerAddresses;
-        closedEvents[_evtCode].event_1.playerCnt = activeEvents[_evtCode].event_1.playerCnt;
-        address[] memory pAddies = activeEvents[_evtCode].event_1.playerAddresses;
+        // Manually copy guest address array, guest count, & guests mapping (event registration & traversal support) 
+        closedEvents[_evtCode].event_1.guestAddresses = activeEvents[_evtCode].event_1.guestAddresses;
+        closedEvents[_evtCode].event_1.guestCnt = activeEvents[_evtCode].event_1.guestCnt;
+        address[] memory pAddies = activeEvents[_evtCode].event_1.guestAddresses;
         for (uint256 i = 0; i < pAddies.length; i++) {
-            closedEvents[_evtCode].event_1.players[pAddies[i]] = true; // true = registerd 
+            closedEvents[_evtCode].event_1.guests[pAddies[i]] = true; // true = registered 
         }
 
         // Explicitly copy event_2 values
@@ -1048,14 +1048,14 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
              - win payouts -> taken from GROSS 'prizePoolUSD' generated below
 
             Formulas ...
-                keeperFeeUSD = (entryFeeUSD * playerCnt) * keeperFeePerc
-                serviceFeeUSD = (entryFeeUSD * playerCnt) * serviceFeePerc
-                supportFeeUSD = (entryFeeUSD * playerCnt) * supportFeePerc
+                keeperFeeUSD = (entryFeeUSD * guestCnt) * keeperFeePerc
+                serviceFeeUSD = (entryFeeUSD * guestCnt) * serviceFeePerc
+                supportFeeUSD = (entryFeeUSD * guestCnt) * supportFeePerc
                 totalFeesUSD = keeperFeeUSD + serviceFeeUSD + supportFeeUSD
 
                 buyGtaUSD = serviceFeeUSD * buyGtaPerc
 
-                GROSS entryFeeUSD = entryFeeUSD * playerCnt
+                GROSS entryFeeUSD = entryFeeUSD * guestCnt
                   NET entryFeeUSD = GROSS entryFeeUSD - totalFeesUSD
 
                 GROSS serviceFeeUSD = GROSS entryFeeUSD * serviceFeePerc
@@ -1066,7 +1066,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                       then '_burnGTA' burns 'burnGtaPerc' of all GTA held
                        w/ remaining GTA held being sent to msg.sender
 
-                GROSS prizePoolUSD = (entryFeeUSD * playerCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
+                GROSS prizePoolUSD = (entryFeeUSD * guestCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
                         hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
                   NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
                      payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
@@ -1079,7 +1079,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                  HENCE, full 'prizePoolUSD' will always be distributed (ie. to host)
         */
 
-        // calc individual player fees (BEFORE generating 'prizePoolUSD') 
+        // calc individual guest fees (BEFORE generating 'prizePoolUSD') 
         //  '_ind' used for refunds in 'cancelEventAndProcessRefunds' (excludes 'hostFeeUSD_ind')
         _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (GTAD.keeperFeePerc()/100);
         _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (GTAD.serviceFeePerc()/100);
@@ -1092,9 +1092,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _evt.event_2.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind) * (_evt.event_1.hostFeePerc/100);
 
         // calc total fees for all 'entryFeeUSD' paid
-        _evt.event_1.keeperFeeUSD = _evt.event_2.keeperFeeUSD_ind * _evt.event_1.playerCnt;
-        _evt.event_1.serviceFeeUSD = _evt.event_2.serviceFeeUSD_ind * _evt.event_1.playerCnt; // GROSS
-        _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.playerCnt;
+        _evt.event_1.keeperFeeUSD = _evt.event_2.keeperFeeUSD_ind * _evt.event_1.guestCnt;
+        _evt.event_1.serviceFeeUSD = _evt.event_2.serviceFeeUSD_ind * _evt.event_1.guestCnt; // GROSS
+        _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.guestCnt;
         _evt.event_2.totalFeesUSD = _evt.event_1.keeperFeeUSD + _evt.event_1.serviceFeeUSD + _evt.event_1.supportFeeUSD;
 
         /** TOKENOMICS...
@@ -1109,7 +1109,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                 
             2) add GTA to the market: 
                 - host gets minted some amount for hosting games (handled in 'hostEndEventWithGuestRecipients')
-                - player gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
+                - guest gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
             
             #2 always has to be less than #1 for every hosted event 
                 - the value of amounts minted must always be less than the service fee
@@ -1125,10 +1125,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         // calc idividual & total refunds (for 'cancelEventAndProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
         _evt.event_2.refundUSD_ind = _evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind; 
-        _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.playerCnt;
+        _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.guestCnt;
 
         // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
-        _evt.event_2.prizePoolUSD = (_evt.entryFeeUSD * _evt.event_1.playerCnt) - _evt.event_2.totalFeesUSD;
+        _evt.event_2.prizePoolUSD = (_evt.entryFeeUSD * _evt.event_1.guestCnt) - _evt.event_2.totalFeesUSD;
 
         // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
         _evt.event_2.hostFeeUSD = _evt.event_2.prizePoolUSD * (_evt.event_1.hostFeePerc/100);
