@@ -322,6 +322,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
     function keeperDeleteClosedEvent(address _evtCode) external onlyKeeper {
         require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+
+        // delete from closedEvents, removes from closedEventCodes, decrements closedEventCount
         _deleteClosedEvent(_evtCode);
     }
     function keeperCleanOutClosedEvents() external onlyKeeper {
@@ -329,6 +331,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             // NOTE: no error check for address(0), want to clean regardless            
             delete closedEvents[closedEventCodes[i]]; // delete event mapping
         }
+
+        // NOTE: simply wipe closedEventCodes all at once after closedEvents mapping is cleaned
+        //  *DO NOT ALTER closedEventCodes array while looping through it*
         closedEventCodes = new address[](0);
         closedEventCount = 0;
     }
@@ -874,6 +879,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
         return stable;
+
+        // LEFT OFF HERE ... all '*USD' vars are currently converted to wei using '*USD * 10**18'
+        //  during 'transfer' or calcs for misc comparisons, but this might be wrong,
+        //  need to verify this conversion w/ stable contract integrations (could be 10**6 thats need, maybe)
     }
 
     function _addGuestToEvent(address _player, address _evtCode) private {
@@ -1110,7 +1119,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // calc: TOT 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
         //       NET 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
         //  NOTE: remaining NET 'serviceFeeUSD' is simply held by GTA contract address
-        //   LEFT OF HERE ... should we do something with it? track it in global? perhaps send it to some 'serviceFeeAddress'?
+        //   LEFT OFF HERE ... should we do something with it? track it in global? perhaps send it to some 'serviceFeeAddress'?
         _evt.event_2.buyGtaUSD = _evt.event_1.serviceFeeUSD * (buyGtaPerc/100);
         _evt.event_1.serviceFeeUSD -= _evt.event_2.buyGtaUSD; // NET
 
