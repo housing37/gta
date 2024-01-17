@@ -165,6 +165,7 @@ if __name__ == "__main__":
             lst_evts_min, blocknum, timstamp = get_latest_bals(_w3.W3, contr_inst, start_blocknum, filter_gta=False)
 
             # Convert python lst_evts_min to Solidity-friendly format
+            # LEFT OFF HERE ... add 'v["receiver"]' to send to contract
             solidity_data = [
                     (
                         v["token"], v["sender"], v["amount"]
@@ -172,7 +173,7 @@ if __name__ == "__main__":
                 ]
             # send 'lst_evts_min' credit updates to solidity contract
             #   note: send credit updates for stable token: 'contr_inst'  (for all players)
-            _w3.GTA_CONTRACT.updateCredits(solidity_data, blocknum, {'from': _w3.ACCOUNT})
+            _w3.GTA_CONTRACT.settleBalances(solidity_data, blocknum, {'from': _w3.ACCOUNT})
 
         print('\n\nBlock# range: ', start_blocknum, blocknum)
 

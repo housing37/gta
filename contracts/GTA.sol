@@ -32,6 +32,7 @@ interface IGTADelegate {
     function serviceFeePerc() external view returns (uint8);
     function supportFeePerc() external view returns (uint8);
     function whitelistStables() external view returns (address[] memory);
+    function whitelistAlts() external view returns (address[] memory);
     function enableMinDepositRefunds() external view returns(bool);
     
     // public access
@@ -41,14 +42,16 @@ interface IGTADelegate {
     function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
-    function getWhitelistStables() external view returns (address[] memory);
-    function getWhitelistAlts() external view returns (address[] memory);
+    // function getWhitelistStables() external view returns (address[] memory);
+    // function getWhitelistAlts() external view returns (address[] memory);
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
     function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
-    function _sanityCheck(address token, uint256 amount) external returns (bool);
+    // function sanityCheck(address token, uint256 amount) external returns (bool);
+    function processContractDebitsAndCredits(address _token, uint256 _amnt) external;
+    function contractStablesSanityCheck() external view returns (bool);
     function getNextStableTokDeposit() external returns (address);
     function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
     function getAccruedGFRL() external view returns (uint256);
@@ -186,8 +189,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // used for deposits in keeper call to 'settleBalances'
     struct TxDeposit {
         address token;
-        address sender;
         uint256 amount;
+        address sender;
+        address receiver;
     }
     
     /* -------------------------------------------------------- */
@@ -622,9 +626,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             // pay winner (w/ lowest market value stable)
             address stable = _transferBestDebitStableUSD(winner, win_usd);
 
-            // syncs w/ 'settleBalances' algorithm
-            GTAD._increaseWhitelistPendingDebit(stable, win_usd);
-
             // mint GTA to this winner; amount is same for all winners & host (if applicable)
             _mint(winner, gta_amnt_mint_ind);
 
@@ -710,36 +711,55 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.guestCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
     }
 
+    // LEFT OFF HERE ... review settleBalances logic and algoirthmic integration
+    //  011724_1725: i think the review is now complete...
+    //  ready for one lost logic walk through, then commit to git
+
     /* -------------------------------------------------------- */
     /* KEEPER CALL-BACK                                         */
     /* -------------------------------------------------------- */
     // invoked by keeper client side, every ~10sec (~blocktime), to ...
-    //  1) update credits logged from 'Transfer' emits
+    //  1) 'processContractDebitsAndCredits': 
+    //       debit 'whitelistPendingDebits' & credit 'contractBalances' w/ incoming 'Transfer' emits
     //  2) convert alt deposits to stables (if needed)
-    //  3) settle 'creditsUSD', 'contractBalances' & 'whitelistPendingDebits' (keeper 'SANITY CHECK')
-    function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) public onlyKeeper {
+    //  3) update 'creditsUSD' w/ all NET incoming 'Transfer' emits ('sender' & 'amount')
+    //  4) SANITIY CHECK: 'contractStablesSanityCheck'
+    //      verifiy keeper sent legit 'amount' for each 'Transfer' event capture
+    function settleBalances(TxDeposit[] memory dataArray, uint32 _lastBlockNum) external onlyKeeper {
         uint256 start_refund = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
         // loop through ERC-20 'Transfer' events received from client side
-        //  NOTE: to save gas (refunded by contract), keeper 'should' pre-filter event for ...
-        //      1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
-        //      2) recipient = this contract address (else '_sanityCheck' fails)
+        //  NOTE: to save keeper gas (NOT refunded by contract), keeper required to pre-filter events for ...
+        //   1) 'whitelistStables' & 'whitelistAlts' (else 'require' fails)
+        //   2) receiver = this contract address (else 'require' fails)
         for (uint i = 0; i < dataArray.length; i++) { // python side: lst_evts_min[{token,sender,amount}, ...]
-            bool is_wl_stab = GTAD._isTokenInArray(dataArray[i].token, GTAD.getWhitelistStables());
-            bool is_wl_alt = GTAD._isTokenInArray(dataArray[i].token, GTAD.getWhitelistAlts());
-            if (!is_wl_stab && !is_wl_alt) { continue; } // skip non-whitelist tokens
-            
             address tok_addr = dataArray[i].token;
-            address src_addr = dataArray[i].sender;
             uint256 tok_amnt = dataArray[i].amount;
-            
-            if (tok_addr == address(0) || src_addr == address(0)) { continue; } // skip 0x0 addresses
-            if (tok_amnt == 0) { continue; } // skip 0 amount
+            address src_addr = dataArray[i].sender;
+            address dst_addr = dataArray[i].receiver;
 
-            // verifiy keeper sent legit amounts from their 'Transfer' event captures (1 FAIL = revert everything)
+            // verifiy keeper params from their 'Transfer' event captures (1 FAIL = revert everything)
             //   ie. force start over w/ new call & no gas refund; encourages keeper to NOT fuck up
-            require(GTAD._sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+            require(tok_addr != address(0), "err: invalid token, stop FUCKING AROUND! ={=}");
+            require(tok_amnt != 0, "err: invalid amount, stop FUCKING AROUND! ={=}");
+            require(src_addr != address(0) && src_addr != address(this), "err: invalid sender, stop FUCKING AROUND! ={=}");
+            require(dst_addr == address(this), "err: receiver ain't this, stop FUCKING AROUND! :-{=}");
+
+            bool is_wl_stab = GTAD._isTokenInArray(tok_addr, GTAD.whitelistStables());
+            bool is_wl_alt = GTAD._isTokenInArray(tok_addr, GTAD.whitelistAlts());
+            require(is_wl_stab || is_wl_alt, "err: non-whitelist token, stop FUCKING AROUND! :-{=}");
+            
+            // Settle ALL 'whitelistPendingDebits' & update 'contractBalances'
+            //  via: _settlePendingDebits & _processIncommingTransfer
+            //   1) deduct debits accrued from 'hostEndEventWithGuestRecipients->_increaseWhitelistPendingDebit'
+            //   2) update stable balances from incoming IERC20 'Transfer' emits
+            GTAD.processContractDebitsAndCredits(tok_addr, tok_amnt);
+
+            // verifiy keeper sent legit 'amount' from their 'Transfer' event captures (1 FAIL = revert everything)
+            //   ie. force start over w/ new call & no gas refund; encourages keeper to NOT fuck up
+            // NOTE: settles ALL 'whitelistPendingDebits' accrued during 'hostEndEventWithGuestRecipients'
+            // require(GTAD.sanityCheck(tok_addr, tok_amnt), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
 
             // default: if found in 'whitelistStables'
             uint256 stable_credit_amnt = tok_amnt; 
@@ -815,6 +835,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             emit DepositProcessed(src_addr, tok_addr, tok_amnt, stable_swap_fee, depositFee, usd_net_amnt);
         }
 
+        // SANITIY CHECK: verifiy keeper sent legit 'amount' for each 'Transfer' event capture 
+        //  checks 'contractBalances' == on-chain balances (for all 'whitelistStables')
+        // NOTE: 1 FAIL = revert everything (force start over w/ no gas refund; encourages keeper to NOT fuck up)
+        require(GTAD.contractStablesSanityCheck(), "err: whitelist<->chain balance mismatch :-{} _ KEEPER LIED!");
+        
         // update last block number
         lastBlockNumUpdate = _lastBlockNum;
 
@@ -876,8 +901,12 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
         address stable = GTAD._getBestDebitStableUSD(_amountUSD);
 
-        // send 'win_usd' amount to 'winner', using 'currHighIdx' whitelist stable
+        // send '_amountUSD' to '_receiver', using lowest market value whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
+
+        // syncs w/ 'settleBalances' algorithm
+        GTAD._increaseWhitelistPendingDebit(stable, _amountUSD);
+
         return stable;
 
         // LEFT OFF HERE ... all '*USD' vars are currently converted to wei using '*USD * 10**18'
@@ -1015,6 +1044,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return gta_quote;
     }
 
+    // LEFT OFF HERE ... need external keeper support functions
+    //  to get current profits (maybe track accumulated *feeUSD)
     function _payHost(address _host, uint32 _amntUSD, address _eventCode) private {
         address stable_host = _transferBestDebitStableUSD(_host, _amntUSD);
         emit PaidHostFee(_host, _amntUSD, _eventCode);

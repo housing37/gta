@@ -108,12 +108,12 @@ contract GTADelegate is GTASwapTools {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    function getWhitelistStables() external view returns (address[] memory) {
-        return whitelistStables;
-    }
-    function getWhitelistAlts() external view returns (address[] memory) {
-        return whitelistAlts;
-    }
+    // function getWhitelistStables() external view returns (address[] memory) {
+    //     return whitelistStables;
+    // }
+    // function getWhitelistAlts() external view returns (address[] memory) {
+    //     return whitelistAlts;
+    // }
 
     /* -------------------------------------------------------- */
     /* KEEPER - PUBLIC GETTERS / SETTERS                        */
@@ -340,33 +340,38 @@ contract GTADelegate is GTASwapTools {
         return stable_addr;
     }
 
-    // keeper 'SANITY CHECK' for 'settleBalances'
-    function _sanityCheck(address token, uint256 amount) external onlyKeeper returns (bool) {
-        // SANITY CHECK: 
-        //  settles whitelist debits accrued during 'hostEndEventWithWinners'
-        //  updates whitelist balance from IERC20 'Transfer' emit (delagated through keeper -> 'settleBalances')
-        //  require: keeper calculated (delegated) balance == on-chain balance
-        _settlePendingDebit(token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
-        _increaseContractBalance(token, amount); // sync 'contractBalances' w/ this 'Transfer' emit
-        uint256 chainBal = IERC20(token).balanceOf(address(this));
-        return contractBalances[token] == chainBal;
+    // keeper SANITY CHECK for 'settleBalances->processContractDebitsAndCredits'
+    // verify keeper calc 'contractBalances' == on-chain balances
+    //  for all 'whitelistStables' (NOTE: 1 FAIL = return false)
+    function contractStablesSanityCheck() external view onlyKeeperOrGTA returns (bool) {
+        for (uint i=0; i < whitelistStables.length; i++) {
+            address tok = whitelistStables[i];
+            uint256 chainBal = IERC20(tok).balanceOf(contractGTA);
+            if (contractBalances[tok] != chainBal) { return false; }
+        }
+        return true;
     }
 
-    // deduct debits accrued from 'hostEndEventWithWinners'
-    function _settlePendingDebit(address _token) private {
+    function processContractDebitsAndCredits(address _token, uint256 _amnt) external onlyKeeperOrGTA {
+        _settlePendingDebits(_token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
+        _processIncommingTransfer(_token, _amnt); // sync 'contractBalances' w/ this 'Transfer' emit
+    }
+
+    // deduct debits accrued from 'hostEndEventWithGuestRecipients'
+    function _settlePendingDebits(address _token) private {
         require(contractBalances[_token] >= whitelistPendingDebits[_token], 'err: insefficient balance to settle debit :O');
         contractBalances[_token] -= whitelistPendingDebits[_token];
         delete whitelistPendingDebits[_token];
     }
 
     // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
-    function _increaseContractBalance(address _token, uint256 _amount) private {
+    function _processIncommingTransfer(address _token, uint256 _amount) private {
         require(_token != address(0), 'err: no address :{');
         require(_amount != 0, 'err: no amount :{');
         contractBalances[_token] += _amount;
     }
 
-    // aggregate debits incurred from 'hostEndEventWithWinners'; syncs w/ 'settleBalances' algorithm
+    // aggregate debits incurred from 'hostEndEventWithGuestRecipients'; syncs w/ 'settleBalances' algorithm
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external onlyKeeper {
         whitelistPendingDebits[token] += amount;
     }
