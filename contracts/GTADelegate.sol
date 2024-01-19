@@ -48,12 +48,10 @@ contract GTADelegate is GTASwapTools {
 
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
-    uint32 public constant minDepositUSD_floor = 1; // 1 USD 
-    uint32 public constant minDepositUSD_ceiling = 100; // 100 USD
-    uint32 public minDepositUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
-
-    // enable/disable refunds for less than min deposit (keeper controlled)
-    bool public enableMinDepositRefunds = true;
+    uint32 public constant minDepositForAltsUSD_floor = 1; // 1 USD 
+    uint32 public constant minDepositForAltsUSD_ceiling = 100; // 100 USD
+    uint32 public minDepositForAltsUSD = 0; // dynamic (keeper controlled w/ 'setMinimumUsdValueDeposit')
+    bool public enableMinDepositRefundsForAlts = true; // enable/disable refunds for < minDepositForAltsUSD (keeper controlled)
 
     // track gas fee wei losses due to min deposit refunds (keeper controlled reset)
     uint256 private accruedGasFeeRefundLoss = 0; 
@@ -154,7 +152,7 @@ contract GTADelegate is GTASwapTools {
     }
     // enable/disable refunds for less than min deposit (keeper controlled)
     function setEnableMinDepositRefunds(bool _enable) public onlyKeeper {
-        enableMinDepositRefunds = _enable;
+        enableMinDepositRefundsForAlts = _enable;
     }
     function setHostGtaBalReqPerc(uint16 _perc) public onlyKeeper {
         require(_perc <= hostGtaBalReqPercMax, 'err: required balance too high, check hostGtaBalReqPercMax :/');
@@ -176,7 +174,7 @@ contract GTADelegate is GTASwapTools {
         return true;
     }
     function setMinimumEventEntryFeeUSD(uint32 _amountUSD) public onlyKeeper {
-        require(_amountUSD > minDepositUSD, 'err: amount must be greater than minDepositUSD =)');
+        require(_amountUSD > minDepositForAltsUSD, 'err: amount must be greater than minDepositForAltsUSD =)');
         minEventEntryFeeUSD = _amountUSD;
     }
     function addAccruedGFRL(uint256 _gasAmnt) external onlyKeeper returns (uint256) {
@@ -198,8 +196,8 @@ contract GTADelegate is GTASwapTools {
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
     function setMinimumUsdValueDeposit(uint32 _amountUSD) public onlyKeeper {
-        require(minDepositUSD_floor <= _amountUSD && _amountUSD <= minDepositUSD_ceiling, 'err: invalid amount =)');
-        minDepositUSD = _amountUSD;
+        require(minDepositForAltsUSD_floor <= _amountUSD && _amountUSD <= minDepositForAltsUSD_ceiling, 'err: invalid amount =)');
+        minDepositForAltsUSD = _amountUSD;
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) public onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'

@@ -24,7 +24,7 @@ interface IGTADelegate {
     function burnGtaBalanceRequired() external view returns (uint256);
     function cancelGtaBalanceRequired() external view returns (uint256);
     function minEventEntryFeeUSD() external view returns (uint32);
-    function minDepositUSD() external view returns (uint32);
+    function minDepositForAltsUSD() external view returns (uint32);
     function maxHostFeePerc() external view returns (uint8);
     function hostGtaBalReqPerc() external view returns (uint8);
     function depositFeePerc() external view returns (uint8);
@@ -33,7 +33,7 @@ interface IGTADelegate {
     function supportFeePerc() external view returns (uint8);
     function whitelistStables() external view returns (address[] memory);
     function whitelistAlts() external view returns (address[] memory);
-    function enableMinDepositRefunds() external view returns(bool);
+    function enableMinDepositRefundsForAlts() external view returns(bool);
     
     // public access
     function setKeeper(address _newKeeper) external;
@@ -777,11 +777,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                 alt_stab_path[1] = stable_addr;
                 (uint8 rtrIdx, uint256 stableAmnt) = _best_swap_v2_router_idx_quote(alt_stab_path, tok_amnt, GTAD.uswapV2routers());
 
-                // if stable amount quote is below min deposit required
-                if (stableAmnt < GTAD.minDepositUSD()) {  
+                // if stable quote is below min USD deposit required for alts
+                //  then process refund (if 'enableMinDepositRefundsForAlts')
+                // NOTE: need 'minDepositForAltsUSD' because 'stable_swap_fee' could be greater than 'stable_credit_amnt'
+                if (stableAmnt < GTAD.minDepositForAltsUSD()) {  
 
                     // if refunds enabled, process refund: send 'tok_amnt' of 'tok_addr' back to 'src_addr'
-                    if (GTAD.enableMinDepositRefunds()) {
+                    if (GTAD.enableMinDepositRefundsForAlts()) {
                         // log gas used for refund
                         uint256 start_trans = gasleft();
 
@@ -797,7 +799,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
                     }
 
                     // notify client side, deposit failed
-                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositUSD(), GTAD.enableMinDepositRefunds());
+                    emit DepositFailed(src_addr, tok_addr, tok_amnt, stableAmnt, GTAD.minDepositForAltsUSD(), GTAD.enableMinDepositRefundsForAlts());
 
                     // skip to next transfer in 'dataArray'
                     continue;
