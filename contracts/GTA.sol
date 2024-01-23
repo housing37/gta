@@ -40,6 +40,12 @@ interface IGTADelegate {
     function burnGtaPerc() external view returns (uint8);
     function mintGtaPerc() external view returns (uint8);
     function mintGtaToHost() external view returns (bool);
+    // function BURN_CODE_EASY() external view returns (uint16);
+    // function BURN_CODE_HARD() external view returns (uint32);
+    function BURN_CODE_GUESS_CNT() external view returns (uint64);
+    function USE_BURN_CODE_HARD() external view returns (bool);
+    function GET_BURN_CODES() external view returns (uint32[2] memory);
+    function SET_BURN_CODE_GUESS_CNT(uint64 _cnt) external;
     
     // public access
     function setKeeper(address _newKeeper) external;
@@ -104,13 +110,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // track last block# used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
 
-    // code required for 'burnGTA'
-    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
-    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
-    uint16 private BURN_CODE_EASY;
-    uint32 private BURN_CODE_HARD; 
-    uint64 public BURN_CODE_GUESS_CNT = 0;
-    bool public USE_BURN_CODE_HARD = false;
+    // // code required for 'burnGTA'
+    // //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    // //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    // uint16 private BURN_CODE_EASY;
+    // uint32 private BURN_CODE_HARD; 
+    // uint64 public BURN_CODE_GUESS_CNT = 0;
+    // bool public USE_BURN_CODE_HARD = false;
     
     /* -------------------------------------------------------- */
     /* EVENTS                                                   */
@@ -140,8 +146,8 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // notify client side that someoen cracked the burn code and burned all gta in this contract
     event BurnedGTA(uint256 bal_cleaned, uint256 bal_burned, uint256 bal_earned, address code_cracker, uint64 guess_count);
     
-    // notify clients a new burn code is set with type (easy, hard)
-    event BurnCodeReset(bool setToHard);
+    // // notify clients a new burn code is set with type (easy, hard)
+    // event BurnCodeReset(bool setToHard);
 
     // notify client side that a guest was registered for event
     event RegisteredForEvent(address evtCode, uint32 entryFeeUSD, address guest, uint32 guestCnt);
@@ -180,18 +186,18 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
-    modifier onlyAdmins(address _evtCode) {
-        require(GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: gameCode not found :(');
-        bool isHost = msg.sender == GTAD.getActiveEvent_0(_evtCode).host;
-        bool isKeeper = msg.sender == GTAD.keeper();
-        require(isKeeper || isHost, 'err: only admins :/*');
+    // modifier onlyAdmins(address _evtCode) {
+    //     require(GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: gameCode not found :(');
+    //     bool isHost = msg.sender == GTAD.getActiveEvent_0(_evtCode).host;
+    //     bool isKeeper = msg.sender == GTAD.keeper();
+    //     require(isKeeper || isHost, 'err: only admins :/*');
         
-        // NOTE: onlyAdmins is only used in 'getPlayers' (no need for owner() check)
-        // bool isOwner = msg.sender == owner(); // from 'Ownable'
-        // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
+    //     // NOTE: onlyAdmins is only used in 'getPlayers' (no need for owner() check)
+    //     // bool isOwner = msg.sender == owner(); // from 'Ownable'
+    //     // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
 
-        _;
-    }
+    //     _;
+    // }
     modifier onlyKeeper() {
         require(msg.sender == GTAD.keeper(), "Only the keeper :p");
         _;
@@ -215,26 +221,26 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
     }
-    // '_burnGTA' support
-    function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
-        require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
-        BURN_CODE_EASY = bc;
-        USE_BURN_CODE_HARD = false;
-        emit BurnCodeReset(USE_BURN_CODE_HARD);
-    }
-    function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
-        require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
-        BURN_CODE_HARD = bc;
-        USE_BURN_CODE_HARD = true;
-        emit BurnCodeReset(USE_BURN_CODE_HARD);
-    }
-    function keeperSetBurnCodeHard(bool _hard) external onlyKeeper {
-        USE_BURN_CODE_HARD = _hard;
-        emit BurnCodeReset(USE_BURN_CODE_HARD);
-    }
-    function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
-        return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
-    }
+    // // '_burnGTA' support
+    // function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
+    //     require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
+    //     BURN_CODE_EASY = bc;
+    //     USE_BURN_CODE_HARD = false;
+    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
+    // }
+    // function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
+    //     require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
+    //     BURN_CODE_HARD = bc;
+    //     USE_BURN_CODE_HARD = true;
+    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
+    // }
+    // function keeperSetBurnCodeHard(bool _hard) external onlyKeeper {
+    //     USE_BURN_CODE_HARD = _hard;
+    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
+    // }
+    // function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
+    //     return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
+    // }
     
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
@@ -257,15 +263,20 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
     //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
     function burnGTA_HARD(uint32 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(USE_BURN_CODE_HARD, 'err: burn code set to easy, use burnGTA_EASY :p');
-        require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
+        // BURN_CODE_GUESS_CNT++; // keep track of guess count
+        GTAD.SET_BURN_CODE_GUESS_CNT(GTAD.BURN_CODE_GUESS_CNT() +1); // keep track of guess count
+        require(GTAD.USE_BURN_CODE_HARD(), 'err: burn code set to easy, use burnGTA_EASY :p');
+        // require(burnCode == BURN_CODE_HARD, 'err: invalid burn_code, guess again :p');
+        require(burnCode == GTAD.GET_BURN_CODES()[1], 'err: invalid burn_code, guess again :p'); // [1] = hard
+        
         return _burnGTA();
     }
     function burnGTA_EASY(uint16 burnCode) external onlyHolder(GTAD.burnGtaBalanceRequired()) returns (bool) {
-        BURN_CODE_GUESS_CNT++; // keep track of guess count
-        require(!USE_BURN_CODE_HARD, 'err: burn code set to hard, use burnGTA_HARD :p');
-        require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
+        // BURN_CODE_GUESS_CNT++; // keep track of guess count
+        GTAD.SET_BURN_CODE_GUESS_CNT(GTAD.BURN_CODE_GUESS_CNT() + 1); // keep track of guess count
+        require(!GTAD.USE_BURN_CODE_HARD(), 'err: burn code set to hard, use burnGTA_HARD :p');
+        // require(burnCode == BURN_CODE_EASY, 'err: invalid burn_code, guess again :p');
+        require(uint32(burnCode) == GTAD.GET_BURN_CODES()[0], 'err: invalid burn_code, guess again :p'); // [0] = easy
         return _burnGTA();
     }
 
@@ -466,7 +477,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  NOTE: if _guests.length == 0, then winPercs & payoutsUSD are empty arrays
         for (uint16 i=0; i < _guests.length; i++) {
             // verify winner address was registered in the event
-            require(GTAD.isGuestRegistered(_eventCode, _guests[i]), 'err: invalid guest found :/, check getPlayers & retry w/ all valid guests');
+            require(GTAD.isGuestRegistered(_eventCode, _guests[i]), 'err: invalid guest found :/, check info* & retry w/ all valid guests');
             
             // calc win_usd = _guests[i] => payoutsUSD[i]
             address winner = _guests[i];
@@ -722,10 +733,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         transferFrom(address(this), msg.sender, bal_earn);
 
         // notify the world that shit was burned
-        emit BurnedGTA(bal, bal_burn, bal_earn, msg.sender, BURN_CODE_GUESS_CNT);
+        emit BurnedGTA(bal, bal_burn, bal_earn, msg.sender, GTAD.BURN_CODE_GUESS_CNT());
 
         // reset guess count
-        BURN_CODE_GUESS_CNT = 0;
+        // BURN_CODE_GUESS_CNT = 0;
+        GTAD.SET_BURN_CODE_GUESS_CNT(0);
 
         return true;
     }

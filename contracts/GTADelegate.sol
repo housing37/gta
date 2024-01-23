@@ -111,7 +111,18 @@ contract GTADelegate {
     uint8 public burnGtaPerc = 50; // % of total GTA token held by this contract (to burn)
     uint8 public mintGtaPerc = 50; // % of GTA allocated from 'serviceFeeUSD' (minted/divided to winners)
     bool public mintGtaToHost = true; // host included in mintGtaPerc (calc in 'hostEndEventWithGuestRecipients')
+
+    // code required for 'burnGTA'
+    //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
+    //  HARD -> uint32: 4,294,967,295 (~100yrs=3,110,400,00 @ 10s blocks w/ 1 wallet)
+    uint16 private BURN_CODE_EASY;
+    uint32 private BURN_CODE_HARD; 
+    uint64 public BURN_CODE_GUESS_CNT = 0;
+    bool public USE_BURN_CODE_HARD = false;
     
+    // notify clients a new burn code is set with type (easy, hard)
+    event BurnCodeReset(bool setToHard);
+
     /* -------------------------------------------------------- */
     /* CONSTRUCTOR                                              */
     /* -------------------------------------------------------- */
@@ -140,6 +151,30 @@ contract GTADelegate {
     /* -------------------------------------------------------- */
     /* KEEPER - PUBLIC GETTERS / SETTERS                        */
     /* -------------------------------------------------------- */
+    // '_burnGTA' support
+    function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
+        require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
+        BURN_CODE_EASY = bc;
+        USE_BURN_CODE_HARD = false;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
+    }
+    function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
+        require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
+        BURN_CODE_HARD = bc;
+        USE_BURN_CODE_HARD = true;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
+    }
+    function keeperSetBurnCodeHard(bool _hard) external onlyKeeper {
+        USE_BURN_CODE_HARD = _hard;
+        emit BurnCodeReset(USE_BURN_CODE_HARD);
+    }
+    function GET_BURN_CODES() external view onlyKeeperOrGTA returns (uint32[2] memory) {
+        return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
+    }
+    function SET_BURN_CODE_GUESS_CNT(uint64 _cnt) external onlyKeeperOrGTA {
+        BURN_CODE_GUESS_CNT = _cnt;
+    }
+
     // GETTERS / SETTERS (keeper)
     function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
         return (activeEventCodes, activeEventCount);
