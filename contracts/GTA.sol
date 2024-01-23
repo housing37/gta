@@ -23,9 +23,9 @@ interface IGTADelegate {
     function infoGtaBalanceRequired() external view returns (uint256); 
     function burnGtaBalanceRequired() external view returns (uint256);
     function cancelGtaBalanceRequired() external view returns (uint256);
-    function minEventEntryFeeUSD() external view returns (uint32);
+    // function minEventEntryFeeUSD() external view returns (uint32);
     function minDepositForAltsUSD() external view returns (uint32);
-    function maxHostFeePerc() external view returns (uint8);
+    // function maxHostFeePerc() external view returns (uint8);
     function hostGtaBalReqPerc() external view returns (uint8);
     function depositFeePerc() external view returns (uint8);
     function keeperFeePerc() external view returns (uint8);
@@ -34,12 +34,18 @@ interface IGTADelegate {
     function whitelistStables() external view returns (address[] memory);
     function whitelistAlts() external view returns (address[] memory);
     function enableMinDepositRefundsForAlts() external view returns(bool);
+    function activeEventCount() external view returns (uint64);
+    function activeEventCodes() external view returns (address[] memory);
+    function buyGtaPerc() external view returns (uint8);
+    function burnGtaPerc() external view returns (uint8);
+    function mintGtaPerc() external view returns (uint8);
+    function mintGtaToHost() external view returns (bool);
     
     // public access
     function setKeeper(address _newKeeper) external;
     function _generateAddressHash(address host, string memory uid) external view returns (address);
-    function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8);
-    function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
+    // function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8);
+    // function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
     // function getWhitelistStables() external view returns (address[] memory);
@@ -58,9 +64,25 @@ interface IGTADelegate {
     function getSwapRouters() external view returns (address[] memory);
     function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
     function setContractGTA(address _gta) external;
+    function _addGuestToEvent(address _guest, address _evtCode) external;
+    function hostEndEvent(address _eventCode, address[] memory _guests) external returns(address, GTALib.Event_1 calldata, GTALib.Event_2 calldata);
+    function _endEvent(address _evtCode) external;
+    function getActiveEventHost(address _evtCode) external returns(address);
+
+    function getActiveEvent_0(address _evtCode) external view returns (GTALib.Event_0 calldata);
+    function getActiveEvent_1(address _evtCode) external view returns (GTALib.Event_1 calldata);
+    function getActiveEvent_2(address _evtCode) external view returns (GTALib.Event_2 calldata);
+    function isGuestRegistered(address _evtCode, address _guest) external view returns (bool);
+    function _getPublicActiveEventDetails(address _evtCode) external view returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256);
+    function createNewEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) external returns (address, uint256);
+    function _calcFeesAndPayouts(address _evtCode) external;
+    function _launchEvent(address _evtCode) external;
 }
 
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
+    // Import MyStruct from ContractB
+    // using GTALib for GTALib.Event_0;
+
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
@@ -71,24 +93,24 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     string private constant tok_name = "_TEST GTA IERC20";
     string private constant tok_symb = "_TEST_GTA";
         
-    /* _ GAME SUPPORT _ */
-    // map generated gameCode address to Game struct
-    mapping(address => GTALib.Event_0) private activeEvents;
+    // /* _ GAME SUPPORT _ */
+    // // map generated gameCode address to Game struct
+    // mapping(address => GTALib.Event_0) private activeEvents;
     
-    // track activeEventCount using 'createGame' & '_endEvent'
-    uint64 private activeEventCount = 0; 
+    // // track activeEventCount using 'createGame' & '_endEvent'
+    // uint64 private activeEventCount = 0; 
 
-    // track activeEventCodes array for keeper 'keeperGetGameCodes'
-    address[] private activeEventCodes = new address[](0);
+    // // track activeEventCodes array for keeper 'keeperGetGameCodes'
+    // address[] private activeEventCodes = new address[](0);
 
-    // track transfer of active events to dead events
-    mapping(address => GTALib.Event_0) private closedEvents;
-    uint64 private closedEventCount = 0; 
-    address[] private closedEventCodes = new address[](0);
+    // // track transfer of active events to dead events
+    // mapping(address => GTALib.Event_0) private closedEvents;
+    // uint64 private closedEventCount = 0; 
+    // address[] private closedEventCodes = new address[](0);
 
-    // event experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
-    //  BUT, block.timestamp is express in seconds since 1970 as uint256
-    uint256 private eventExpSec = 86400 * 1; // 1 day = 86400 seconds 
+    // // event experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
+    // //  BUT, block.timestamp is express in seconds since 1970 as uint256
+    // uint256 private eventExpSec = 86400 * 1; // 1 day = 86400 seconds 
 
     /* _ CREDIT SUPPORT _ */
     // usd credits used to process guest deposits, registers, refunds
@@ -99,15 +121,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     
     // track last block# used to update 'creditsUSD' in 'settleBalances'
     uint32 private lastBlockNumUpdate = 0; // takes 1355 years to max out uint32
-
-    /* _ BUY & BURN & MINT SUPPORT _ */
-    // % of event 'serviceFeeUSD' to use to buy & burn GTA (keeper controlled)
-    //  and % of buy & burn GTA to mint for winners
-    // NOTE: 'ensures GTA amount burned' > 'GTA amount mint' (per event)
-    uint8 public buyGtaPerc = 50; // % of total 'serviceFeeUSD' collected (set to buyGtaUSD)
-    uint8 public burnGtaPerc = 50; // % of total GTA token held by this contract (to burn)
-    uint8 public mintGtaPerc = 50; // % of GTA allocated from 'serviceFeeUSD' (minted/divided to winners)
-    bool public mintGtaToHost = true; // host included in mintGtaPerc (calc in 'hostEndEventWithGuestRecipients')
 
     // code required for 'burnGTA'
     //  EASY -> uint16: 65,535 (~1day=86,400 @ 10s blocks w/ 1 wallet)
@@ -185,9 +198,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
-    modifier onlyAdmins(address gameCode) {
-        require(activeEvents[gameCode].host != address(0), 'err: gameCode not found :(');
-        bool isHost = msg.sender == activeEvents[gameCode].host;
+    modifier onlyAdmins(address _evtCode) {
+        require(GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: gameCode not found :(');
+        bool isHost = msg.sender == GTAD.getActiveEvent_0(_evtCode).host;
         bool isKeeper = msg.sender == GTAD.keeper();
         require(isKeeper || isHost, 'err: only admins :/*');
         
@@ -209,9 +222,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - KEEPER SUPPORT                        */
     /* -------------------------------------------------------- */
-    function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
-        return (activeEventCodes, activeEventCount);
-    }
+    // function keeperGetGameCodes() external view onlyKeeper returns (address[] memory, uint64) {
+    //     return (activeEventCodes, activeEventCount);
+    // }
     function keeperGetCreditAddresses() external view onlyKeeper returns (address[] memory) {
         require(creditsAddrArray.length > 0, 'err: no addresses found with credits :0');
         return creditsAddrArray;
@@ -220,10 +233,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_guest != address(0), 'err: no zero address :{=}');
         return creditsUSD[_guest];
     }
-    function keeperSetGameExpSec(uint256 _sec) external onlyKeeper {
-        require(_sec > 0, 'err: no zero :{}');
-        eventExpSec = _sec;
-    }
+    // function keeperSetGameExpSec(uint256 _sec) external onlyKeeper {
+    //     require(_sec > 0, 'err: no zero :{}');
+    //     eventExpSec = _sec;
+    // }
     function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
     }
@@ -247,50 +260,37 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
         return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
     }
-    function keeperDeleteClosedEvent(address _evtCode) external onlyKeeper {
-        require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+    // function keeperDeleteClosedEvent(address _evtCode) external onlyKeeper {
+    //     require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
 
-        // delete from closedEvents, removes from closedEventCodes, decrements closedEventCount
-        _deleteClosedEvent(_evtCode);
-    }
-    function keeperCleanOutClosedEvents() external onlyKeeper {
-        for (uint i; i < closedEventCodes.length; i++) {
-            // NOTE: no error check for address(0), want to clean regardless            
-            delete closedEvents[closedEventCodes[i]]; // delete event mapping
-        }
+    //     // delete from closedEvents, removes from closedEventCodes, decrements closedEventCount
+    //     _deleteClosedEvent(_evtCode);
+    // }
+    // function keeperCleanOutClosedEvents() external onlyKeeper {
+    //     for (uint i; i < closedEventCodes.length; i++) {
+    //         // NOTE: no error check for address(0), want to clean regardless            
+    //         delete closedEvents[closedEventCodes[i]]; // delete event mapping
+    //     }
 
-        // NOTE: simply wipe closedEventCodes all at once after closedEvents mapping is cleaned
-        //  *DO NOT ALTER closedEventCodes array while looping through it*
-        closedEventCodes = new address[](0);
-        closedEventCount = 0;
-    }
-    function keeperSetMintGtaToHost(bool _mintToHost) external onlyKeeper {
-        mintGtaToHost = _mintToHost;
-    }
+    //     // NOTE: simply wipe closedEventCodes all at once after closedEvents mapping is cleaned
+    //     //  *DO NOT ALTER closedEventCodes array while looping through it*
+    //     closedEventCodes = new address[](0);
+    //     closedEventCount = 0;
+    // }
     
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
     /* -------------------------------------------------------- */
-    function infoGetPlayersForGameCode(address _gameCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
-        require(_gameCode != address(0) && activeEvents[_gameCode].host != address(0), 'err: invalid game code :O');
-        return _getPlayers(_gameCode);
+    function infoGetPlayersForGameCode(address _evtCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
+        require(_evtCode != address(0) && GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: invalid game code :O');
+        return _getPlayers(_evtCode);
     }
     function infoGetBurnGtaBalanceRequired() external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (uint256) {
         return GTAD.burnGtaBalanceRequired();
     }
-    function infoGetDetailsForEventCode(address _eventCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
-        require(_eventCode != address(0) && activeEvents[_eventCode].host != address(0), 'err: invalid event code :O');
-        return _getPublicEventDetails(_eventCode);
-    }
-    // Import MyStruct from ContractB
-    using GTALib for GTALib.Event_0;
-    function _getPublicEventDetails(address _eventCode) private view returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
-        require(activeEvents[_eventCode].host != address(0), 'err: invalid event');
-        GTALib.Event_0 storage e = activeEvents[_eventCode];
-        GTALib.Event_1 storage e1 = e.event_1;
-        GTALib.Event_2 memory e2 = e.event_2;
-        string memory eventName = e.gameName;
-        return (_eventCode, e.host, eventName, e.entryFeeUSD, e2.winPercs, e1.hostFeePerc, e.createBlockNum, e.createTime, e.startTime, e.expTime);
+    function infoGetDetailsForEventCode(address _evtCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
+        require(_evtCode != address(0) && GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: invalid event code :O');
+        return GTAD._getPublicActiveEventDetails(_evtCode);
     }
 
     /* SIDE QUEST... CRACK THE (BURN) CODE                        */
@@ -320,15 +320,9 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
 
     // verify your registration for event 
-    function checkMyRegistrationForEvent(address _eventCode) external view returns (bool) {
-        require(_eventCode != address(0), 'err: no event code ;o');
-
-        // validate _eventCode exists
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
-        require(evt.host != address(0), 'err: invalid event code :I');
-
-        // check msg.sender is registered
-        return evt.event_1.guests[msg.sender];
+    function checkMyRegistrationForEvent(address _evtCode) external view returns (bool) {
+        require(_evtCode != address(0), 'err: no event code ;o');
+        return GTAD.isGuestRegistered(_evtCode, msg.sender);
     }
 
     // verify your own GTA holding required to host
@@ -346,7 +340,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return GTAD.infoGtaBalanceRequired();
     }
     function getGameCode(address _host, string memory _gameName) external view returns (address) {
-        require(activeEventCount > 0, "err: no activeEvents :{}"); // verify there are active activeEvents
+        require(GTAD.activeEventCount() > 0, "err: no activeEvents :{}"); // verify there are active activeEvents
         require(_host != address(0x0), "err: no host address :{}"); // verify _host address input
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
@@ -355,45 +349,46 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     }
 
     function createEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {
-        require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
-        require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
-        require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
-        require(GTAD._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
-        require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
+        // require(_startTime > block.timestamp, "err: start too soon :/");
+        // require(_entryFeeUSD >= GTAD.minEventEntryFeeUSD(), "err: entry fee too low :/");
+        // require(_hostFeePerc <= GTAD.maxHostFeePerc(), 'err: host fee too high :O, check maxHostFeePerc');
+        // require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
+        // require(GTAD._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
+        // require(GTAD._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
         
         require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
+        (address eventCode, uint256 expTime) = GTAD.createNewEvent(_eventName, _startTime, _entryFeeUSD, _hostFeePerc, _winPercs);
+        // // SAFE-ADD
+        // uint256 expTime = _startTime + eventExpSec;
+        // require(expTime > _startTime, "err: stop f*ckin around :X");
 
-        // SAFE-ADD
-        uint256 expTime = _startTime + eventExpSec;
-        require(expTime > _startTime, "err: stop f*ckin around :X");
+        // // verify name/code doesn't yet exist in 'activeEvents'
+        // address eventCode = GTAD._generateAddressHash(msg.sender, _eventName);
+        // require(activeEvents[eventCode].host == address(0), 'err: game name already exists :/');
 
-        // verify name/code doesn't yet exist in 'activeEvents'
-        address eventCode = GTAD._generateAddressHash(msg.sender, _eventName);
-        require(activeEvents[eventCode].host == address(0), 'err: game name already exists :/');
-
-        // Creates a default empty 'GTALib.Event_0' struct for 'eventCode' (doesn't exist yet)
-        //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
-        //    ie. modifying the newEvent will indeed directly affect the state stored in activeEvents[eventCode].
-        GTALib.Event_0 storage newEvent = activeEvents[eventCode];
+        // // Creates a default empty 'GTALib.Event_0' struct for 'eventCode' (doesn't exist yet)
+        // //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
+        // //    ie. modifying the newEvent will indeed directly affect the state stored in activeEvents[eventCode].
+        // GTALib.Event_0 storage newEvent = activeEvents[eventCode];
     
-        // set properties for default empty 'Game' struct
-        newEvent.host = msg.sender;
-        newEvent.gameName = _eventName;
-        newEvent.entryFeeUSD = _entryFeeUSD;
-        newEvent.event_2.winPercs = _winPercs; // [%_1st_place, %_2nd_place, ...] = prizePoolUSD - hostFeePerc
-        newEvent.event_1.hostFeePerc = _hostFeePerc; // hostFeePerc = prizePoolUSD - winPercs
-        newEvent.createTime = block.timestamp;
-        newEvent.createBlockNum = block.number;
-        newEvent.startTime = _startTime;
-        newEvent.expTime = expTime;
+        // // set properties for default empty 'Game' struct
+        // newEvent.host = msg.sender;
+        // newEvent.gameName = _eventName;
+        // newEvent.entryFeeUSD = _entryFeeUSD;
+        // newEvent.event_2.winPercs = _winPercs; // [%_1st_place, %_2nd_place, ...] = prizePoolUSD - hostFeePerc
+        // newEvent.event_1.hostFeePerc = _hostFeePerc; // hostFeePerc = prizePoolUSD - winPercs
+        // newEvent.createTime = block.timestamp;
+        // newEvent.createBlockNum = block.number;
+        // newEvent.startTime = _startTime;
+        // newEvent.expTime = expTime;
 
-        // increment support
-        activeEventCodes = GTAD.addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
-        activeEventCount++;
+        // // increment support
+        // activeEventCodes = GTAD.addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
+        // activeEventCount++;
         
         // emit client side notification for 'createEvent' event
-        emit GTAEventCreated(msg.sender, _eventName, eventCode, newEvent.createTime, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
+        // emit GTAEventCreated(msg.sender, _eventName, eventCode, newEvent.createTime, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
+        emit GTAEventCreated(msg.sender, _eventName, eventCode, block.timestamp, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
 
         // return eventCode to caller
         return eventCode;
@@ -409,18 +404,20 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
+        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if game launched
-        require(!evt.event_1.launched, "err: event already started :(");
+        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        require(!evt1.launched, "err: event already started :(");
 
         // check if host trying to register
         //  NOTE: keeper may indeed register for any event
         require(evt.host != msg.sender, 'err: invalid guest, no host registration :{}');
 
         // check msg.sender already registered
-        require(!evt.event_1.guests[msg.sender], 'err: already registered for this _eventCode :p');
+        // require(!evt1.guests[msg.sender], 'err: already registered for this _eventCode :p');
+        require(!GTAD.isGuestRegistered(_eventCode, msg.sender), 'err: already registered for this _eventCode :p');
 
         // check msg.sender for enough credits
         require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :P');
@@ -429,10 +426,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _updateCredits(msg.sender, evt.entryFeeUSD, true); // true = debit
 
         // -1) add msg.sender to event
-        _addGuestToEvent(msg.sender, _eventCode);
+        GTAD._addGuestToEvent(msg.sender, _eventCode);
         
         // notify client side that a guest was registered for event
-        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, msg.sender, evt.event_1.guestCnt);
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, msg.sender, evt1.guestCnt);
         
         return true;
     }
@@ -443,7 +440,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no _eventCode ;l');
 
         // get/validate active game
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
+        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if msg.sender is _eventCode host
@@ -454,10 +451,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != _guest, 'err: invalid guest, no host registration :{}');
 
         // check if event launched
-        require(!evt.event_1.launched, 'err: event already started :(');
+        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        require(!evt1.launched, 'err: event already started :(');
 
         // check _guest already registered
-        require(!evt.event_1.guests[_guest], 'err: _guest already registered for this _eventCode :p');
+        // require(!evt1.guests[_guest], 'err: _guest already registered for this _eventCode :p');
+        require(!GTAD.isGuestRegistered(_eventCode, _guest), 'err: _guest already registered for this _eventCode :p');
+        
 
         // check msg.sender for enough credits
         require(evt.entryFeeUSD < creditsUSD[msg.sender], 'err: invalid credits :(, use checkMyCredits & send whitelistAlts|whitelistStables to this contract :p');
@@ -466,10 +466,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _updateCredits(msg.sender, evt.entryFeeUSD, true); // true = debit
 
         // -1) add guest to game event
-        _addGuestToEvent(_guest, _eventCode);
+        GTAD._addGuestToEvent(_guest, _eventCode);
 
         // notify client side that a _guest was registered for event
-        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, _guest, evt.event_1.guestCnt);
+        emit RegisteredForEvent(_eventCode, evt.entryFeeUSD, _guest, evt1.guestCnt);
 
         return true;
     }
@@ -480,27 +480,28 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :p');
 
         // get/validate active game
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
+        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
         require(evt.host == msg.sender, 'err: only host :/');
 
         // check if event not started yet
-        require(!evt.event_1.launched, 'err: event already started');
+        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        require(!evt1.launched, 'err: event already started');
 
         // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD'
         //  calc 'buyGtaUSD' from 'serviceFeeUSD'
-        evt = _calcFeesAndPayouts(evt);
+        GTAD._calcFeesAndPayouts(_eventCode);
 
         // set event state to 'launched = true'
-        evt = _launchEvent(evt); 
+        GTAD._launchEvent(_eventCode); 
 
         // pay keeper & support staff w/ lowest market value stable
         //  (contract maintains highest market value stables)
         // NOTE: host paid in 'hostEndEventWithGuestRecipients'
-        _payKeeper(evt.event_1.keeperFeeUSD, _eventCode);
-        _paySupport(evt.event_1.supportFeeUSD, _eventCode);        
+        _payKeeper(evt1.keeperFeeUSD, _eventCode);
+        _paySupport(evt1.supportFeeUSD, _eventCode);        
 
         return true;
     }
@@ -514,39 +515,43 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
+        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
         require(evt.host == msg.sender, 'err: only host :/');
 
         // check if event started
-        require(evt.event_1.launched, 'err: event not started yet');
+        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        require(evt1.launched, 'err: event not started yet');
 
         // check if # of _guests.length == winPercs.length == payoutsUSD.length (set during createEvent & hostStartEvent)
-        require(evt.event_2.winPercs.length == _guests.length && _guests.length == evt.event_2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
+        GTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
+        require(evt2.winPercs.length == _guests.length && _guests.length == evt2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
         //  NOTE: invokes inherited '_swap_v2_wrap' & uses address(this) as 'outReceiver'
-        uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt.event_2.buyGtaUSD), evt.event_2.buyGtaUSD);
+        uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt2.buyGtaUSD), evt2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
         //  gta_amnt_mint gets divided equally to all '_winners' + host (if 'mintGtaToHost'; keeper controlled)
         // NOTE: remaining 'gta_amnt_buy' is simply held by this GTA contract
-        uint256 gta_amnt_mint_ind = (gta_amnt_buy * (mintGtaPerc/100)) / (_guests.length + (mintGtaToHost ? 1 : 0)); // +1 = host
+        uint256 gta_amnt_mint_ind = (gta_amnt_buy * (GTAD.mintGtaPerc()/100)) / (_guests.length + (GTAD.mintGtaToHost() ? 1 : 0)); // +1 = host
 
         // mint GTA to host (if applicable; keeper controlled)
-        if (mintGtaToHost) { _mint(evt.host, gta_amnt_mint_ind); }
+        if (GTAD.mintGtaToHost()) { _mint(evt.host, gta_amnt_mint_ind); }
 
         // loop through _guests: distribute 'evt.event_2.winPercs'
         //  NOTE: if _guests.length == 0, then winPercs & payoutsUSD are empty arrays
         for (uint16 i=0; i < _guests.length; i++) {
             // verify winner address was registered in the event
-            require(evt.event_1.guests[_guests[i]], 'err: invalid guest found :/, check getPlayers & retry w/ all valid guests');
+            // require(evt1.guests[_guests[i]], 'err: invalid guest found :/, check getPlayers & retry w/ all valid guests');
+            require(GTAD.isGuestRegistered(_eventCode, _guests[i]), 'err: invalid guest found :/, check getPlayers & retry w/ all valid guests');
+            
 
             // calc win_usd = _guests[i] => payoutsUSD[i]
             address winner = _guests[i];
-            uint32 win_usd = evt.event_2.payoutsUSD[i];
+            uint32 win_usd = evt2.payoutsUSD[i];
 
             // LEFT OFF HERE ... new feature, keeper enable/disable winner autopay or claim
             //  ... need winner claim integration 
@@ -559,7 +564,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             _mint(winner, gta_amnt_mint_ind);
 
             // notify client side that an end event distribution occurred successfully
-            emit EndEventDistribution(winner, i, evt.event_2.winPercs[i], win_usd, evt.event_2.prizePoolUSD, stable);
+            emit EndEventDistribution(winner, i, evt2.winPercs[i], win_usd, evt2.prizePoolUSD, stable);
         }
 
         // pay host w/ lowest market value stable 
@@ -567,13 +572,13 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         // NOTE: if _guests.length == 0, then 'hostFeePerc' == 100 (set in 'createEvent')
         //    HENCE, hostFeeUSD is 100% of prizePoolUSD
         // NOTE: keeper & support paid in 'hostStartEvent'
-        _payHost(evt.host, evt.event_2.hostFeeUSD, _eventCode);
+        _payHost(evt.host, evt2.hostFeeUSD, _eventCode);
         
         // set event params to end state & transfer to closedEvents array
-        _endEvent(_eventCode);
+        GTAD._endEvent(_eventCode);
 
         // notify client side that an end event occurred successfully
-        emit EndEventActivity(_eventCode, evt.host, _guests, evt.event_2.prizePoolUSD, evt.event_2.hostFeeUSD, evt.event_1.keeperFeeUSD, activeEventCount, block.timestamp, block.number);
+        emit EndEventActivity(_eventCode, evt.host, _guests, evt2.prizePoolUSD, evt2.hostFeeUSD, evt1.keeperFeeUSD, GTAD.activeEventCount(), block.timestamp, block.number);
         
         return true;
     }
@@ -586,32 +591,37 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
-        GTALib.Event_0 storage evt = activeEvents[_eventCode];
+        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered guests, host, or keeper)
-        bool isValidSender = evt.event_1.guests[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
+        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        GTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
+        // bool isValidSender = evt1.guests[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
+        bool isValidSender = GTAD.isGuestRegistered(_eventCode, msg.sender) || msg.sender == evt.host || msg.sender == GTAD.keeper();
         require(isValidSender, 'err: only registered guests or host :<>');
 
         // if guest is canceling, verify event not launched & expTime indeed passed 
         //  NOTE: considers keeper's allowance to register for any events
-        if (evt.event_1.guests[msg.sender] && msg.sender != GTAD.keeper()) { 
-            require(!evt.event_1.launched && evt.expTime < block.timestamp, 'err: _eventCode not expTime yet :<>');
+        // if (evt1.guests[msg.sender] && msg.sender != GTAD.keeper()) { 
+        if (GTAD.isGuestRegistered(_eventCode, msg.sender) && msg.sender != GTAD.keeper()) { 
+            
+            require(!evt1.launched && evt.expTime < block.timestamp, 'err: _eventCode not expTime yet :<>');
         } 
 
         // calc fees for keeperFeeUSD, supportFeeUSD, refundUSD_ind
-        evt = _calcFeesAndPayouts(evt);
+        GTAD._calcFeesAndPayouts(_eventCode);
 
         // if event NOT launched yet: pay keeper & support staff accordingly
         //  else: keeper & support already paid in hostStartEvent
         // NOTE: host does not get paid here (ie. security risk: could create & cancel events for fees)
-        if (!evt.event_1.launched) {
-            _payKeeper(evt.event_1.keeperFeeUSD, _eventCode);
-            _paySupport(evt.event_1.supportFeeUSD, _eventCode);
+        if (!evt1.launched) {
+            _payKeeper(evt1.keeperFeeUSD, _eventCode);
+            _paySupport(evt1.supportFeeUSD, _eventCode);
         }
 
         // loop through guests & process refunds via '_updateCredits'
-        for (uint i=0; i < evt.event_1.guestAddresses.length; i++) {
+        for (uint i=0; i < evt1.guestAddresses.length; i++) {
             // REFUND ENTRY FEES (via IN-CONTRACT CREDITS) ... to 'creditsUSD'
             //  deposit fees: 'depositFeePerc' calc/removed in 'settleBalances' (BEFORE 'registerForEvent|hostRegisterSeatForEvent')
             //  service fees: 'totalFeesUSD' calc/set in 'hostStartEvent' w/ '_calcFeesAndPayouts' (AFTER 'registerForEvent|hostRegisterSeatForEvent')
@@ -627,17 +637,17 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             //      - 'cancelEventAndProcessRefunds' credits 'refundUSD_ind' to 'creditsUSD' (refundUSD_ind = entryFeeUSD - totalFeesUSD_ind)
 
             // credit guest in 'creditsUSD' w/ amount 'refundUSD_ind' (NET of totalFeesUSD; set in '_calcFeesAndPayouts')
-            _updateCredits(evt.event_1.guestAddresses[i], evt.event_2.refundUSD_ind, false); // false = credit
+            _updateCredits(evt1.guestAddresses[i], evt2.refundUSD_ind, false); // false = credit
 
             // notify listeners of processed refund
-            emit ProcessedRefund(evt.event_1.guestAddresses[i], evt.event_2.refundUSD_ind, _eventCode, evt.event_1.launched, evt.expTime);
+            emit ProcessedRefund(evt1.guestAddresses[i], evt2.refundUSD_ind, _eventCode, evt1.launched, evt.expTime);
         }
     
         // set event params to end state
-        _endEvent(_eventCode);
+        GTAD._endEvent(_eventCode);
 
         // notify listeners of canceled event
-        emit CanceledEvent(msg.sender, _eventCode, evt.event_1.launched, evt.expTime, evt.event_1.guestCnt, evt.event_2.prizePoolUSD, evt.event_2.totalFeesUSD, evt.event_2.refundsUSD, evt.event_2.refundUSD_ind);
+        emit CanceledEvent(msg.sender, _eventCode, evt1.launched, evt.expTime, evt1.guestCnt, evt2.prizePoolUSD, evt2.totalFeesUSD, evt2.refundsUSD, evt2.refundUSD_ind);
     }
 
     // LEFT OFF HERE ... review settleBalances logic and algoirthmic integration
@@ -788,7 +798,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         // burn it.. burn it real good...
         //  burn 'burnGtaPerc' of 'bal', send rest to cracker
-        uint256 bal_burn = bal * (burnGtaPerc/100);
+        uint256 bal_burn = bal * (GTAD.burnGtaPerc()/100);
         uint256 bal_earn = bal - bal_burn;
         transferFrom(address(this), address(0), bal_burn);
         transferFrom(address(this), msg.sender, bal_earn);
@@ -804,12 +814,12 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function _getGameCode(address _host, string memory _gameName) private view returns (address) {
         // generate gameCode from host address and game name
         address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(activeEvents[gameCode].host != address(0), 'err: game name for host not found :{}');
+        require(GTAD.getActiveEvent_0(gameCode).host != address(0), 'err: game name for host not found :{}');
         return gameCode;
     }
     function _getPlayers(address _gameCode) private view returns (address[] memory) {
-        require(activeEvents[_gameCode].host != address(0), 'err: _gameCode not found :{}');
-        return activeEvents[_gameCode].event_1.guestAddresses; // '.event_1.guests' is mapping
+        require(GTAD.getActiveEvent_0(_gameCode).host != address(0), 'err: _gameCode not found :{}');
+        return GTAD.getActiveEvent_1(_gameCode).guestAddresses; // 'Event_1.guests' is mapping
     }
     // debits/credits for a _guest in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredits(address _guest, uint32 _amountUSD, bool _debit) private {
@@ -845,108 +855,101 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         //  need to verify this conversion w/ stable contract integrations (could be 10**6 thats need, maybe)
     }
 
-    function _addGuestToEvent(address _guest, address _evtCode) private {
-        GTALib.Event_0 storage _evt = activeEvents[_evtCode];
-        _evt.event_1.guests[_guest] = true;
-        _evt.event_1.guestAddresses.push(_guest);
-        _evt.event_1.guestCnt = uint32(_evt.event_1.guestAddresses.length);
-    }
+    // function _addGuestToEvent(address _guest, address _evtCode) private {
+    //     GTALib.Event_0 storage _evt = activeEvents[_evtCode];
+    //     _evt.event_1.guests[_guest] = true;
+    //     _evt.event_1.guestAddresses.push(_guest);
+    //     _evt.event_1.guestCnt = uint32(_evt.event_1.guestAddresses.length);
+    // }
 
-    // set event param to end state
-    function _endEvent(address _evtCode) private {
-        require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :P');
-        require(activeEvents[_evtCode].event_1.launched, 'err: event not launched');
+    // // set event param to end state
+    // function _endEvent(address _evtCode) private {
+    //     require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :P');
+    //     require(activeEvents[_evtCode].event_1.launched, 'err: event not launched');
 
-        GTALib.Event_0 storage _evt = activeEvents[_evtCode];
-        // set game end state (doesn't matter if its about to be deleted)
-        _evt.endTime = block.timestamp;
-        _evt.endBlockNum = block.number;
-        _evt.event_1.ended = true;
+    //     GTALib.Event_0 storage _evt = activeEvents[_evtCode];
+    //     // set game end state (doesn't matter if its about to be deleted)
+    //     _evt.endTime = block.timestamp;
+    //     _evt.endBlockNum = block.number;
+    //     _evt.event_1.ended = true;
 
-        // transfer from activeEvents to closedEvents & delete from activeEvents
-        _migrateToClosedEvents(_evtCode);
-    }
-    function _migrateToClosedEvents(address _evtCode) private {
-        // copies to closedEvents, appends to closedEventCodes, increments closedEventCount
-        _copyActiveEventToClosedEvent(_evtCode); 
+    //     // transfer from activeEvents to closedEvents & delete from activeEvents
+    //     _migrateToClosedEvents(_evtCode);
+    // }
+    // function _migrateToClosedEvents(address _evtCode) private {
+    //     // copies to closedEvents, appends to closedEventCodes, increments closedEventCount
+    //     _copyActiveEventToClosedEvent(_evtCode); 
 
-        // delete from activeEvents, removes from activeEventCodes, decrements activeEventCount
-        _deleteActiveEvent(_evtCode); 
-    }
-    function _deleteActiveEvent(address _evtCode) private {
-        require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :/');
-        delete activeEvents[_evtCode]; // delete event mapping
-        activeEventCodes = GTAD.remAddressFromArray(_evtCode, activeEventCodes);
-        activeEventCount--;
-    }
-    function _deleteClosedEvent(address _evtCode) private {
-        require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
-        delete closedEvents[_evtCode]; // delete event mapping
-        closedEventCodes = GTAD.remAddressFromArray(_evtCode, closedEventCodes);
-        closedEventCount--;
-    }
-    function _copyActiveEventToClosedEvent(address _evtCode) private {
-        // append to closedEventCodes array & increment closedEventCount (traversal support)
-        closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
-        closedEventCount++;
-
-        // Copy values to closedEvents
-        closedEvents[_evtCode].host = activeEvents[_evtCode].host;
-        closedEvents[_evtCode].gameName = activeEvents[_evtCode].gameName;
-        closedEvents[_evtCode].entryFeeUSD = activeEvents[_evtCode].entryFeeUSD;
-        closedEvents[_evtCode].createTime = activeEvents[_evtCode].createTime;
-        closedEvents[_evtCode].createBlockNum = activeEvents[_evtCode].createBlockNum;
-        closedEvents[_evtCode].startTime = activeEvents[_evtCode].startTime;
-        closedEvents[_evtCode].launchTime = activeEvents[_evtCode].launchTime;
-        closedEvents[_evtCode].launchBlockNum = activeEvents[_evtCode].launchBlockNum;
-        closedEvents[_evtCode].endTime = activeEvents[_evtCode].endTime;
-        closedEvents[_evtCode].endBlockNum = activeEvents[_evtCode].endBlockNum;
-        closedEvents[_evtCode].expTime = activeEvents[_evtCode].expTime;
-        closedEvents[_evtCode].expBlockNum = activeEvents[_evtCode].expBlockNum;
+    //     // delete from activeEvents, removes from activeEventCodes, decrements activeEventCount
+    //     _deleteActiveEvent(_evtCode); 
+    // }
+    // function _deleteActiveEvent(address _evtCode) private {
+    //     require(_evtCode != address(0) && activeEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+    //     delete activeEvents[_evtCode]; // delete event mapping
+    //     activeEventCodes = GTAD.remAddressFromArray(_evtCode, activeEventCodes);
+    //     activeEventCount--;
+    // }
+    // function _deleteClosedEvent(address _evtCode) private {
+    //     require(_evtCode != address(0) && closedEvents[_evtCode].host != address(0), 'err: invalid event code :/');
+    //     delete closedEvents[_evtCode]; // delete event mapping
+    //     closedEventCodes = GTAD.remAddressFromArray(_evtCode, closedEventCodes);
+    //     closedEventCount--;
+    // }
+    // function _copyActiveEventToClosedEvent(address _evtCode) private {
+    //     // append to closedEventCodes array, increment closedEventCount (traversal support), & copy to closedEvents struct
+    //     GTAD.copyActiveEventToClosedEvent(_evtCode);
+    //     // closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
+    //     // closedEventCount++;
         
-        // Explicitly copy event_1 values
-        closedEvents[_evtCode].event_1.launched = activeEvents[_evtCode].event_1.launched;
-        closedEvents[_evtCode].event_1.ended = activeEvents[_evtCode].event_1.ended;
-        closedEvents[_evtCode].event_1.hostFeePerc = activeEvents[_evtCode].event_1.hostFeePerc;
-        closedEvents[_evtCode].event_1.keeperFeeUSD = activeEvents[_evtCode].event_1.keeperFeeUSD;
-        closedEvents[_evtCode].event_1.serviceFeeUSD = activeEvents[_evtCode].event_1.serviceFeeUSD;
-        closedEvents[_evtCode].event_1.supportFeeUSD = activeEvents[_evtCode].event_1.supportFeeUSD;
+    //     // // closedEvents = GTALib._copyEvent(activeEvents[_evtCode]);
+    //     // (GTALib.Event_0 storage _cEvt, GTALib.Event_1 storage _cEvt_1, GTALib.Event_2 storage _cEvt_2) = GTALib._copyEvent(_evtCode, activeEvents);
+    //     // closedEvents[_evtCode].event_1 = _cEvt_1;
 
-        // Manually copy guest address array, guest count, & guests mapping (event registration & traversal support) 
-        closedEvents[_evtCode].event_1.guestAddresses = activeEvents[_evtCode].event_1.guestAddresses;
-        closedEvents[_evtCode].event_1.guestCnt = activeEvents[_evtCode].event_1.guestCnt;
-        address[] memory pAddies = activeEvents[_evtCode].event_1.guestAddresses;
-        for (uint256 i = 0; i < pAddies.length; i++) {
-            closedEvents[_evtCode].event_1.guests[pAddies[i]] = true; // true = registered 
-        }
+    //     // Copy values to closedEvents
+    //     closedEvents[_evtCode].host = activeEvents[_evtCode].host;
+    //     closedEvents[_evtCode].gameName = activeEvents[_evtCode].gameName;
+    //     closedEvents[_evtCode].entryFeeUSD = activeEvents[_evtCode].entryFeeUSD;
+    //     closedEvents[_evtCode].createTime = activeEvents[_evtCode].createTime;
+    //     closedEvents[_evtCode].createBlockNum = activeEvents[_evtCode].createBlockNum;
+    //     closedEvents[_evtCode].startTime = activeEvents[_evtCode].startTime;
+    //     closedEvents[_evtCode].launchTime = activeEvents[_evtCode].launchTime;
+    //     closedEvents[_evtCode].launchBlockNum = activeEvents[_evtCode].launchBlockNum;
+    //     closedEvents[_evtCode].endTime = activeEvents[_evtCode].endTime;
+    //     closedEvents[_evtCode].endBlockNum = activeEvents[_evtCode].endBlockNum;
+    //     closedEvents[_evtCode].expTime = activeEvents[_evtCode].expTime;
+    //     closedEvents[_evtCode].expBlockNum = activeEvents[_evtCode].expBlockNum;
+        
+    //     // Explicitly copy event_1 values
+    //     closedEvents[_evtCode].event_1.launched = activeEvents[_evtCode].event_1.launched;
+    //     closedEvents[_evtCode].event_1.ended = activeEvents[_evtCode].event_1.ended;
+    //     closedEvents[_evtCode].event_1.hostFeePerc = activeEvents[_evtCode].event_1.hostFeePerc;
+    //     closedEvents[_evtCode].event_1.keeperFeeUSD = activeEvents[_evtCode].event_1.keeperFeeUSD;
+    //     closedEvents[_evtCode].event_1.serviceFeeUSD = activeEvents[_evtCode].event_1.serviceFeeUSD;
+    //     closedEvents[_evtCode].event_1.supportFeeUSD = activeEvents[_evtCode].event_1.supportFeeUSD;
 
-        // Explicitly copy event_2 values
-        closedEvents[_evtCode].event_2.totalFeesUSD = activeEvents[_evtCode].event_2.totalFeesUSD;
-        closedEvents[_evtCode].event_2.hostFeeUSD = activeEvents[_evtCode].event_2.hostFeeUSD;
-        closedEvents[_evtCode].event_2.prizePoolUSD = activeEvents[_evtCode].event_2.prizePoolUSD;
-        closedEvents[_evtCode].event_2.winPercs = activeEvents[_evtCode].event_2.winPercs;
-        closedEvents[_evtCode].event_2.payoutsUSD = activeEvents[_evtCode].event_2.payoutsUSD;
-        closedEvents[_evtCode].event_2.keeperFeeUSD_ind = activeEvents[_evtCode].event_2.keeperFeeUSD_ind;
-        closedEvents[_evtCode].event_2.serviceFeeUSD_ind = activeEvents[_evtCode].event_2.serviceFeeUSD_ind;
-        closedEvents[_evtCode].event_2.supportFeeUSD_ind = activeEvents[_evtCode].event_2.supportFeeUSD_ind;
-        closedEvents[_evtCode].event_2.totalFeesUSD_ind = activeEvents[_evtCode].event_2.totalFeesUSD_ind;
-        closedEvents[_evtCode].event_2.refundUSD_ind = activeEvents[_evtCode].event_2.refundUSD_ind;
-        closedEvents[_evtCode].event_2.refundsUSD = activeEvents[_evtCode].event_2.refundsUSD;
-        closedEvents[_evtCode].event_2.hostFeeUSD_ind = activeEvents[_evtCode].event_2.hostFeeUSD_ind;
-        closedEvents[_evtCode].event_2.buyGtaUSD = activeEvents[_evtCode].event_2.buyGtaUSD;
-    }
+    //     // Manually copy guest address array, guest count, & guests mapping (event registration & traversal support) 
+    //     closedEvents[_evtCode].event_1.guestAddresses = activeEvents[_evtCode].event_1.guestAddresses;
+    //     closedEvents[_evtCode].event_1.guestCnt = activeEvents[_evtCode].event_1.guestCnt;
+    //     address[] memory pAddies = activeEvents[_evtCode].event_1.guestAddresses;
+    //     for (uint256 i = 0; i < pAddies.length; i++) {
+    //         closedEvents[_evtCode].event_1.guests[pAddies[i]] = true; // true = registered 
+    //     }
 
-    // set event params to launched state
-    function _launchEvent(GTALib.Event_0 storage _evt) private returns (GTALib.Event_0 storage ) {
-        require(!_evt.event_1.launched, 'err: event already launched');
-
-        // set event fee calculations & prizePoolUSD
-        // set event launched state
-        _evt.launchTime = block.timestamp;
-        _evt.launchBlockNum = block.number;
-        _evt.event_1.launched = true;
-        return _evt;
-    }
+    //     // Explicitly copy event_2 values
+    //     closedEvents[_evtCode].event_2.totalFeesUSD = activeEvents[_evtCode].event_2.totalFeesUSD;
+    //     closedEvents[_evtCode].event_2.hostFeeUSD = activeEvents[_evtCode].event_2.hostFeeUSD;
+    //     closedEvents[_evtCode].event_2.prizePoolUSD = activeEvents[_evtCode].event_2.prizePoolUSD;
+    //     closedEvents[_evtCode].event_2.winPercs = activeEvents[_evtCode].event_2.winPercs;
+    //     closedEvents[_evtCode].event_2.payoutsUSD = activeEvents[_evtCode].event_2.payoutsUSD;
+    //     closedEvents[_evtCode].event_2.keeperFeeUSD_ind = activeEvents[_evtCode].event_2.keeperFeeUSD_ind;
+    //     closedEvents[_evtCode].event_2.serviceFeeUSD_ind = activeEvents[_evtCode].event_2.serviceFeeUSD_ind;
+    //     closedEvents[_evtCode].event_2.supportFeeUSD_ind = activeEvents[_evtCode].event_2.supportFeeUSD_ind;
+    //     closedEvents[_evtCode].event_2.totalFeesUSD_ind = activeEvents[_evtCode].event_2.totalFeesUSD_ind;
+    //     closedEvents[_evtCode].event_2.refundUSD_ind = activeEvents[_evtCode].event_2.refundUSD_ind;
+    //     closedEvents[_evtCode].event_2.refundsUSD = activeEvents[_evtCode].event_2.refundsUSD;
+    //     closedEvents[_evtCode].event_2.hostFeeUSD_ind = activeEvents[_evtCode].event_2.hostFeeUSD_ind;
+    //     closedEvents[_evtCode].event_2.buyGtaUSD = activeEvents[_evtCode].event_2.buyGtaUSD;
+    // }
 
     // swap 'buyAndBurnUSD' amount of best market stable, for GTA (traverses 'uswapV2routers')
     function _processBuyAndBurnStableSwap(address stable, uint32 _buyAndBurnUSD) private returns (uint256) {
@@ -996,115 +999,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             address stable_supp = _transferBestDebitStableUSD(staff[i], indFees[i]);
             emit PaidSupportFee(staff[i], indFees[i], _amntUSD, _eventCode);
         }
-    }
-
-    // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD' collected
-    //  calc 'buyGtaUSD' from 'serviceFeeUSD'
-    // calc: prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD, buyGtaUSD
-    function _calcFeesAndPayouts(GTALib.Event_0 storage _evt) private returns (GTALib.Event_0 storage) {
-        /* DEDUCTING FEES
-            current contract debits: 'depositFeePerc', 'hostFeePerc', 'keeperFeePerc', 'serviceFeePerc', 'supportFeePerc', 'winPercs'
-             - depositFeePerc -> taken out of each deposit (alt|stable 'transfer' to contract) _ in 'settleBalances'
-             - keeper|service|support fees -> taken from gross 'entryFeeUSD' calculated below
-             - host fees -> taken from GROSS 'prizePoolUSD' generated below (ie. net 'entryFeeUSD')
-             - win payouts -> taken from GROSS 'prizePoolUSD' generated below
-
-            Formulas ...
-                keeperFeeUSD = (entryFeeUSD * guestCnt) * keeperFeePerc
-                serviceFeeUSD = (entryFeeUSD * guestCnt) * serviceFeePerc
-                supportFeeUSD = (entryFeeUSD * guestCnt) * supportFeePerc
-                totalFeesUSD = keeperFeeUSD + serviceFeeUSD + supportFeeUSD
-
-                buyGtaUSD = serviceFeeUSD * buyGtaPerc
-
-                GROSS entryFeeUSD = entryFeeUSD * guestCnt
-                  NET entryFeeUSD = GROSS entryFeeUSD - totalFeesUSD
-
-                GROSS serviceFeeUSD = GROSS entryFeeUSD * serviceFeePerc
-                  NET serviceFeeUSD = GROSS serviceFeeUSD - buyGtaUSD
-                
-                NOTE: buyGtaUSD used to buy GTA from market (in 'hostEndEventWithGuestRecipients'),
-                       which is then held by GTA contract address (until '_burnGTA' invoked)
-                      then '_burnGTA' burns 'burnGtaPerc' of all GTA held
-                       w/ remaining GTA held being sent to msg.sender
-
-                GROSS prizePoolUSD = (entryFeeUSD * guestCnt) - (keeperFeeUSD + serviceFeeUSD + supportFeeUSD)
-                        hostFeeUSD = GROSS prizePoolUSD * hostFeePerc
-                  NET prizePoolUSD = GROSS prizePoolUSD - hostFeeUSD
-                     payoutsUSD[i] = NET prizePoolUSD * 'winPercs[i]'
-
-                NOTE: if 'winPercs.length' == 0 (then 'hostFeePerc' == 100, set in 'createEvent'), results in empty 'payoutsUSD' array
-                 HENCE, this event will allow no _guests to be passed into 'hostEndEventWithGuestRecipients',
-                    resulting in host receiving 100% of 'prizePoolUSD'
-                
-                NOTE: contract won't take responsibility for any errors w/ no winners declared by withholding funds or refunding credits, etc.
-                 HENCE, full 'prizePoolUSD' will always be distributed (ie. to host)
-        */
-
-        // calc individual guest fees (BEFORE generating 'prizePoolUSD') 
-        //  '_ind' used for refunds in 'cancelEventAndProcessRefunds' (excludes 'hostFeeUSD_ind')
-        _evt.event_2.keeperFeeUSD_ind = _evt.entryFeeUSD * (GTAD.keeperFeePerc()/100);
-        _evt.event_2.serviceFeeUSD_ind = _evt.entryFeeUSD * (GTAD.serviceFeePerc()/100);
-        _evt.event_2.supportFeeUSD_ind = _evt.entryFeeUSD * (GTAD.supportFeePerc()/100);
-
-        // calc total fees for each individual 'entryFeeUSD' paid
-        _evt.event_2.totalFeesUSD_ind = _evt.event_2.keeperFeeUSD_ind + _evt.event_2.serviceFeeUSD_ind + _evt.event_2.supportFeeUSD_ind;
-
-        // calc: 'hostFeeUSD_ind' = 'hostFeePerc' of single 'entryFeeUSD' - 'totalFeesUSD_ind'
-        _evt.event_2.hostFeeUSD_ind = (_evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind) * (_evt.event_1.hostFeePerc/100);
-
-        // calc total fees for all 'entryFeeUSD' paid
-        _evt.event_1.keeperFeeUSD = _evt.event_2.keeperFeeUSD_ind * _evt.event_1.guestCnt;
-        _evt.event_1.serviceFeeUSD = _evt.event_2.serviceFeeUSD_ind * _evt.event_1.guestCnt; // GROSS
-        _evt.event_1.supportFeeUSD = _evt.event_2.supportFeeUSD_ind * _evt.event_1.guestCnt;
-        _evt.event_2.totalFeesUSD = _evt.event_1.keeperFeeUSD + _evt.event_1.serviceFeeUSD + _evt.event_1.supportFeeUSD;
-
-        /** TOKENOMICS...
-            1) remove GTA from the market: 
-                LEGACY MODEL (N/A)
-                    - host choice: to pay service fee in GTA for a discount (and then we buy and burn)
-                NEW MODEL
-                    - keeper set: buyGtaPerc of serviceFeeUSD = buyGtaUSD (for every event)
-                    - buyGtaUSD calculated & removed from 'serviceFeeUSD' (buys GTA from market in 'hostEndEventWithGuestRecipients')
-                    - host required to hold some GTA in order to host (handled in 'createEvent')
-                    - 'info|burn|cancel' public functions require holding GTA
-                
-            2) add GTA to the market: 
-                - host gets minted some amount for hosting games (handled in 'hostEndEventWithGuestRecipients')
-                - guest gets minted some amount for winning games (handled in 'hostEndEventWithGuestRecipients')
-            
-            #2 always has to be less than #1 for every hosted event 
-                - the value of amounts minted must always be less than the service fee
-                NOTE: total amount minted to winners + host = 'mintGtaPerc' of GTA amount recieved from 'buyGtaUSD' from market
-        */
-
-        // calc: TOT 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD'
-        //       NET 'serviceFeeUSD' = 'serviceFeeUSD' - 'buyGtaUSD'
-        //  NOTE: remaining NET 'serviceFeeUSD' is simply held by GTA contract address
-        //   LEFT OFF HERE ... should we do something with it? track it in global? perhaps send it to some 'serviceFeeAddress'?
-        _evt.event_2.buyGtaUSD = _evt.event_1.serviceFeeUSD * (buyGtaPerc/100);
-        _evt.event_1.serviceFeeUSD -= _evt.event_2.buyGtaUSD; // NET
-
-        // calc idividual & total refunds (for 'cancelEventAndProcessRefunds', 'ProcessedRefund', 'CanceledEvent')
-        _evt.event_2.refundUSD_ind = _evt.entryFeeUSD - _evt.event_2.totalFeesUSD_ind; 
-        _evt.event_2.refundsUSD = _evt.event_2.refundUSD_ind * _evt.event_1.guestCnt;
-
-        // calc: GROSS 'prizePoolUSD' = all 'entryFeeUSD' - 'totalFeesUSD'
-        _evt.event_2.prizePoolUSD = (_evt.entryFeeUSD * _evt.event_1.guestCnt) - _evt.event_2.totalFeesUSD;
-
-        // calc: 'hostFeeUSD' = 'hostFeePerc' of 'prizePoolUSD' (AFTER 'totalFeesUSD' deducted first)
-        _evt.event_2.hostFeeUSD = _evt.event_2.prizePoolUSD * (_evt.event_1.hostFeePerc/100);
-
-        // calc: NET 'prizePoolUSD' = gross 'prizePoolUSD' - 'hostFeeUSD'
-        //  NOTE: not setting NET, allows for correct calc of payoutsUSD & correct emit logs
-        // _evt.event_2.prizePoolUSD -= _evt.event_2.hostFeeUSD;
-        
-        // calc payoutsUSD (finally, AFTER all deductions)
-        for (uint i=0; i < _evt.event_2.winPercs.length; i++) {
-            _evt.event_2.payoutsUSD.push(_evt.event_2.prizePoolUSD * (_evt.event_2.winPercs[i]/100));
-        }
-
-        return _evt;
     }
 
     /* -------------------------------------------------------- */
