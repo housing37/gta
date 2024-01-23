@@ -552,7 +552,16 @@ contract GTADelegate {
         // return eventCode to caller
         return (eventCode, expTime);
     }
-
+    function _getGameCode(address _host, string memory _evtName) external view onlyKeeperOrGTA() returns (address) {
+        // generate gameCode from host address and game name
+        address evtCode = GTALib._generateAddressHash(_host, _evtName);
+        require(activeEvents[evtCode].event_0.host != address(0), 'err: event name for host not found :{}');
+        return evtCode;
+    }
+    function _getPlayers(address _evtCode) external view onlyKeeperOrGTA returns (address[] memory) {
+        require(activeEvents[_evtCode].event_0.host != address(0), 'err: _gameCode not found :{}');
+        return activeEvents[_evtCode].event_1.guestAddresses; // 'Event_1.guests' is mapping
+    }
     function getActiveEventHost(address _evtCode) external view onlyKeeperOrGTA() returns(address) {
         return activeEvents[_evtCode].event_0.host;
     }

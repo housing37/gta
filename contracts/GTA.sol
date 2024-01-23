@@ -66,6 +66,8 @@ interface IGTADelegate {
     function _calcFeesAndPayouts(address _evtCode) external;
     function _launchEvent(address _evtCode) external;
     function _getStableTokensAvailDebit(uint32 _debitAmntUSD) external view returns (address[] memory);
+    function _getGameCode(address _host, string memory _evtName) external view returns (address);
+    function _getPlayers(address _evtCode) external view returns (address[] memory);
 }
 
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
@@ -229,7 +231,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     function infoGetPlayersForGameCode(address _evtCode) external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (address[] memory) {
         require(_evtCode != address(0) && GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: invalid game code :O');
-        return _getPlayers(_evtCode);
+        return GTAD._getPlayers(_evtCode);
     }
     function infoGetBurnGtaBalanceRequired() external view onlyHolder(GTAD.infoGtaBalanceRequired()) returns (uint256) {
         return GTAD.burnGtaBalanceRequired();
@@ -296,7 +298,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(bytes(_gameName).length > 0, "err: no game name :{}"); // verifiy _gameName input
 
         // gameCode = hash(_host, _gameName)
-        return _getGameCode(_host, _gameName);
+        return GTAD._getGameCode(_host, _gameName);
     }
 
     function createEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) public returns (address) {        
@@ -723,16 +725,17 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         return true;
     }
-    function _getGameCode(address _host, string memory _gameName) private view returns (address) {
-        // generate gameCode from host address and game name
-        address gameCode = GTAD._generateAddressHash(_host, _gameName);
-        require(GTAD.getActiveEvent_0(gameCode).host != address(0), 'err: game name for host not found :{}');
-        return gameCode;
-    }
-    function _getPlayers(address _gameCode) private view returns (address[] memory) {
-        require(GTAD.getActiveEvent_0(_gameCode).host != address(0), 'err: _gameCode not found :{}');
-        return GTAD.getActiveEvent_1(_gameCode).guestAddresses; // 'Event_1.guests' is mapping
-    }
+
+    // function _getGameCode(address _host, string memory _gameName) private view returns (address) {
+    //     // generate gameCode from host address and game name
+    //     address gameCode = GTAD._generateAddressHash(_host, _gameName);
+    //     require(GTAD.getActiveEvent_0(gameCode).host != address(0), 'err: game name for host not found :{}');
+    //     return gameCode;
+    // }
+    // function _getPlayers(address _gameCode) private view returns (address[] memory) {
+    //     require(GTAD.getActiveEvent_0(_gameCode).host != address(0), 'err: _gameCode not found :{}');
+    //     return GTAD.getActiveEvent_1(_gameCode).guestAddresses; // 'Event_1.guests' is mapping
+    // }
     // debits/credits for a _guest in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredits(address _guest, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 
