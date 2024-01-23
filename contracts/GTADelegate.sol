@@ -104,65 +104,8 @@ library GTALib {
         address sender;
         address receiver;
     }
-
-    // // function _copyEvent(GTALib.Event_0 storage _evt, mapping(address => GTALib.Event_0) storage structInit) internal returns (GTALib.Event_0 storage) {
-    // function _copyEvent(address _evtCode, mapping(address => GTALib.Event_0) storage _activeEvents) internal returns (GTALib.Event_0 storage, GTALib.Event_1 storage, GTALib.Event_2 storage) {
-    //     // append to closedEventCodes array & increment closedEventCount (traversal support)
-    //     // closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
-    //     // closedEventCount++;
-    //     // mapping(address => GTALib.Event_0) storage structInit;
-
-    //     // hack: create default empty struct to copy to (using a mapping)
-    //     GTALib.Event_0 storage _copyEvt = _activeEvents[address(0x000000037)];
-
-    //     // Copy values to closedEvents
-    //     _copyEvt.host = _activeEvents[_evtCode].host;
-    //     _copyEvt.gameName = _activeEvents[_evtCode].gameName;
-    //     _copyEvt.entryFeeUSD = _activeEvents[_evtCode].entryFeeUSD;
-    //     _copyEvt.createTime = _activeEvents[_evtCode].createTime;
-    //     _copyEvt.createBlockNum = _activeEvents[_evtCode].createBlockNum;
-    //     _copyEvt.startTime = _activeEvents[_evtCode].startTime;
-    //     _copyEvt.launchTime = _activeEvents[_evtCode].launchTime;
-    //     _copyEvt.launchBlockNum = _activeEvents[_evtCode].launchBlockNum;
-    //     _copyEvt.endTime = _activeEvents[_evtCode].endTime;
-    //     _copyEvt.endBlockNum = _activeEvents[_evtCode].endBlockNum;
-    //     _copyEvt.expTime = _activeEvents[_evtCode].expTime;
-    //     _copyEvt.expBlockNum = _activeEvents[_evtCode].expBlockNum;
-        
-    //     // Explicitly copy event_1 values
-    //     _copyEvt.event_1.launched = _activeEvents[_evtCode].event_1.launched;
-    //     _copyEvt.event_1.ended = _activeEvents[_evtCode].event_1.ended;
-    //     _copyEvt.event_1.hostFeePerc = _activeEvents[_evtCode].event_1.hostFeePerc;
-    //     _copyEvt.event_1.keeperFeeUSD = _activeEvents[_evtCode].event_1.keeperFeeUSD;
-    //     _copyEvt.event_1.serviceFeeUSD = _activeEvents[_evtCode].event_1.serviceFeeUSD;
-    //     _copyEvt.event_1.supportFeeUSD = _activeEvents[_evtCode].event_1.supportFeeUSD;
-
-    //     // Manually copy guest address array, guest count, & guests mapping (event registration & traversal support) 
-    //     _copyEvt.event_1.guestAddresses = _activeEvents[_evtCode].event_1.guestAddresses;
-    //     _copyEvt.event_1.guestCnt = _activeEvents[_evtCode].event_1.guestCnt;
-    //     address[] memory pAddies = _activeEvents[_evtCode].event_1.guestAddresses;
-    //     for (uint256 i = 0; i < pAddies.length; i++) {
-    //         _copyEvt.event_1.guests[pAddies[i]] = true; // true = registered 
-    //     }
-
-    //     // Explicitly copy event_2 values
-    //     _copyEvt.event_2.totalFeesUSD = _activeEvents[_evtCode].event_2.totalFeesUSD;
-    //     _copyEvt.event_2.hostFeeUSD = _activeEvents[_evtCode].event_2.hostFeeUSD;
-    //     _copyEvt.event_2.prizePoolUSD = _activeEvents[_evtCode].event_2.prizePoolUSD;
-    //     _copyEvt.event_2.winPercs = _activeEvents[_evtCode].event_2.winPercs;
-    //     _copyEvt.event_2.payoutsUSD = _activeEvents[_evtCode].event_2.payoutsUSD;
-    //     _copyEvt.event_2.keeperFeeUSD_ind = _activeEvents[_evtCode].event_2.keeperFeeUSD_ind;
-    //     _copyEvt.event_2.serviceFeeUSD_ind = _activeEvents[_evtCode].event_2.serviceFeeUSD_ind;
-    //     _copyEvt.event_2.supportFeeUSD_ind = _activeEvents[_evtCode].event_2.supportFeeUSD_ind;
-    //     _copyEvt.event_2.totalFeesUSD_ind = _activeEvents[_evtCode].event_2.totalFeesUSD_ind;
-    //     _copyEvt.event_2.refundUSD_ind = _activeEvents[_evtCode].event_2.refundUSD_ind;
-    //     _copyEvt.event_2.refundsUSD = _activeEvents[_evtCode].event_2.refundsUSD;
-    //     _copyEvt.event_2.hostFeeUSD_ind = _activeEvents[_evtCode].event_2.hostFeeUSD_ind;
-    //     _copyEvt.event_2.buyGtaUSD = _activeEvents[_evtCode].event_2.buyGtaUSD;
-
-    //     return (_copyEvt, _copyEvt.event_1, _copyEvt.event_2);
-    // }
 }
+
 contract GTADelegate is GTASwapTools {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
@@ -277,12 +220,6 @@ contract GTADelegate is GTASwapTools {
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS                                         */
     /* -------------------------------------------------------- */
-    // function getWhitelistStables() external view returns (address[] memory) {
-    //     return whitelistStables;
-    // }
-    // function getWhitelistAlts() external view returns (address[] memory) {
-    //     return whitelistAlts;
-    // }
 
     /* -------------------------------------------------------- */
     /* KEEPER - PUBLIC GETTERS / SETTERS                        */
@@ -619,12 +556,8 @@ contract GTADelegate is GTASwapTools {
     }
     function _copyActiveEventToClosedEvent(address _evtCode) private {
         // append to closedEventCodes array & increment closedEventCount (traversal support)
-        // closedEventCodes = GTAD.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
-        // closedEventCount++;
-
-        // // closedEvents = GTALib._copyEvent(activeEvents[_evtCode]);
-        // (GTALib.Event_0 storage _cEvt, GTALib.Event_1 storage _cEvt_1, GTALib.Event_2 storage _cEvt_2) = GTALib._copyEvent(_evtCode, activeEvents);
-        // closedEvents[_evtCode].event_1 = _cEvt_1;
+        closedEventCodes = _addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
+        closedEventCount++;
 
         // Copy values to closedEvents
         closedEvents[_evtCode].event_0.host = activeEvents[_evtCode].event_0.host;
@@ -699,8 +632,6 @@ contract GTADelegate is GTASwapTools {
         require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
         require(_validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
         require(_getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
-        
-        // require(_hostCanCreateEvent(msg.sender, _entryFeeUSD), "err: not enough GTA to host, check getGtaBalanceRequiredToHost :/");
 
         // SAFE-ADD
         uint256 expTime = _startTime + eventExpSec;
@@ -729,9 +660,6 @@ contract GTADelegate is GTASwapTools {
         // increment support
         activeEventCodes = _addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
         activeEventCount++;
-        
-        // // emit client side notification for 'createEvent' event
-        // emit GTAEventCreated(msg.sender, _eventName, eventCode, newEvent.createTime, _startTime, expTime, _entryFeeUSD, _hostFeePerc, _winPercs);
 
         // return eventCode to caller
         return (eventCode, expTime);
@@ -781,7 +709,7 @@ contract GTADelegate is GTASwapTools {
         _evt.event_0.launchBlockNum = block.number;
         _evt.event_1.launched = true;
     }
-    
+
     // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD' collected
     //  calc 'buyGtaUSD' from 'serviceFeeUSD'
     // calc: prizePoolUSD, payoutsUSD, keeperFeeUSD, serviceFeeUSD, supportFeeUSD, refundsUSD, totalFeesUSD, buyGtaUSD
