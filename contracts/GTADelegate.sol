@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;        
-import "./GTASwapTools.sol"; // inheritance
+pragma solidity ^0.8.20;
+// import "./GTASwapTools.sol"; // inheritance
+import "./GTALibs.sol";
 
 // deploy
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -20,93 +21,8 @@ import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Rout
              register -> guest, seat, player, delegates, users, participants, entrants
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
-library GTALib {
-   /* -------------------------------------------------------- */
-    /* STRUCTURES                                               */
-    /* -------------------------------------------------------- */
-    // LEFT OFF HERE ... migrate event structs over to GTADelegate
-    //  maybe rename GTADelegate.sol to GTAEVent.sol ?
-
-    /* _ GAME SUPPORT _ */
-    struct GTAEvent {
-        mapping(address => bool) guests; // true = registered 
-        Event_0 event_0;
-        Event_1 event_1;
-        Event_2 event_2;
-    }
-    struct Event_0 {
-        /** cons */
-        address host;           // input param
-        string gameName;        // input param
-        uint32 entryFeeUSD;     // input param
-        
-        /** EVENT SUPPORT - mostly host set */
-        uint256 createTime;     // 'createGame'
-        uint256 createBlockNum; // 'createGame'
-        uint256 startTime;      // host scheduled start time
-        uint256 launchTime;     // 'hostStartEvent'
-        uint256 launchBlockNum; // 'hostStartEvent'
-        uint256 endTime;        // 'hostEndGameWithWinners'
-        uint256 endBlockNum;    // 'hostEndGameWithWinners'
-        uint256 expTime;        // expires if not launched by this time
-        uint256 expBlockNum;    // 'cancelEventAndProcessRefunds'
-
-        // mapping(address => bool) guests; // true = registered 
-        // Event_1 event_1;
-        // Event_2 event_2;
-    }
-    struct Event_1 { 
-        // ------------------------------------------
-        bool launched;  // 'hostStartEvent'
-        bool ended;     // 'hostEndEventWithGuestRecipients'
-
-        // ------------------------------------------
-        // mapping(address => bool) guests; // true = registered 
-        address[] guestAddresses; // traversal access
-        uint32 guestCnt;       // length or guests; max 4,294,967,295
-
-        /** host set */
-        uint8 hostFeePerc;      // x% of prizePoolUSD
-
-        // uint8 mintDistrPerc;    // % of ?
-        
-        /** _calcFeesAndPayouts */
-        uint32 keeperFeeUSD;    // (entryFeeUSD * guestCnt) * keeperFeePerc
-        uint32 serviceFeeUSD;   // (entryFeeUSD * guestCnt) * serviceFeePerc
-        uint32 supportFeeUSD;   // (entryFeeUSD * guestCnt) * supportFeePerc
-    }
-    struct Event_2 { 
-        uint32 totalFeesUSD;    // keeperFeeUSD + serviceFeeUSD + supportFeeUSD
-        uint32 hostFeeUSD;      // prizePoolUSD * hostFeePerc
-        uint32 prizePoolUSD;    // (entryFeeUSD * guestCnt) - totalFeesUSD - hostFeeUSD
-
-        // ------------------------------------------
-        uint8[] winPercs;       // %'s of prizePoolUSD - hostFeeUSD
-        uint32[] payoutsUSD;    // prizePoolUSD * winPercs[]
-        
-        /** _calcFeesAndPayouts */
-        uint32 keeperFeeUSD_ind;    // entryFeeUSD * keeperFeePerc
-        uint32 serviceFeeUSD_ind;   // entryFeeUSD * serviceFeePerc
-        uint32 supportFeeUSD_ind;   // entryFeeUSD * supportFeePerc
-        uint32 totalFeesUSD_ind;    // keeperFeeUSD_ind + serviceFeeUSD_ind + supportFeeUSD_ind
-        uint32 refundUSD_ind;       // entryFeeUSD - totalFeesUSD_ind
-        uint32 refundsUSD;          // refundUSD_ind * evt.event_1.guestCnt
-        uint32 hostFeeUSD_ind;      // (entryFeeUSD - totalFeesUSD_ind) * hostFeePerc
-
-        uint32 buyGtaUSD;   // serviceFeeUSD * buyGtaPerc
-    }
-
-    /** _ DEFI SUPPORT _ */
-    // used for deposits in keeper call to 'settleBalances'
-    struct TxDeposit {
-        address token;
-        uint256 amount;
-        address sender;
-        address receiver;
-    }
-}
-
-contract GTADelegate is GTASwapTools {
+// contract GTADelegate is GTASwapTools {
+contract GTADelegate {
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
@@ -238,11 +154,11 @@ contract GTADelegate is GTASwapTools {
     }
     function addSupportStaff(address _newStaff) external onlyKeeper {
         require(_newStaff != address(0), 'err: zero address ::)');
-        supportStaff = _addAddressToArraySafe(_newStaff, supportStaff, true); // true = no dups
+        supportStaff = GTALib._addAddressToArraySafe(_newStaff, supportStaff, true); // true = no dups
     }
     function remSupportStaff(address _remStaff) external onlyKeeper {
         require(_remStaff != address(0), 'err: zero address ::)');
-        supportStaff = _remAddressFromArray(_remStaff, supportStaff);
+        supportStaff = GTALib._remAddressFromArray(_remStaff, supportStaff);
     }
     function getSupportStaffWithIndFees(uint32 _totFee) external view onlyKeeperOrGTA returns (address[] memory, uint32[] memory) {
         // NOTE v1: simply divide _totFee evenly
@@ -328,10 +244,10 @@ contract GTADelegate is GTASwapTools {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'err: found zero address to update :L');
             if (_add) {
-                whitelistStables = _addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
-                contractStables = _addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
+                whitelistStables = GTALib._addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
+                contractStables = GTALib._addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
             } else {
-                whitelistStables = _remAddressFromArray(_tokens[i], whitelistStables);
+                whitelistStables = GTALib._remAddressFromArray(_tokens[i], whitelistStables);
             }
         }
     }
@@ -339,22 +255,22 @@ contract GTADelegate is GTASwapTools {
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'err: found zero address for update :L');
             if (_add) {
-                whitelistAlts = _addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
-                contractAlts = _addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
+                whitelistAlts = GTALib._addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
+                contractAlts = GTALib._addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
             } else {
-                whitelistAlts = _remAddressFromArray(_tokens[i], whitelistAlts);   
+                whitelistAlts = GTALib._remAddressFromArray(_tokens[i], whitelistAlts);   
             }
         }
     }
     function addDexRouter(address _router) public onlyKeeper {
         require(_router != address(0x0), "err: invalid address");
-        uswapV2routers = _addAddressToArraySafe(_router, uswapV2routers, true); // true = no dups
+        uswapV2routers = GTALib._addAddressToArraySafe(_router, uswapV2routers, true); // true = no dups
     }
     function remDexRouter(address router) public onlyKeeper returns (bool) {
         require(router != address(0x0), "err: invalid address");
 
         // NOTE: remove algorithm does NOT maintain order
-        uswapV2routers = _remAddressFromArray(router, uswapV2routers);
+        uswapV2routers = GTALib._remAddressFromArray(router, uswapV2routers);
         return true;
     }
 
@@ -366,89 +282,26 @@ contract GTADelegate is GTASwapTools {
     }
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory) {
         // NOTE: no require checks needed
-        return _addAddressToArraySafe(_addr, _arr, _safe);
+        return GTALib._addAddressToArraySafe(_addr, _arr, _safe);
     }
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory) {
         // NOTE: no require checks needed
-        return _remAddressFromArray(_addr, _arr);
+        return GTALib._remAddressFromArray(_addr, _arr);
     }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - EVENT SUPPORTING                               */
     /* -------------------------------------------------------- */
-    function _addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) private pure returns (address[] memory) {
-        if (_addr == address(0)) { return _arr; }
+    // // get lowest market value stable
+    // function _getBestDebitStableUSD(uint32 _amountUSD) external view onlyKeeper returns (address) {
+    //     // loop through 'whitelistStables', generate stables available (bals ok for debit)
+    //     address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
 
-        // safe = remove first (no duplicates)
-        if (_safe) { _arr = _remAddressFromArray(_addr, _arr); }
-
-        // perform add to memory array type w/ static size
-        address[] memory _ret = new address[](_arr.length+1);
-        for (uint i=0; i < _arr.length; i++) { _ret[i] = _arr[i]; }
-        _ret[_ret.length] = _addr;
-        return _ret;
-    }
-    function _remAddressFromArray(address _addr, address[] memory _arr) private pure returns (address[] memory) {
-        if (_addr == address(0) || _arr.length == 0) { return _arr; }
-        
-        // NOTE: remove algorithm does NOT maintain order & only removes first occurance
-        for (uint i = 0; i < _arr.length; i++) {
-            if (_addr == _arr[i]) {
-                _arr[i] = _arr[_arr.length - 1];
-                assembly { // reduce memory _arr length by 1 (simulate pop)
-                    mstore(_arr, sub(mload(_arr), 1))
-                }
-                return _arr;
-            }
-        }
-        return _arr;
-    }
-
-    function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool) {
-        if (_addr == address(0) || _arr.length == 0) { return false; }
-        for (uint i=0; i < _arr.length; i++) {
-            if (_addr == _arr[i]) { return true; }
-        }
-        return false;
-    }
-
-    // LEFT OFF HERE ... should review what functions in GTADelegate.sol, are only used in GTA.sol
-    //      ... and think about that organizational design 
-    function _getTotalsOfArray(uint8[] calldata _arr) private pure returns (uint8) {
-        uint8 t = 0;
-        for (uint i=0; i < _arr.length; i++) { t += _arr[i]; }
-        return t;
-    }
-    function _validatePercsInArr(uint8[] calldata _percs) private pure returns (bool) {
-        for (uint i=0; i < _percs.length; i++) { 
-            if (!_validatePercent(_percs[i]))
-                return false;
-        } 
-        return true;
-    }
-    function _validatePercent(uint8 _perc) private pure returns (bool) {
-        return (0 < _perc && _perc <= 100);
-    }
-
-    // get lowest market value stable
-    function _getBestDebitStableUSD(uint32 _amountUSD) external view onlyKeeper returns (address) {
-        // loop through 'whitelistStables', generate stables available (bals ok for debit)
-        address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
-
-        // traverse stables available for debit, select stable w/ the lowest market value            
-        address stable = _getStableTokenLowMarketValue(stables_avail, uswapV2routers);
-        require(stable != address(0), 'err: low market stable address is 0 _ :+0');
-        return stable;
-    }
-
-    function _generateAddressHash(address host, string memory uid) public pure returns (address) {
-        // Concatenate the address and the string, and then hash the result
-        bytes32 hash = keccak256(abi.encodePacked(host, uid));
-
-        // LEFT OFF HERE ... is this a bug? 'uint160' ? shoudl be uint16? 
-        address generatedAddress = address(uint160(uint256(hash)));
-        return generatedAddress;
-    }
+    //     // traverse stables available for debit, select stable w/ the lowest market value            
+    //     address stable = _getStableTokenLowMarketValue(stables_avail, uswapV2routers);
+    //     require(stable != address(0), 'err: low market stable address is 0 _ :+0');
+    //     return stable;
+    // }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
@@ -501,7 +354,7 @@ contract GTADelegate is GTASwapTools {
     /* PRIVATE - DEX SUPPORT                                    */
     /* -------------------------------------------------------- */
     // NOTE: *WARNING* 'whitelistStables' could have duplicates (hence, using '_addAddressToArraySafe')
-    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) private view returns (address[] memory) {
+    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) external view returns (address[] memory) {
         // loop through white list stables, generate stables available (ok for debit)
         address[] memory stables_avail;
         for (uint i = 0; i < whitelistStables.length; i++) {
@@ -509,7 +362,7 @@ contract GTADelegate is GTASwapTools {
             // get balnce for this whitelist stable (push to stablesAvail if has enough)
             uint256 stableBal = IERC20(whitelistStables[i]).balanceOf(address(this));
             if (stableBal >= _debitAmntUSD * 10**18) { 
-                stables_avail = _addAddressToArraySafe(whitelistStables[i], stables_avail, true); // true = no dups
+                stables_avail = GTALib._addAddressToArraySafe(whitelistStables[i], stables_avail, true); // true = no dups
             }
         }
         return stables_avail;
@@ -545,18 +398,18 @@ contract GTADelegate is GTASwapTools {
     function _deleteActiveEvent(address _evtCode) private {
         require(_evtCode != address(0) && activeEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :/');
         delete activeEvents[_evtCode]; // delete event mapping
-        activeEventCodes = _remAddressFromArray(_evtCode, activeEventCodes);
+        activeEventCodes = GTALib._remAddressFromArray(_evtCode, activeEventCodes);
         activeEventCount--;
     }
     function _deleteClosedEvent(address _evtCode) private {
         require(_evtCode != address(0) && closedEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :/');
         delete closedEvents[_evtCode]; // delete event mapping
-        closedEventCodes = _remAddressFromArray(_evtCode, closedEventCodes);
+        closedEventCodes = GTALib._remAddressFromArray(_evtCode, closedEventCodes);
         closedEventCount--;
     }
     function _copyActiveEventToClosedEvent(address _evtCode) private {
         // append to closedEventCodes array & increment closedEventCount (traversal support)
-        closedEventCodes = _addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
+        closedEventCodes = GTALib._addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
         closedEventCount++;
 
         // Copy values to closedEvents
@@ -630,15 +483,15 @@ contract GTADelegate is GTASwapTools {
         require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
         require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
-        require(_validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
-        require(_getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
+        require(GTALib._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
+        require(GTALib._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
 
         // SAFE-ADD
         uint256 expTime = _startTime + eventExpSec;
         require(expTime > _startTime, "err: stop f*ckin around :X");
 
         // verify name/code doesn't yet exist in 'activeEvents'
-        address eventCode = _generateAddressHash(msg.sender, _eventName);
+        address eventCode = GTALib._generateAddressHash(msg.sender, _eventName);
         require(activeEvents[eventCode].event_0.host == address(0), 'err: game name already exists :/');
 
         // Creates a default empty 'GTALib.Event_0' struct for 'eventCode' (doesn't exist yet)
@@ -658,7 +511,7 @@ contract GTADelegate is GTASwapTools {
         newEvent.event_0.expTime = expTime;
 
         // increment support
-        activeEventCodes = _addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
+        activeEventCodes = GTALib._addAddressToArraySafe(eventCode, activeEventCodes, true); // true = no dups
         activeEventCount++;
 
         // return eventCode to caller

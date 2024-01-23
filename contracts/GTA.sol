@@ -53,7 +53,7 @@ interface IGTADelegate {
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
-    function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
+    // function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
     // function sanityCheck(address token, uint256 amount) external returns (bool);
     function processContractDebitsAndCredits(address _token, uint256 _amnt) external;
@@ -77,6 +77,7 @@ interface IGTADelegate {
     function createNewEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) external returns (address, uint256);
     function _calcFeesAndPayouts(address _evtCode) external;
     function _launchEvent(address _evtCode) external;
+    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) external view returns (address[] memory);
 }
 
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
@@ -451,7 +452,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
         //  NOTE: invokes inherited '_swap_v2_wrap' & uses address(this) as 'outReceiver'
-        uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(GTAD._getBestDebitStableUSD(evt2.buyGtaUSD), evt2.buyGtaUSD);
+        uint256 gta_amnt_buy = _processBuyAndBurnStableSwap(_getBestDebitStableUSD(evt2.buyGtaUSD), evt2.buyGtaUSD);
 
         // calc 'gta_amnt_mint' using 'mintGtaPerc' of 'gta_amnt_buy' 
         //  gta_amnt_mint gets divided equally to all '_winners' + host (if 'mintGtaToHost'; keeper controlled)
@@ -755,9 +756,20 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             creditsAddrArray = GTAD.addAddressToArraySafe(_guest, creditsAddrArray, true); // true = no dups
         }
     }
+    // get lowest market value stable
+    function _getBestDebitStableUSD(uint32 _amountUSD) private view returns (address) {
+        // loop through 'whitelistStables', generate stables available (bals ok for debit)
+        address[] memory stables_avail = GTAD._getStableTokensAvailDebit(_amountUSD);
+
+        // traverse stables available for debit, select stable w/ the lowest market value            
+        address stable = _getStableTokenLowMarketValue(stables_avail, GTAD.uswapV2routers());
+        require(stable != address(0), 'err: low market stable address is 0 _ :+0');
+        return stable;
+    }
+
     function _transferBestDebitStableUSD(address _receiver, uint32 _amountUSD) private returns (address) {
         // traverse 'whitelistStables' w/ bals ok for debit, select stable with lowest market value
-        address stable = GTAD._getBestDebitStableUSD(_amountUSD);
+        address stable = _getBestDebitStableUSD(_amountUSD);
 
         // send '_amountUSD' to '_receiver', using lowest market value whitelist stable
         IERC20(stable).transfer(_receiver, _amountUSD * 10**18);
