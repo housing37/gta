@@ -23,45 +23,29 @@ interface IGTADelegate {
     function infoGtaBalanceRequired() external view returns (uint256); 
     function burnGtaBalanceRequired() external view returns (uint256);
     function cancelGtaBalanceRequired() external view returns (uint256);
-    // function minEventEntryFeeUSD() external view returns (uint32);
     function minDepositForAltsUSD() external view returns (uint32);
-    // function maxHostFeePerc() external view returns (uint8);
     function hostGtaBalReqPerc() external view returns (uint8);
     function depositFeePerc() external view returns (uint8);
-    function keeperFeePerc() external view returns (uint8);
-    function serviceFeePerc() external view returns (uint8);
-    function supportFeePerc() external view returns (uint8);
     function whitelistStables() external view returns (address[] memory);
     function whitelistAlts() external view returns (address[] memory);
     function enableMinDepositRefundsForAlts() external view returns(bool);
     function activeEventCount() external view returns (uint64);
-    function activeEventCodes() external view returns (address[] memory);
-    function buyGtaPerc() external view returns (uint8);
     function burnGtaPerc() external view returns (uint8);
     function mintGtaPerc() external view returns (uint8);
     function mintGtaToHost() external view returns (bool);
-    // function BURN_CODE_EASY() external view returns (uint16);
-    // function BURN_CODE_HARD() external view returns (uint32);
     function BURN_CODE_GUESS_CNT() external view returns (uint64);
     function USE_BURN_CODE_HARD() external view returns (bool);
     function GET_BURN_CODES() external view returns (uint32[2] memory);
     function SET_BURN_CODE_GUESS_CNT(uint64 _cnt) external;
     
     // public access
-    function setKeeper(address _newKeeper) external;
     function _generateAddressHash(address host, string memory uid) external view returns (address);
-    // function _getTotalsOfArray(uint8[] calldata _arr) external pure returns (uint8);
-    // function _validatePercsInArr(uint8[] calldata _percs) external pure returns (bool);
     function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
     function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
-    // function getWhitelistStables() external view returns (address[] memory);
-    // function getWhitelistAlts() external view returns (address[] memory);
     function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
 
     // onlyKeeper access
-    // function _getBestDebitStableUSD(uint32 _amountUSD) external view returns (address);
     function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
-    // function sanityCheck(address token, uint256 amount) external returns (bool);
     function processContractDebitsAndCredits(address _token, uint256 _amnt) external;
     function contractStablesSanityCheck() external view returns (bool);
     function getNextStableTokDeposit() external returns (address);
@@ -71,9 +55,7 @@ interface IGTADelegate {
     function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
     function setContractGTA(address _gta) external;
     function _addGuestToEvent(address _guest, address _evtCode) external;
-    function hostEndEvent(address _eventCode, address[] memory _guests) external returns(address, GTALib.Event_1 calldata, GTALib.Event_2 calldata);
     function _endEvent(address _evtCode) external;
-    function getActiveEventHost(address _evtCode) external returns(address);
 
     function getActiveEvent_0(address _evtCode) external view returns (GTALib.Event_0 calldata);
     function getActiveEvent_1(address _evtCode) external view returns (GTALib.Event_1 calldata);
