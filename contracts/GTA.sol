@@ -120,18 +120,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     /* -------------------------------------------------------- */
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
-    // modifier onlyAdmins(address _evtCode) {
-    //     require(GTAD.getActiveEvent_0(_evtCode).host != address(0), 'err: gameCode not found :(');
-    //     bool isHost = msg.sender == GTAD.getActiveEvent_0(_evtCode).host;
-    //     bool isKeeper = msg.sender == GTAD.keeper();
-    //     require(isKeeper || isHost, 'err: only admins :/*');
-        
-    //     // NOTE: onlyAdmins is only used in 'getPlayers' (no need for owner() check)
-    //     // bool isOwner = msg.sender == owner(); // from 'Ownable'
-    //     // require(isKeeper || isOwner || isHost, 'err: only admins :/*');
-
-    //     _;
-    // }
     modifier onlyKeeper() {
         require(msg.sender == GTAD.keeper(), "Only the keeper :p");
         _;
@@ -155,26 +143,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     function keeperGetLastBlockNumUpdate() external view onlyKeeper returns (uint32) {
         return lastBlockNumUpdate;
     }
-    // // '_burnGTA' support
-    // function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
-    //     require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
-    //     BURN_CODE_EASY = bc;
-    //     USE_BURN_CODE_HARD = false;
-    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
-    // }
-    // function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
-    //     require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
-    //     BURN_CODE_HARD = bc;
-    //     USE_BURN_CODE_HARD = true;
-    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
-    // }
-    // function keeperSetBurnCodeHard(bool _hard) external onlyKeeper {
-    //     USE_BURN_CODE_HARD = _hard;
-    //     emit BurnCodeReset(USE_BURN_CODE_HARD);
-    // }
-    // function keeperGetBurnCodes() external view onlyKeeper returns (uint32[2] memory) {
-    //     return [uint32(BURN_CODE_EASY), BURN_CODE_HARD];
-    // }
     
     /* -------------------------------------------------------- */
     /* PUBLIC ACCESSORS - GTA HOLDER SUPPORT                    */
@@ -677,16 +645,6 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         return true;
     }
 
-    // function _getGameCode(address _host, string memory _gameName) private view returns (address) {
-    //     // generate gameCode from host address and game name
-    //     address gameCode = GTAD._generateAddressHash(_host, _gameName);
-    //     require(GTAD.getActiveEvent_0(gameCode).host != address(0), 'err: game name for host not found :{}');
-    //     return gameCode;
-    // }
-    // function _getPlayers(address _gameCode) private view returns (address[] memory) {
-    //     require(GTAD.getActiveEvent_0(_gameCode).host != address(0), 'err: _gameCode not found :{}');
-    //     return GTAD.getActiveEvent_1(_gameCode).guestAddresses; // 'Event_1.guests' is mapping
-    // }
     // debits/credits for a _guest in 'creditsUSD' (used during deposits and event registrations)
     function _updateCredits(address _guest, uint32 _amountUSD, bool _debit) private {
         if (_debit) { 

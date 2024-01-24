@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;        
 
-// deploy
-// import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-// import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-
+// import interfaces
 // local _ $ npm install @openzeppelin/contracts @uniswap/v2-core @uniswap/v2-periphery
-import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; 
-import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol"; // local
+// import "./node_modules/@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol"; // local
+import "./node_modules/@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol"; // local
+// import "@openzeppelin/contracts/token/ERC20/IERC20.sol"; // deploy
+// import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol"; // deploy
+
+
 
 contract GTASwapTools {
     /* -------------------------------------------------------- */

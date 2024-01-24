@@ -310,28 +310,6 @@ contract GTADelegate {
     function getNextStableTokDeposit() external onlyKeeper returns (address) {
         return _getNextStableTokDeposit(); // increments 'whitelistStablesUseIdx'
     }
-    // function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory) {
-    //     // NOTE: no require checks needed
-    //     return GTAL.addAddressToArraySafe(_addr, _arr, _safe);
-    // }
-    // function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory) {
-    //     // NOTE: no require checks needed
-    //     return GTAL.remAddressFromArray(_addr, _arr);
-    // }
-
-    /* -------------------------------------------------------- */
-    /* PRIVATE - EVENT SUPPORTING                               */
-    /* -------------------------------------------------------- */
-    // // get lowest market value stable
-    // function _getBestDebitStableUSD(uint32 _amountUSD) external view onlyKeeper returns (address) {
-    //     // loop through 'whitelistStables', generate stables available (bals ok for debit)
-    //     address[] memory stables_avail = _getStableTokensAvailDebit(_amountUSD);
-
-    //     // traverse stables available for debit, select stable w/ the lowest market value            
-    //     address stable = _getStableTokenLowMarketValue(stables_avail, uswapV2routers);
-    //     require(stable != address(0), 'err: low market stable address is 0 _ :+0');
-    //     return stable;
-    // }
 
     /* -------------------------------------------------------- */
     /* PRIVATE - BOOK KEEPING                                   */
