@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
-// NOTE: code size limit = 24576 bytes (a limit introduced in Spurious Dragon _ 2016)
-// NOTE: code size limit = 49152 bytes (a limit introduced in Shanghai _ 2023)
+// ref: https://ethereum.org/en/history
+//  code size limit = 24576 bytes (a limit introduced in Spurious Dragon _ 2016)
+//  code size limit = 49152 bytes (a limit introduced in Shanghai _ 2023)
 pragma solidity ^0.8.20;
 
 // interfaces
