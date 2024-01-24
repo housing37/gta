@@ -1,84 +1,33 @@
 // SPDX-License-Identifier: MIT
+// NOTE: code size limit = 24576 bytes (a limit introduced in Spurious Dragon _ 2016)
+// NOTE: code size limit = 49152 bytes (a limit introduced in Shanghai _ 2023)
 pragma solidity ^0.8.0;        
-import "./GTADelegate.sol"; // interface
-import "./GTASwapTools.sol"; // inheritance
 
-// deploy
-// import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-// import "@openzeppelin/contracts/access/Ownable.sol";
+// interfaces
+import "./IGTADelegate.sol";
+import "./IGTALib.sol";
 
-// local _ $ npm install @openzeppelin/contracts
-import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./node_modules/@openzeppelin/contracts/access/Ownable.sol"; 
+// inherited contracts
+import "./GTASwapTools.sol"; // deploy|local
+// import "@openzeppelin/contracts/token/ERC20/ERC20.sol"; // deploy
+// import "@openzeppelin/contracts/access/Ownable.sol"; // deploy
+import "./node_modules/@openzeppelin/contracts/token/ERC20/ERC20.sol"; // local _ $ npm install @openzeppelin/contracts
+import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";  // local _ $ npm install @openzeppelin/contracts
 
 /* terminology...
                  join -> room, game, event, activity
              register -> seat, guest, delegates, users, participants, entrants
     payout/distribute -> rewards, winnings, earnings, recipients 
 */
-interface IGTADelegate {
-    // public auto-generated getter
-    function keeper() external view returns (address);
-    function uswapV2routers() external view returns (address[] memory);
-    function infoGtaBalanceRequired() external view returns (uint256); 
-    function burnGtaBalanceRequired() external view returns (uint256);
-    function cancelGtaBalanceRequired() external view returns (uint256);
-    function minDepositForAltsUSD() external view returns (uint32);
-    function hostGtaBalReqPerc() external view returns (uint8);
-    function depositFeePerc() external view returns (uint8);
-    function whitelistStables() external view returns (address[] memory);
-    function whitelistAlts() external view returns (address[] memory);
-    function enableMinDepositRefundsForAlts() external view returns(bool);
-    function activeEventCount() external view returns (uint64);
-    function burnGtaPerc() external view returns (uint8);
-    function mintGtaPerc() external view returns (uint8);
-    function mintGtaToHost() external view returns (bool);
-    function BURN_CODE_GUESS_CNT() external view returns (uint64);
-    function USE_BURN_CODE_HARD() external view returns (bool);
-    function GET_BURN_CODES() external view returns (uint32[2] memory);
-    function SET_BURN_CODE_GUESS_CNT(uint64 _cnt) external;
-    
-    // public access
-    function _generateAddressHash(address host, string memory uid) external view returns (address);
-    function addAddressToArraySafe(address _addr, address[] memory _arr, bool _safe) external pure returns (address[] memory);
-    function remAddressFromArray(address _addr, address[] memory _arr) external pure returns (address[] memory);
-    function _isTokenInArray(address _addr, address[] memory _arr) external pure returns (bool);
-
-    // onlyKeeper access
-    function _increaseWhitelistPendingDebit(address token, uint256 amount) external;
-    function processContractDebitsAndCredits(address _token, uint256 _amnt) external;
-    function contractStablesSanityCheck() external view returns (bool);
-    function getNextStableTokDeposit() external returns (address);
-    function addAccruedGFRL(uint256 _gasAmnt) external returns (uint256);
-    function getAccruedGFRL() external view returns (uint256);
-    function getSwapRouters() external view returns (address[] memory);
-    function getSupportStaffWithIndFees(uint32 _totFee) external view returns (address[] calldata, uint32[] calldata);
-    function setContractGTA(address _gta) external;
-    function _addGuestToEvent(address _guest, address _evtCode) external;
-    function _endEvent(address _evtCode) external;
-
-    function getActiveEvent_0(address _evtCode) external view returns (GTALib.Event_0 calldata);
-    function getActiveEvent_1(address _evtCode) external view returns (GTALib.Event_1 calldata);
-    function getActiveEvent_2(address _evtCode) external view returns (GTALib.Event_2 calldata);
-    function isGuestRegistered(address _evtCode, address _guest) external view returns (bool);
-    function _getPublicActiveEventDetails(address _evtCode) external view returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256);
-    function createNewEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) external returns (address, uint256);
-    function _calcFeesAndPayouts(address _evtCode) external;
-    function _launchEvent(address _evtCode) external;
-    function _getStableTokensAvailDebit(uint32 _debitAmntUSD) external view returns (address[] memory);
-    function _getGameCode(address _host, string memory _evtName) external view returns (address);
-    function _getPlayers(address _evtCode) external view returns (address[] memory);
-}
-
+// Import MyStruct from ContractB
+// using IGTALib for IGTALib.Event_0;
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
-    // Import MyStruct from ContractB
-    // using GTALib for GTALib.Event_0;
-
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
     /* _ ADMIN SUPPORT _ */
     IGTADelegate private GTAD; // 'keeper' maintained within
+    IGTALib private GTAL;
     
     /* _ TOKEN INIT SUPPORT _ */
     string private constant tok_name = "_TEST GTA IERC20";
@@ -150,9 +99,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     // NOTE: pre-initialized 'GTADelegate' address required
     //      initializer w/ 'keeper' not required ('GTADelegate' maintained)
     //      sets msg.sender to '_owner' ('Ownable' maintained)
-    constructor(address _gtad, uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
+    constructor(address _gtad, address _gtal, uint256 _initSupply) ERC20(tok_name, tok_symb) Ownable(msg.sender) {
         require(_gtad != address(0), 'err: invalid delegate contract address :/');
         GTAD = IGTADelegate(_gtad);
+        GTAL = IGTALib(_gtal);
         GTAD.setContractGTA(address(this));
         _mint(msg.sender, _initSupply * 10**uint8(decimals())); // 'emit Transfer'
     }
@@ -322,11 +272,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no game code ;o');
 
         // get/validate active game
-        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
+        IGTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if game launched
-        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        IGTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
         require(!evt1.launched, "err: event already started :(");
 
         // check if host trying to register
@@ -358,7 +308,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no _eventCode ;l');
 
         // get/validate active game
-        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
+        IGTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid _eventCode :I');
 
         // check if msg.sender is _eventCode host
@@ -369,7 +319,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(evt.host != _guest, 'err: invalid guest, no host registration :{}');
 
         // check if event launched
-        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        IGTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
         require(!evt1.launched, 'err: event already started :(');
 
         // check _guest already registered
@@ -396,14 +346,14 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :p');
 
         // get/validate active game
-        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
+        IGTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
         require(evt.host == msg.sender, 'err: only host :/');
 
         // check if event not started yet
-        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        IGTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
         require(!evt1.launched, 'err: event already started');
 
         // calc all fees & 'prizePoolUSD' & 'payoutsUSD' from total 'entryFeeUSD'
@@ -424,6 +374,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
 
     // _guests[i] => payoutsUSD[i]
     // earners, gainers, recipients, receivers, achievers, Leaders, Victors, PaidGuests
+    // LEFT OFF HERE ... refactor function name to 'hostEndEventWithGuestPicks' (file wide)
     function hostEndEventWithGuestRecipients(address _eventCode, address[] memory _guests) public returns (bool) {
         require(_eventCode != address(0), 'err: no event code :p');
 
@@ -431,18 +382,18 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_guests.length >= 0, 'err: _guests.length, SHOULD NOT OCCUR :p');
 
         // get/validate active game
-        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
+        IGTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid game code :I');
 
         // check if msg.sender is event host
         require(evt.host == msg.sender, 'err: only host :/');
 
         // check if event started
-        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        IGTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
         require(evt1.launched, 'err: event not started yet');
 
         // check if # of _guests.length == winPercs.length == payoutsUSD.length (set during createEvent & hostStartEvent)
-        GTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
+        IGTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
         require(evt2.winPercs.length == _guests.length && _guests.length == evt2.payoutsUSD.length, 'err: _guests.length != size of winPercs[] & payoutsUSD[] =(');
 
         // buy GTA from open market (using 'buyGtaUSD' = 'buyGtaPerc' of 'serviceFeeUSD')
@@ -505,12 +456,12 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         require(_eventCode != address(0), 'err: no event code :<>');
 
         // get/validate active event
-        GTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
+        IGTALib.Event_0 memory evt = GTAD.getActiveEvent_0(_eventCode);
         require(evt.host != address(0), 'err: invalid event code :<>');
         
         // check for valid sender to cancel (only registered guests, host, or keeper)
-        GTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
-        GTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
+        IGTALib.Event_1 memory evt1 = GTAD.getActiveEvent_1(_eventCode);
+        IGTALib.Event_2 memory evt2 = GTAD.getActiveEvent_2(_eventCode);
         // bool isValidSender = evt1.guests[msg.sender] || msg.sender == evt.host || msg.sender == GTAD.keeper();
         bool isValidSender = GTAD.isGuestRegistered(_eventCode, msg.sender) || msg.sender == evt.host || msg.sender == GTAD.keeper();
         require(isValidSender, 'err: only registered guests or host :<>');
@@ -577,7 +528,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     //  3) update 'creditsUSD' w/ all NET incoming 'Transfer' emits ('sender' & 'amount')
     //  4) SANITIY CHECK: 'contractStablesSanityCheck'
     //      verifiy keeper sent legit 'amount' for each 'Transfer' event capture
-    function settleBalances(GTALib.TxDeposit[] memory dataArray, uint32 _lastBlockNum) external onlyKeeper {
+    function settleBalances(IGTALib.TxDeposit[] memory dataArray, uint32 _lastBlockNum) external onlyKeeper {
         uint256 start_refund = gasleft(); // record start gas amount
         require(lastBlockNumUpdate < _lastBlockNum, 'err: invalid _lastBlockNum :O');
 
@@ -746,11 +697,11 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
             // if balance is now 0, remove _guest from balance tracking
             if (creditsUSD[_guest] == 0) {
                 delete creditsUSD[_guest];
-                creditsAddrArray = GTAD.remAddressFromArray(_guest, creditsAddrArray);
+                creditsAddrArray = GTAL.remAddressFromArray(_guest, creditsAddrArray);
             }
         } else { 
             creditsUSD[_guest] += _amountUSD; 
-            creditsAddrArray = GTAD.addAddressToArraySafe(_guest, creditsAddrArray, true); // true = no dups
+            creditsAddrArray = GTAL.addAddressToArraySafe(_guest, creditsAddrArray, true); // true = no dups
         }
     }
     // get lowest market value stable
