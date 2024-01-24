@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.23;
 import "./IGTALib.sol"; // interface for struct GTAEvent
 interface IGTADelegate {
     // public auto-generated getter
