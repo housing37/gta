@@ -38,8 +38,10 @@ contract GTADelegate {
     uint64 private closedEventCount = 0; 
     address[] private closedEventCodes = new address[](0);
 
-    // event experation time (keeper control); uint32 max = 4,294,967,295 (~49,710 days)
-    //  BUT, block.timestamp is express in seconds since 1970 as uint256
+    // event experation time sec (keeper control)
+    //  ie. sec from evt start time, when guests can cancel (if evt not launched)
+    //  NOTE: uint32 max = 4,294,967,295 sec (~49,710 days)
+    //   BUT, using uint256 because block.timestamp is uint256 (sec since 1970)
     uint256 private eventExpSec = 86400 * 1; // 1 day = 86400 seconds 
 
     /* _ ADMIN SUPPORT _ */
@@ -272,7 +274,8 @@ contract GTADelegate {
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) external onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
-        //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
+        //  hence, simply pass dups in '_tokens' as desired (for both add & remove)
+        //   (this allows for keeper control over which whitelistStables to use most)
         for (uint i=0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), 'found 0 address :L');
             if (_add) {
@@ -486,6 +489,7 @@ contract GTADelegate {
         eventExpSec = _sec;
     }
     function createNewEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) external onlyKeeperOrGTA() returns (address, uint256) {
+        require(bytes(_eventName).length > 0, "no evt name :{}"); // verifiy _evtName input
         require(_startTime > block.timestamp, "start too soon :/");
         require(_entryFeeUSD >= minEventEntryFeeUSD, "entryFee too low :/");
         require(_hostFeePerc <= maxHostFeePerc, 'host fee too high, check maxHostFeePerc :O');

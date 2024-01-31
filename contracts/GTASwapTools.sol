@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.23;        
+pragma solidity ^0.8.20;        
 
 // import interfaces
 // local _ $ npm install @openzeppelin/contracts @uniswap/v2-core @uniswap/v2-periphery
