@@ -134,11 +134,11 @@ contract GTADelegate {
     /* MODIFIERS                                                */
     /* -------------------------------------------------------- */
     modifier onlyKeeper() {
-        require(msg.sender == keeper, "Only the keeper :p");
+        require(msg.sender == keeper, "!keeper :p");
         _;
     }
     modifier onlyKeeperOrGTA() {
-        require(msg.sender == contractGTA || msg.sender == keeper, "Only the keeper OR GTA contract :p");
+        require(msg.sender == contractGTA || msg.sender == keeper, "!keeper|GTA :p");
         _;
     }
 
@@ -151,13 +151,13 @@ contract GTADelegate {
     /* -------------------------------------------------------- */
     // '_burnGTA' support
     function keeperResetBurnCodeEasy(uint16 bc) external onlyKeeper {
-        require(bc != BURN_CODE_EASY, 'err: same burn code, no changes made ={}');
+        require(bc != BURN_CODE_EASY, 'same code, no change ={}');
         BURN_CODE_EASY = bc;
         USE_BURN_CODE_HARD = false;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
     }
     function keeperResetBurnCodeHard(uint32 bc) external onlyKeeper {
-        require(bc != BURN_CODE_HARD, 'err: same burn code, no changes made ={}');
+        require(bc != BURN_CODE_HARD, 'same code, no change ={}');
         BURN_CODE_HARD = bc;
         USE_BURN_CODE_HARD = true;
         emit BurnCodeReset(USE_BURN_CODE_HARD);
@@ -178,19 +178,19 @@ contract GTADelegate {
         return (activeEventCodes, activeEventCount);
     }
     function setKeeper(address _newKeeper) external onlyKeeper {
-        require(_newKeeper != address(0), 'err: zero address ::)');
+        require(_newKeeper != address(0), '0 address ::)');
         keeper = _newKeeper;
     }
     function setContractGTA(address _gta) external onlyKeeper {
-        require(_gta != address(0), 'err: zero address ::)');
+        require(_gta != address(0), '0 address ::)');
         contractGTA = _gta;
     }
     function addSupportStaff(address _newStaff) external onlyKeeper {
-        require(_newStaff != address(0), 'err: zero address ::)');
+        require(_newStaff != address(0), '0 address ::)');
         supportStaff = GTAL.addAddressToArraySafe(_newStaff, supportStaff, true); // true = no dups
     }
     function remSupportStaff(address _remStaff) external onlyKeeper {
-        require(_remStaff != address(0), 'err: zero address ::)');
+        require(_remStaff != address(0), '0 address ::)');
         supportStaff = GTAL.remAddressFromArray(_remStaff, supportStaff);
     }
     function getSupportStaffWithIndFees(uint32 _totFee) external view onlyKeeperOrGTA returns (address[] memory, uint32[] memory) {
@@ -227,26 +227,26 @@ contract GTADelegate {
         enableMinDepositRefundsForAlts = _enable;
     }
     function setHostGtaBalReqPerc(uint16 _perc) external onlyKeeper {
-        require(_perc <= hostGtaBalReqPercMax, 'err: required balance too high, check hostGtaBalReqPercMax :/');
+        require(_perc <= hostGtaBalReqPercMax, 'bal too high, check hostGtaBalReqPercMax :/');
         hostGtaBalReqPerc = _perc;
     }
     function setEntryFeePercs(uint8 _keeperPerc, uint8 _servicePerc, uint8 _supportPerc) external onlyKeeper {
-        require(_keeperPerc <= 100 && _servicePerc <= 100 && _supportPerc <= 100, 'err: max 100%');
+        require(_keeperPerc <= 100 && _servicePerc <= 100 && _supportPerc <= 100, 'max 100%');
         keeperFeePerc = _keeperPerc;
         serviceFeePerc = _servicePerc;
         supportFeePerc = _supportPerc;
     }
     function setDepositFeePerc(uint8 _perc) external onlyKeeper {
-        require(_perc <= 100, 'err: max 100%');
+        require(_perc <= 100, 'max 100%');
         depositFeePerc = _perc;
     }
     function setMaxHostFeePerc(uint8 _perc) external onlyKeeper returns (bool) {
-        require(_perc <= 100, 'err: max 100%');
+        require(_perc <= 100, 'max 100%');
         maxHostFeePerc = _perc;
         return true;
     }
     function setMinimumEventEntryFeeUSD(uint32 _amountUSD) external onlyKeeper {
-        require(_amountUSD > minDepositForAltsUSD, 'err: amount must be greater than minDepositForAltsUSD =)');
+        require(_amountUSD > minDepositForAltsUSD, 'amount too low, check minDepositForAltsUSD =)');
         minEventEntryFeeUSD = _amountUSD;
     }
     function addAccruedGFRL(uint256 _gasAmnt) external onlyKeeper returns (uint256) {
@@ -257,7 +257,6 @@ contract GTADelegate {
         return accruedGasFeeRefundLoss;
     }
     function resetAccruedGFRL() external onlyKeeper returns (bool) {
-        require(accruedGasFeeRefundLoss > 0, 'err: AccruedGFRL already 0');
         accruedGasFeeRefundLoss = 0;
         return true;
     }
@@ -268,14 +267,14 @@ contract GTADelegate {
     // minimum deposits allowed (in usd value)
     //  set constant floor/ceiling so keeper can't lock people out
     function setMinimumUsdValueDeposit(uint32 _amountUSD) external onlyKeeper {
-        require(minDepositForAltsUSD_floor <= _amountUSD && _amountUSD <= minDepositForAltsUSD_ceiling, 'err: invalid amount =)');
+        require(minDepositForAltsUSD_floor <= _amountUSD && _amountUSD <= minDepositForAltsUSD_ceiling, 'invalid amount =)');
         minDepositForAltsUSD = _amountUSD;
     }
     function updateWhitelistStables(address[] calldata _tokens, bool _add) external onlyKeeper { // allows duplicates
         // NOTE: integration allows for duplicate addresses in 'whitelistStables'
         //        hence, simply pass dups in '_tokens' as desired (for both add & remove)
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0), 'err: found zero address to update :L');
+            require(_tokens[i] != address(0), 'found 0 address :L');
             if (_add) {
                 whitelistStables = GTAL.addAddressToArraySafe(_tokens[i], whitelistStables, false); // false = allow dups
                 contractStables = GTAL.addAddressToArraySafe(_tokens[i], contractStables, true); // true = no dups
@@ -286,7 +285,7 @@ contract GTADelegate {
     }
     function updateWhitelistAlts(address[] calldata _tokens, bool _add) external onlyKeeper { // no dups allowed
         for (uint i=0; i < _tokens.length; i++) {
-            require(_tokens[i] != address(0), 'err: found zero address for update :L');
+            require(_tokens[i] != address(0), 'found 0 address :L');
             if (_add) {
                 whitelistAlts = GTAL.addAddressToArraySafe(_tokens[i], whitelistAlts, true); // true = no dups
                 contractAlts = GTAL.addAddressToArraySafe(_tokens[i], contractAlts, true); // true = no dups
@@ -296,11 +295,11 @@ contract GTADelegate {
         }
     }
     function addDexRouter(address _router) external onlyKeeper {
-        require(_router != address(0x0), "err: invalid address");
+        require(_router != address(0x0), "0 address");
         uswapV2routers = GTAL.addAddressToArraySafe(_router, uswapV2routers, true); // true = no dups
     }
     function remDexRouter(address router) external onlyKeeper returns (bool) {
-        require(router != address(0x0), "err: invalid address");
+        require(router != address(0x0), "0 address");
 
         // NOTE: remove algorithm does NOT maintain order
         uswapV2routers = GTAL.remAddressFromArray(router, uswapV2routers);
@@ -338,21 +337,20 @@ contract GTADelegate {
     }
 
     function processContractDebitsAndCredits(address _token, uint256 _amnt) external onlyKeeperOrGTA {
+        require(_token != address(0) && _amnt != 0, '0 address|amount :{');
+        require(contractBalances[_token] >= whitelistPendingDebits[_token], 'insefficient bal to settle debit :O');
         _settlePendingDebits(_token); // sync 'contractBalances' w/ 'whitelistPendingDebits'
         _processIncommingTransfer(_token, _amnt); // sync 'contractBalances' w/ this 'Transfer' emit
     }
 
     // deduct debits accrued from 'hostEndEventWithGuestRecipients'
     function _settlePendingDebits(address _token) private {
-        require(contractBalances[_token] >= whitelistPendingDebits[_token], 'err: insefficient balance to settle debit :O');
         contractBalances[_token] -= whitelistPendingDebits[_token];
         delete whitelistPendingDebits[_token];
     }
 
     // update stable balance from IERC20 'Transfer' emit (delegated by keeper -> 'settleBalances')
     function _processIncommingTransfer(address _token, uint256 _amount) private {
-        require(_token != address(0), 'err: no address :{');
-        require(_amount != 0, 'err: no amount :{');
         contractBalances[_token] += _amount;
     }
 
@@ -387,8 +385,8 @@ contract GTADelegate {
 
     // set event param to end state
     function _endEvent(address _evtCode) external onlyKeeperOrGTA() {
-        require(_evtCode != address(0) && activeEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :P');
-        require(activeEvents[_evtCode].event_1.launched, 'err: event not launched');
+        require(_evtCode != address(0) && activeEvents[_evtCode].event_0.host != address(0), 'bad evt code :P');
+        require(activeEvents[_evtCode].event_1.launched, 'evt !launched');
 
         IGTALib.GTAEvent storage _evt = activeEvents[_evtCode];
         // set game end state (doesn't matter if its about to be deleted)
@@ -399,26 +397,24 @@ contract GTADelegate {
         // transfer from activeEvents to closedEvents & delete from activeEvents
         _migrateToClosedEvents(_evtCode);
     }
-    function _migrateToClosedEvents(address _evtCode) private {
+    function _migrateToClosedEvents(address _evtCode) private { // req: caller checks params
         // copies to closedEvents, appends to closedEventCodes, increments closedEventCount
         _copyActiveEventToClosedEvent(_evtCode); 
 
         // delete from activeEvents, removes from activeEventCodes, decrements activeEventCount
         _deleteActiveEvent(_evtCode); 
     }
-    function _deleteActiveEvent(address _evtCode) private {
-        require(_evtCode != address(0) && activeEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :/');
+    function _deleteActiveEvent(address _evtCode) private { // req: caller checks params
         delete activeEvents[_evtCode]; // delete event mapping
         activeEventCodes = GTAL.remAddressFromArray(_evtCode, activeEventCodes);
         activeEventCount--;
     }
-    function _deleteClosedEvent(address _evtCode) private {
-        require(_evtCode != address(0) && closedEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :/');
+    function _deleteClosedEvent(address _evtCode) private { // req: caller checks params
         delete closedEvents[_evtCode]; // delete event mapping
         closedEventCodes = GTAL.remAddressFromArray(_evtCode, closedEventCodes);
         closedEventCount--;
     }
-    function _copyActiveEventToClosedEvent(address _evtCode) private {
+    function _copyActiveEventToClosedEvent(address _evtCode) private { // req: caller checks params
         // append to closedEventCodes array & increment closedEventCount (traversal support)
         closedEventCodes = GTAL.addAddressToArraySafe(_evtCode, closedEventCodes, true); // true = no dups
         closedEventCount++;
@@ -469,7 +465,7 @@ contract GTADelegate {
         closedEvents[_evtCode].event_2.buyGtaUSD = activeEvents[_evtCode].event_2.buyGtaUSD;
     }
     function keeperDeleteClosedEvent(address _evtCode) external onlyKeeper {
-        require(_evtCode != address(0) && closedEvents[_evtCode].event_0.host != address(0), 'err: invalid event code :/');
+        require(_evtCode != address(0) && closedEvents[_evtCode].event_0.host != address(0), 'bad evt code :/');
 
         // delete from closedEvents, removes from closedEventCodes, decrements closedEventCount
         _deleteClosedEvent(_evtCode);
@@ -486,24 +482,24 @@ contract GTADelegate {
         closedEventCount = 0;
     }
     function keeperSetGameExpSec(uint256 _sec) external onlyKeeper {
-        require(_sec > 0, 'err: no zero :{}');
+        require(_sec > 0, 'no zero :{}');
         eventExpSec = _sec;
     }
     function createNewEvent(string memory _eventName, uint256 _startTime, uint32 _entryFeeUSD, uint8 _hostFeePerc, uint8[] calldata _winPercs) external onlyKeeperOrGTA() returns (address, uint256) {
-        require(_startTime > block.timestamp, "err: start too soon :/");
-        require(_entryFeeUSD >= minEventEntryFeeUSD, "err: entry fee too low :/");
-        require(_hostFeePerc <= maxHostFeePerc, 'err: host fee too high :O, check maxHostFeePerc');
-        require(_winPercs.length >= 0, 'err: _winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0, means no winners paid
-        require(GTAL._validatePercsInArr(_winPercs), 'err: invalid _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
-        require(GTAL._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, 'err: _winPercs + _hostFeePerc != 100 (total 100% required) :/');
+        require(_startTime > block.timestamp, "start too soon :/");
+        require(_entryFeeUSD >= minEventEntryFeeUSD, "entryFee too low :/");
+        require(_hostFeePerc <= maxHostFeePerc, 'host fee too high, check maxHostFeePerc :O');
+        // require(_winPercs.length >= 0, '_winPercs.length, SHOULD NOT OCCUR :/'); // NOTE: _winPercs.length = 0 is OK, means no winners paid
+        require(GTAL._validatePercsInArr(_winPercs), 'bad _winPercs; only 1 -> 100 allowed <=[]'); // NOTE: _winPercs.length = 0, return true
+        require(GTAL._getTotalsOfArray(_winPercs) + _hostFeePerc == 100, '_winPercs + _hostFeePerc != 100; req: total 100% :/');
 
         // SAFE-ADD
         uint256 expTime = _startTime + eventExpSec;
-        require(expTime > _startTime, "err: stop f*ckin around :X");
+        require(expTime > _startTime, "stop f*ckin around :X");
 
         // verify name/code doesn't yet exist in 'activeEvents'
         address eventCode = GTAL._generateAddressHash(msg.sender, _eventName);
-        require(activeEvents[eventCode].event_0.host == address(0), 'err: game name already exists :/');
+        require(activeEvents[eventCode].event_0.host == address(0), 'evt name already exists :/');
 
         // Creates a default empty 'IGTALib.Event_0' struct for 'eventCode' (doesn't exist yet)
         //  NOTE: declaring storage ref to a struct, works directly w/ storage slot that the struct occupies. 
@@ -531,22 +527,19 @@ contract GTADelegate {
     function _getGameCode(address _host, string memory _evtName) external view onlyKeeperOrGTA() returns (address) {
         // generate gameCode from host address and game name
         address evtCode = GTAL._generateAddressHash(_host, _evtName);
-        require(activeEvents[evtCode].event_0.host != address(0), 'err: event name for host not found :{}');
+        require(activeEvents[evtCode].event_0.host != address(0), 'evt name for host not found :{}');
         return evtCode;
     }
     function _getPlayers(address _evtCode) external view onlyKeeperOrGTA returns (address[] memory) {
-        require(activeEvents[_evtCode].event_0.host != address(0), 'err: _gameCode not found :{}');
+        require(activeEvents[_evtCode].event_0.host != address(0), '_evtCode not found :{}');
         return activeEvents[_evtCode].event_1.guestAddresses; // 'Event_1.guests' is mapping
     }
-    function getActiveEventHost(address _evtCode) external view onlyKeeperOrGTA() returns(address) {
-        return activeEvents[_evtCode].event_0.host;
-    }
     function isGuestRegistered(address _evtCode, address _guest) external view onlyKeeperOrGTA() returns (bool) {
-        require(_evtCode != address(0), 'err: no event code ;o');
+        require(_evtCode != address(0), 'no evt code ;o');
 
         // validate _eventCode exists
         IGTALib.Event_0 storage evt = activeEvents[_evtCode].event_0;
-        require(evt.host != address(0), 'err: invalid event code :I');
+        require(evt.host != address(0), 'bad evt code :I');
 
         // check msg.sender is registered
         IGTALib.GTAEvent storage gtaEvt = activeEvents[_evtCode];
@@ -562,7 +555,7 @@ contract GTADelegate {
         return activeEvents[_evtCode].event_2;
     }
     function _getPublicActiveEventDetails(address _evtCode) external view onlyKeeperOrGTA returns (address, address, string memory, uint32, uint8[] memory, uint8, uint256, uint256, uint256, uint256) {
-        require(activeEvents[_evtCode].event_0.host != address(0), 'err: invalid event');
+        require(activeEvents[_evtCode].event_0.host != address(0), 'bad evt code');
         IGTALib.Event_0 storage e = activeEvents[_evtCode].event_0;
         IGTALib.Event_1 storage e1 = activeEvents[_evtCode].event_1;
         IGTALib.Event_2 memory e2 = activeEvents[_evtCode].event_2;
@@ -572,9 +565,9 @@ contract GTADelegate {
 
     // set event params to launched state
     // function _launchEvent(IGTALib.Event_0 storage _evt) private returns (IGTALib.Event_0 storage ) {
-    function _launchEvent(address _evtCode) external {
+    function _launchEvent(address _evtCode) external onlyKeeperOrGTA() {
         IGTALib.GTAEvent storage _evt = activeEvents[_evtCode];
-        require(!_evt.event_1.launched, 'err: event already launched');
+        require(!_evt.event_1.launched, 'event already launched');
 
         // set event fee calculations & prizePoolUSD
         // set event launched state

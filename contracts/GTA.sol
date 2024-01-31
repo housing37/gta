@@ -130,7 +130,7 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
         _;
     }
     modifier onlyHolder(uint256 _requiredAmount) {
-        require(balanceOf(msg.sender) >= _requiredAmount, 'err: need more GTA');
+        require(balanceOf(msg.sender) >= _requiredAmount || msg.sender == GTAD.keeper(), 'err: need more GTA');
         _;
     }
 
