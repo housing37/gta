@@ -23,6 +23,8 @@ import "./node_modules/@openzeppelin/contracts/access/Ownable.sol";  // local _ 
 // Import MyStruct from ContractB
 // using IGTALib for IGTALib.Event_0;
 contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
+    uint8 public VERSION = 0;
+
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
@@ -31,8 +33,10 @@ contract GamerTokeAward is ERC20, Ownable, GTASwapTools {
     IGTALib private GTAL;
     
     /* _ TOKEN INIT SUPPORT _ */
-    string private constant tok_name = "_TEST GTA IERC20";
-    string private constant tok_symb = "_TEST_GTA";
+    // string private constant tok_name = "GTA";
+    string private constant tok_symb = "tGTA";
+    string private tok_name = string(abi.encodePacked("tGTA ", VERSION));
+    
 
     /* _ CREDIT SUPPORT _ */
     // usd credits used to process guest deposits, registers, refunds

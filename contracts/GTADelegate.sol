@@ -2,7 +2,7 @@
 // ref: https://ethereum.org/en/history
 //  code size limit = 24576 bytes (a limit introduced in Spurious Dragon _ 2016)
 //  code size limit = 49152 bytes (a limit introduced in Shanghai _ 2023)
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.20;
 
 // interfaces
 import "./IGTALib.sol";
@@ -16,11 +16,13 @@ import "./node_modules/@openzeppelin/contracts/token/ERC20/IERC20.sol"; // local
 */
 // contract GTADelegate is GTASwapTools {
 contract GTADelegate {
-    IGTALib private GTAL;
-
+    uint8 public VERSION = 0;
+    
     /* -------------------------------------------------------- */
     /* GLOBALS                                                  */
     /* -------------------------------------------------------- */
+    IGTALib private GTAL;
+
     /* _ GAME SUPPORT _ */
     // map generated gameCode address to Game struct
     mapping(address => IGTALib.GTAEvent) private activeEvents;
