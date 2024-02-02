@@ -21,6 +21,7 @@ ROUTER_pulsex_router02_v2='0x165C3410fC91EF562C50559f7d2289fEbed552d9' # PulseXR
 ROUTER_pulsex_router02_vX='0xa619F23c632CA9f36CD4Dcea6272E1eA174aAC27' # PulseXSwapRouter 'v1' ref: MM tx
     # ref tx: https://scan.pulsechain.com/tx/0x3c3cceb53976f332f97e1345cd97488d01a33f81cee81d4f08d0aaad574e7735/
 ROUTER_9INCH_PC = '0xeB45a3c4aedd0F47F345fB4c8A1802BB5740d725'
+ROUTER_gopulse = '0x607015EC03b0e2300520175a231c03155b8E1A48' # i think _ 012824
 
 #------------------------------------------------------------#
 #   TOKEN ADDRESSES
@@ -60,6 +61,7 @@ bin_file_gta = "../contracts/plsx.bin"
 LST_CONTR_ABI_BIN = [
     "../bin/contracts/GamerTokenAward",
     "../bin/contracts/GTADelegate",
+    "../bin/contracts/GTALib",
     # "../bin/contracts/BalancerFLR_pc.bin",
     # "../bin/contracts/BalancerFLR_pc.json",
     # "../bin/contracts/BalancerFLR_pc.bin",

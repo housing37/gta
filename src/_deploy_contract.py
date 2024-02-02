@@ -10,25 +10,24 @@ cStrDivider_1 = '#--------------------------------------------------------------
 import sys, os, traceback, time, pprint, json
 from datetime import datetime
 
-from web3 import Web3, HTTPProvider
-from web3.middleware import construct_sign_and_send_raw_middleware
-from web3.gas_strategies.time_based import fast_gas_price_strategy
-import env
+# from web3 import Web3, HTTPProvider
+# from web3.middleware import construct_sign_and_send_raw_middleware
+# from web3.gas_strategies.time_based import fast_gas_price_strategy
+# import env
 import pprint
 from attributedict.collections import AttributeDict # tx_receipt requirement
 import _constants, _web3 # from web3 import Account, Web3, HTTPProvider
 
 # init _w3, user select abi to deploy, generate contract & deploy
-_w3 = _web3.WEB3().init_inp()
+_w3 = _web3.myWEB3().init_inp()
 abi_file, bin_file = _w3.inp_sel_abi_bin(_constants.LST_CONTR_ABI_BIN)
 _CONTRACT = _w3.add_contract_deploy(abi_file, bin_file)
 
 print(f'\nDEPLOYING bytecode: {bin_file}')
 print(f'DEPLOYING abi: {abi_file}')
+assert input('\n (1) procced? [y/n]\n  > ') == 'y', "aborted...\n"
 
-assert input('\n (1) procced? [y/n]\n > ') == 'y', "aborted...\n"
-
-def estimate_gas(contract):
+def estimate_gas(contract, contract_args=[]):
     # Replace with your contract's ABI and bytecode
     # contract_abi = CONTR_ABI
     # contract_bytecode = CONTR_BYTES
@@ -44,7 +43,7 @@ def estimate_gas(contract):
 
     # Estimate gas for contract deployment
     # gas_estimate = contract.constructor().estimateGas({'from': sender_address})
-    gas_estimate = contract.constructor().estimate_gas({'from': sender_address})
+    gas_estimate = contract.constructor(*contract_args).estimate_gas({'from': sender_address})
 
     print(f"\nEstimated gas cost _ 0: {gas_estimate}")
 
@@ -60,7 +59,7 @@ def estimate_gas(contract):
     #gas_price = W3.eth.generateGasPrice(fast_gas_price_strategy)
     #print(f"Estimated gas price (Gwei): {W3.fromWei(gas_price, 'gwei')}")
     
-    return input('\n (2) procced? [y/n]\n > ') == 'y'
+    return input('\n (3) procced? [y/n]\n  > ') == 'y'
 
 # note: params checked/set in priority order; 'def|max_params' uses 'mpf_ratio'
 #   if all params == False, falls back to 'min_params=True' (ie. just use 'gas_limit')
@@ -82,11 +81,42 @@ def get_gas_params_lst(rpc_url, min_params=False, max_params=False, def_params=T
         return [{'gas':gas_limit}, {'maxPriorityFeePerGas': max_prior_fee}]
     else:
         return [{'gas':gas_limit}]
-        
-proceed = estimate_gas(_CONTRACT)
-assert proceed, "\ndeployment canceled after gas estimate\n"
 
-print('calculating gas ...')
+def generate_contructor():
+    constr_args = []
+    print()
+    while True:
+        arg = input(' Add constructor arg (use -1 to end):\n  > ')
+        if arg == '-1': break
+        constr_args.append(arg)
+    return constr_args
+
+def get_time_now(dt=True):
+    if dt: return '['+datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[0:-4]+']'
+    return '['+datetime.now().strftime("%H:%M:%S.%f")[0:-4]+']'
+
+#ref: https://stackoverflow.com/a/1278740/2298002
+def print_except(e, debugLvl=0):
+    #print(type(e), e.args, e)
+    print('', cStrDivider, f' Exception Caught _ e: {e}', cStrDivider, sep='\n')
+    if debugLvl > 0:
+        print('', cStrDivider, f' Exception Caught _ type(e): {type(e)}', cStrDivider, sep='\n')
+    if debugLvl > 1:
+        print('', cStrDivider, f' Exception Caught _ e.args: {e.args}', cStrDivider, sep='\n')
+
+    exc_type, exc_obj, exc_tb = sys.exc_info()
+    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+    strTrace = traceback.format_exc()
+    print('', cStrDivider, f' type: {exc_type}', f' file: {fname}', f' line_no: {exc_tb.tb_lineno}', f' traceback: {strTrace}', cStrDivider, sep='\n')
+
+constr_args = generate_contructor() # 0x78b48b71C8BaBd02589e3bAe82238EC78966290c
+print(f'  using "constructor({", ".join(map(str, constr_args))})"')
+assert input('\n (2) procced? [y/n]\n  > ') == 'y', "aborted...\n"
+
+# proceed = estimate_gas(_CONTRACT, constr_args) # (3) proceed? [y/n]
+# assert proceed, "\ndeployment canceled after gas estimate\n"
+
+print('\ncalculating gas ...')
 tx_nonce = _w3.W3.eth.get_transaction_count(_w3.SENDER_ADDRESS)
 tx_params = {
     'chainId': _w3.CHAIN_ID,
@@ -96,17 +126,30 @@ lst_gas_params = get_gas_params_lst(_w3.RPC_URL, min_params=False, max_params=Tr
 for d in lst_gas_params: tx_params.update(d) # append gas params
 
 print(f'building tx w/ NONCE: {tx_nonce} ...')
-constructor_tx = _CONTRACT.constructor().build_transaction(tx_params)
+# constructor_tx = _CONTRACT.constructor().build_transaction(tx_params)
+constructor_tx = _CONTRACT.constructor(*constr_args).build_transaction(tx_params)
 
-print('signing and sending tx ...')
+print(f'signing and sending tx ... {get_time_now()}')
 # Sign and send the transaction # Deploy the contract
 tx_signed = _w3.W3.eth.account.sign_transaction(constructor_tx, private_key=_w3.SENDER_SECRET)
 tx_hash = _w3.W3.eth.send_raw_transaction(tx_signed.rawTransaction)
 
-print(cStrDivider_1, 'waiting for receipt ...', sep='\n')
+print(cStrDivider_1, f'waiting for receipt ... {get_time_now()}', sep='\n')
 print(f'    tx_hash: {tx_hash.hex()}')
+
 # Wait for the transaction to be mined
-tx_receipt = _w3.W3.eth.wait_for_transaction_receipt(tx_hash)
+wait_time = 300 # sec
+try:
+    tx_receipt = _w3.W3.eth.wait_for_transaction_receipt(tx_hash, timeout=wait_time)
+    print("Transaction confirmed in block:", tx_receipt.blockNumber, f' ... {get_time_now()}')
+# except _w3.W3.exceptions.TransactionNotFound:    
+#     print(f"Transaction not found within the specified timeout... wait_time: {wait_time}", f' ... {get_time_now()}')
+# except _w3.W3.exceptions.TimeExhausted:
+#     print(f"Transaction not confirmed within the specified timeout... wait_time: {wait_time}", f' ... {get_time_now()}')
+except Exception as e:
+    print(f"\n{get_time_now()}\n Transaction not confirmed within the specified timeout... wait_time: {wait_time}")
+    print_except(e)
+    exit(1)
 
 # print incoming tx receipt (requires pprint & AttributeDict)
 tx_receipt = AttributeDict(tx_receipt) # import required

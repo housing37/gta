@@ -8,7 +8,7 @@ from web3 import Account, Web3, HTTPProvider
 # from web3.middleware import geth_poa_middleware
 import env
 
-class WEB3:
+class myWEB3:
     def __init__(self):
         self.rpc_req_timeout = 60 # *tested_111523: 10=50s,30=150s,45=225s,60=300s
         self.RPC_URL = None
@@ -29,7 +29,19 @@ class WEB3:
 
         self.GTA_CONTRACT = None
         self.GTA_CONTRACT_ADDR = None
+    def check_mempool(self, rpc_url):
+        # rpc_url, chain_id, chain_sel    = self.inp_sel_chain()
+        import requests, json
+        response = requests.post(
+            rpc_url,
+            json={"jsonrpc": "2.0", "method": "txpool_content", "params": [], "id": 1}
+        )
 
+        # Parse the response
+        tx_pool = response.json()['result']
+        return tx_pool
+        # return json.dumps(tx_pool, indent=4)
+    
     def init_inp(self):
         rpc_url, chain_id, chain_sel    = self.inp_sel_chain()
         sender_address, sender_secret   = self.inp_sel_sender()
@@ -81,7 +93,11 @@ class WEB3:
         print(f'  selected {self.SENDER_ADDRESS}')
         return self.SENDER_ADDRESS, self.SENDER_SECRET
     
-    def init_web3(self):
+    def init_web3(self, with_sender=True, empty=False):
+        if empty: 
+            self.W3 = Web3()
+            return self.W3, None
+        
         print(f'''\nINITIALIZING web3 ...
             RPC: {self.RPC_URL} _ w/ timeout: {self.rpc_req_timeout}
             ChainID: {self.CHAIN_ID}
@@ -90,7 +106,7 @@ class WEB3:
 
         self.W3 = Web3(HTTPProvider(self.RPC_URL, request_kwargs={'timeout': self.rpc_req_timeout}))
         #self.W3.middleware_stack.inject(geth_poa_middleware, layer=0) # chatGPT: for PoA chains; for gas or something
-        self.ACCOUNT = Account.from_key(self.SENDER_SECRET)
+        if with_sender: self.ACCOUNT = Account.from_key(self.SENDER_SECRET)
         return self.W3, self.ACCOUNT
     
     def get_gas_settings(self, w3):
@@ -102,20 +118,39 @@ class WEB3:
             self.MAX_PRIOR_FEE_RATIO = 1.0
             self.MAX_PRIOR_FEE = int(w3.eth.max_priority_fee * self.MAX_PRIOR_FEE_RATIO)
         else:
-            self.GAS_LIMIT = 20_000_000
-            self.GAS_PRICE = w3.to_wei('0.0005', 'ether')
-            self.MAX_FEE = w3.to_wei('0.001', 'ether')
+            self.GAS_PRICE = w3.to_wei('0.0005', 'ether') # 'gasPrice' param fails on PC
+            # self.GAS_LIMIT = 20_000_000
+            self.GAS_LIMIT = 60_000_000
+            # self.MAX_FEE = w3.to_wei('0.001', 'ether')
+            self.MAX_FEE = w3.to_wei('4_000_000', 'gwei')
+            # self.MAX_FEE = 3000000000000000
+            # 139349003026060
+            # 137198081053371
+            # 138895000000000
+            # 150000000000000
+            # 161362000000000
+            # 3000000000000000
+            # 172896103947394
+            
             self.MAX_PRIOR_FEE_RATIO = 1.0
             self.MAX_PRIOR_FEE = int(w3.eth.max_priority_fee * self.MAX_PRIOR_FEE_RATIO)
 
         print(f'''Setting gas params ...
-            GAS_LIMIT: {self.GAS_LIMIT}
-            GAS_PRICE: {self.GAS_PRICE} *'gasPrice' param fails on PC
-            MAX_FEE: {self.MAX_FEE} ({self.MAX_FEE / 10**18} ether)
-            MAX_PRIOR_FEE: {self.MAX_PRIOR_FEE}''')
+            GAS_PRICE: {self.GAS_PRICE:,} wei (price per unit to pay; fails on PC)
+            GAS_LIMIT: {self.GAS_LIMIT:,} units (amount of gas to use)
+            MAX_FEE: {self.MAX_FEE:,} wei == {w3.from_wei(self.MAX_FEE, 'gwei'):,} beats (max price per unit)
+            MAX_PRIOR_FEE: {self.MAX_PRIOR_FEE:,} wei == {w3.from_wei(self.MAX_PRIOR_FEE, 'gwei'):,} beats \n
+            ON-CHAIN_GAS_PRICE: {w3.from_wei(w3.eth.gas_price, 'ether'):.5f} PLS == {round(w3.from_wei(w3.eth.gas_price, 'gwei'), 0):,} beat (per unit)
+            REQUIRED_BALANCE: {self.calc_req_bal(self.MAX_FEE, self.GAS_LIMIT)} PLS (in wallet)''')
+            # CURRENT_GAS_PRICE: {f"{w3.from_wei(w3.eth.gas_price, 'gwei'):.2f}"} gwei/beat per unit on chain''')
         
         return self.GAS_LIMIT, self.GAS_PRICE, self.MAX_FEE, self.MAX_PRIOR_FEE_RATIO, self.MAX_PRIOR_FEE
-
+    
+    def calc_req_bal(self, wei, gas_amnt):
+        w = wei * gas_amnt
+        e = self.W3.from_wei(w, 'ether')
+        return f"{e:,}"
+    
     def inp_sel_contract(self, _lst_contr_addr=[], str_input='Select contract to add:'):
         print('\n', str_input)
         for i, v in enumerate(_lst_contr_addr): print(' ',i,'=',v[0],v[1]) # parse through tuple
