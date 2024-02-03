@@ -80,14 +80,14 @@ class myWEB3:
         self.LST_CONTRACTS.append((contract, contr_addr))
 
     def inp_sel_chain(self):
-        self.CHAIN_SEL = input('\nSelect chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
+        self.CHAIN_SEL = input('\n Select chain:\n  0 = ethereum mainnet\n  1 = pulsechain mainnet\n  > ')
         assert 0 <= int(self.CHAIN_SEL) <= 1, 'Invalid entry, abort'
         self.RPC_URL, self.CHAIN_ID = (env.eth_main, env.eth_main_cid) if int(self.CHAIN_SEL) == 0 else (env.pc_main, env.pc_main_cid)
         print(f'  selected {(self.RPC_URL, self.CHAIN_ID)}')
         return self.RPC_URL, self.CHAIN_ID, self.CHAIN_SEL
 
     def inp_sel_sender(self):
-        sel_send = input(f'\nSelect sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
+        sel_send = input(f'\n Select sender: (_event_listener: n/a)\n  0 = {env.sender_address_3}\n  1 = {env.sender_address_1}\n  > ')
         assert 0 <= int(sel_send) <= 1, 'Invalid entry, abort'
         self.SENDER_ADDRESS, self.SENDER_SECRET = (env.sender_address_3, env.sender_secret_3) if int(sel_send) == 0 else (env.sender_address_1, env.sender_secret_1)
         print(f'  selected {self.SENDER_ADDRESS}')
@@ -99,10 +99,10 @@ class myWEB3:
             return self.W3, None
         
         print(f'''\nINITIALIZING web3 ...
-            RPC: {self.RPC_URL} _ w/ timeout: {self.rpc_req_timeout}
-            ChainID: {self.CHAIN_ID}
-            SENDER: {self.SENDER_ADDRESS}
-            CONTRACTS: {self.LST_CONTRACTS}''')
+        RPC: {self.RPC_URL} _ w/ timeout: {self.rpc_req_timeout}
+        ChainID: {self.CHAIN_ID}
+        SENDER: {self.SENDER_ADDRESS}
+        CONTRACTS: {self.LST_CONTRACTS}''')
 
         self.W3 = Web3(HTTPProvider(self.RPC_URL, request_kwargs={'timeout': self.rpc_req_timeout}))
         #self.W3.middleware_stack.inject(geth_poa_middleware, layer=0) # chatGPT: for PoA chains; for gas or something
@@ -110,7 +110,7 @@ class myWEB3:
         return self.W3, self.ACCOUNT
     
     def get_gas_settings(self, w3):
-        print('\ncalc gas settings...')
+        print('\nGAS SETTINGS ...')
         if int(self.CHAIN_SEL) == 0:
             self.GAS_LIMIT = 3_000_000
             self.GAS_PRICE = w3.to_wei('10', 'gwei')
@@ -119,35 +119,38 @@ class myWEB3:
             self.MAX_PRIOR_FEE = int(w3.eth.max_priority_fee * self.MAX_PRIOR_FEE_RATIO)
         else:
             self.GAS_PRICE = w3.to_wei('0.0005', 'ether') # 'gasPrice' param fails on PC
-            # self.GAS_LIMIT = 20_000_000
-            self.GAS_LIMIT = 60_000_000
+            self.GAS_LIMIT = 1_000_000
             # self.MAX_FEE = w3.to_wei('0.001', 'ether')
-            self.MAX_FEE = w3.to_wei('4_000_000', 'gwei')
-            # self.MAX_FEE = 3000000000000000
-            # 139349003026060
-            # 137198081053371
-            # 138895000000000
-            # 150000000000000
-            # 161362000000000
-            # 3000000000000000
-            # 172896103947394
-            
+            self.MAX_FEE = w3.to_wei('300_000', 'gwei')
             self.MAX_PRIOR_FEE_RATIO = 1.0
             self.MAX_PRIOR_FEE = int(w3.eth.max_priority_fee * self.MAX_PRIOR_FEE_RATIO)
-
-        print(f'''Setting gas params ...
-            GAS_PRICE: {self.GAS_PRICE:,} wei (price per unit to pay; fails on PC)
-            GAS_LIMIT: {self.GAS_LIMIT:,} units (amount of gas to use)
-            MAX_FEE: {self.MAX_FEE:,} wei == {w3.from_wei(self.MAX_FEE, 'gwei'):,} beats (max price per unit)
-            MAX_PRIOR_FEE: {self.MAX_PRIOR_FEE:,} wei == {w3.from_wei(self.MAX_PRIOR_FEE, 'gwei'):,} beats \n
-            ON-CHAIN_GAS_PRICE: {w3.from_wei(w3.eth.gas_price, 'ether'):.5f} PLS == {round(w3.from_wei(w3.eth.gas_price, 'gwei'), 0):,} beat (per unit)
-            REQUIRED_BALANCE: {self.calc_req_bal(self.MAX_FEE, self.GAS_LIMIT)} PLS (in wallet)''')
-            # CURRENT_GAS_PRICE: {f"{w3.from_wei(w3.eth.gas_price, 'gwei'):.2f}"} gwei/beat per unit on chain''')
         
+        sel_ans = '1'
+        while sel_ans != '0':
+            self.print_gas_params()
+            sel_ans = input("\n Verifiy Gas Settings:\n  0 = use current params\n  1 = set new params (format: xxxx | x_xxx)\n  > ")
+            if sel_ans == '1':
+                self.GAS_LIMIT = int(input("\n Enter GAS_LIMIT (max gas units):\n  > "))
+                inp_fee = input("\n Enter MAX_FEE (max price per unit in gwei|beat):\n  > ")
+                self.MAX_FEE = w3.to_wei(inp_fee, 'gwei')
+        self.print_gas_params()
+
         return self.GAS_LIMIT, self.GAS_PRICE, self.MAX_FEE, self.MAX_PRIOR_FEE_RATIO, self.MAX_PRIOR_FEE
     
-    def calc_req_bal(self, wei, gas_amnt):
-        w = wei * gas_amnt
+    def print_gas_params(self):
+        w3 = self.W3
+        print(f'''\n Current gas params ...
+        ON-CHAIN_GAS_PRICE: {round(w3.from_wei(w3.eth.gas_price, 'gwei'), 0):,} beat (per unit) == {w3.from_wei(w3.eth.gas_price, 'ether'):.5f} PLS
+
+        GAS_PRICE: {self.GAS_PRICE:,} wei (price per unit to pay; fails on PC)
+        GAS_LIMIT: {self.GAS_LIMIT:,} units (amount of gas to use)
+        MAX_FEE: {w3.from_wei(self.MAX_FEE, 'gwei'):,} beats (max price per unit) == {self.MAX_FEE:,} wei
+        MAX_PRIOR_FEE: {w3.from_wei(self.MAX_PRIOR_FEE, 'gwei'):,} beats == {self.MAX_PRIOR_FEE:,} wei        
+        
+        REQUIRED_BALANCE (in wallet): {self.calc_req_bal(self.MAX_FEE, self.GAS_LIMIT)} PLS (for {self.GAS_LIMIT:,} gas units) ''')
+        
+    def calc_req_bal(self, wei_amnt, gas_amnt):
+        w = wei_amnt * gas_amnt
         e = self.W3.from_wei(w, 'ether')
         return f"{e:,}"
     
