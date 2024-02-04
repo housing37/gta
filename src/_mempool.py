@@ -101,10 +101,10 @@ def go_user_inputs():
     global SEARCH_ADDR # REQUIRED (using assignment)
     rpc_url, chain_id, chain_sel    = _web3.myWEB3().inp_sel_chain()
     w3, account = _web3.myWEB3().init_web3(empty=True)
-    ans = input('\nSearch address? [y/n]\n  > ')
+    ans = input('\n Search address? [y/n]\n  > ')
     b_ans = ans == 'y' or ans == '1'
     if b_ans:
-        SEARCH_ADDR = input('\nEnter address:\n  > ')
+        SEARCH_ADDR = input('\n Enter address:\n  > ')
         print(f' searching for: {SEARCH_ADDR}')
     else:
         print(f'ans = {b_ans}')
