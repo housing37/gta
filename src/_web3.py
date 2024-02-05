@@ -139,6 +139,8 @@ class myWEB3:
     
     def print_gas_params(self):
         w3 = self.W3
+        wei_bal = w3.eth.get_balance(self.SENDER_ADDRESS) if self.SENDER_ADDRESS else 0
+        pls_bal = w3.from_wei(wei_bal, 'ether')
         print(f'''\n Current gas params ...
         ON-CHAIN_GAS_PRICE: {round(w3.from_wei(w3.eth.gas_price, 'gwei'), 0):,} beat (per unit) == {w3.from_wei(w3.eth.gas_price, 'ether'):.5f} PLS
 
@@ -147,8 +149,12 @@ class myWEB3:
         MAX_FEE: {w3.from_wei(self.MAX_FEE, 'gwei'):,} beats (max price per unit) == {self.MAX_FEE:,} wei
         MAX_PRIOR_FEE: {w3.from_wei(self.MAX_PRIOR_FEE, 'gwei'):,} beats == {self.MAX_PRIOR_FEE:,} wei        
         
-        REQUIRED_BALANCE (in wallet): {self.calc_req_bal(self.MAX_FEE, self.GAS_LIMIT)} PLS (for {self.GAS_LIMIT:,} gas units) ''')
-        
+        REQUIRED_BALANCE: {self.calc_req_bal(self.MAX_FEE, self.GAS_LIMIT)} PLS
+            (for {self.GAS_LIMIT:,} gas units)
+
+        CURRENT_BALANCE: {pls_bal:,.3f} PLS
+            (in wallet address: {self.SENDER_ADDRESS}) ''')
+
     def calc_req_bal(self, wei_amnt, gas_amnt):
         w = wei_amnt * gas_amnt
         e = self.W3.from_wei(w, 'ether')
